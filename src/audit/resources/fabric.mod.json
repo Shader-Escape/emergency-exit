@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "emergency_exit_audit",
+	"version": "0",
+	"name": "EXIT mixin audit (development only)",
+	"environment": "client",
+	"entrypoints": {
+		"preLaunch": [
+			"ml.mypals.exit.audit.MixinAudit"
+		]
+	},
+	"depends": {
+		"emergency_exit": "*"
+	}
+}

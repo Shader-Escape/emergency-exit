@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"id": "emergency_exit_smoke",
+	"version": "0",
+	"name": "EXIT in-game check (development only)",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"ml.mypals.exit.smoke.SmokeTest"
+		]
+	},
+	"mixins": [
+		"emergency_exit_smoke.mixins.json"
+	],
+	"depends": {
+		"emergency_exit": "*"
+	}
+}

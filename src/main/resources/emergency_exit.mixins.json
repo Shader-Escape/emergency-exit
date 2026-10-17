@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "package": "ml.mypals.exit.mixin",
+  "plugin": "ml.mypals.exit.plugin.ExitMixinPlugin",
+  "compatibilityLevel": "${java}",
+  "client": [
+    "LevelRendererMixin",
+    "PortalPassMixin",
+    "StrictValidationMixin",
+    "iris.IrisRenderingPipelineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}
