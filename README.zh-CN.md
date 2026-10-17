@@ -193,6 +193,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 | `blendWithChannels` | `true` | 与其它参与混合的通道按深度混合；关掉则按优先级盖在混合结果之上 |
 | `wantsFrame` | `null` | 场景深度复制之前询问本帧是否会绘制；`null` 表示"上一帧画过就算" |
 
+> **提示**：`occludedByWorld(false)` 只让通道透过**世界**显示，不会透过其它 EXIT 通道。只要 `blendWithChannels` 还开着（默认），
+> 它仍和其它参与混合的通道按深度比较，位于它们后面时照样会被盖住（调试方块里蓝色在绿色后面时就是这样）。
+> 想让它永远显示在所有 EXIT 内容之上，再加上 `blendWithChannels(false)`，它就会按 `priority` 盖在混合结果之上。
+
 ## 规则与限制
 
 * **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.render`
