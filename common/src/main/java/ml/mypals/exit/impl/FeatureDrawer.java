@@ -2,9 +2,9 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderBuffers;
@@ -19,7 +19,8 @@ import java.util.OptionalDouble;
 
 /**
  * Renders submit storages into a target with our own feature dispatcher. It sets this frame's camera rotation and
- * projection itself, because the level renderer may have reset them by the time EXIT renders.
+ * projection itself, because the level renderer may have reset them by the time EXIT renders. Each feature opens its
+ * own pass on the output target, so the output is pointed at the target while the features are drawn.
  */
 final class FeatureDrawer {
 	private static RenderBuffers buffers;
@@ -29,7 +30,6 @@ final class FeatureDrawer {
 
 	static SubmitNodeStorage newStorage() {
 		SubmitNodeStorage storage = new SubmitNodeStorage();
-		storage.setUseImprovedTransparency(Minecraft.getInstance().gameRenderer.useImprovedTransparency());
 		return storage;
 	}
 
@@ -51,18 +51,46 @@ final class FeatureDrawer {
 		}
 
 		try (frame) {
-			if (!frame.isEmpty()) {
-				try (RenderPass pass = openPass("emergency_exit_features", target)) {
-					FeatureRenderDispatcher.renderAllFeatures(pass, frame);
-				}
-				// Inside a portal a pass on the main target was moved into the channel's target.
-				Channel channel = ExitRuntime.routingChannel();
-				if (channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
-					TranslucentDepth.record(frame, channel.prepareForDraw(), channel.translucentDepth());
-				}
+			long opened = ExitRuntime.openedPasses();
+			executeInto(Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView(), () -> {
+				frame.executeSolid();
+				frame.executeTranslucent();
+				frame.executeTranslucentAfterTerrain();
+				frame.executeAlwaysOnTop();
+			});
+			// Inside a portal a pass on the main target was moved into the channel's target.
+			Channel channel = ExitRuntime.routingChannel();
+			if (ExitRuntime.openedPasses() != opened && channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
+				TranslucentDepth.record(frame, channel.prepareForDraw(), channel.translucentDepth());
 			}
 		} finally {
 			buffers.endFrame();
+		}
+	}
+
+	/**
+	 * Runs {@code execute} with the output of the features pointed at the given colour and depth, and with the level
+	 * projection set, since each feature binds the default uniforms itself.
+	 */
+	static void executeInto(GpuTextureView color, @Nullable GpuTextureView depth, Runnable execute) {
+		GpuTextureView savedColor = RenderSystem.outputColorTextureOverride;
+		GpuTextureView savedDepth = RenderSystem.outputDepthTextureOverride;
+		GpuBufferSlice projection = ExitRuntime.levelProjection();
+		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
+		var type = RenderSystem.getProjectionType();
+		RenderSystem.outputColorTextureOverride = color;
+		RenderSystem.outputDepthTextureOverride = depth;
+		if (projection != null && projection != current) {
+			RenderSystem.setProjectionMatrix(projection, type);
+		}
+		try {
+			execute.run();
+		} finally {
+			RenderSystem.outputColorTextureOverride = savedColor;
+			RenderSystem.outputDepthTextureOverride = savedDepth;
+			if (projection != null && projection != current && current != null) {
+				RenderSystem.setProjectionMatrix(current, type);
+			}
 		}
 	}
 

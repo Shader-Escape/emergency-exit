@@ -2,10 +2,10 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
@@ -46,6 +46,7 @@ public final class ExitRuntime {
 	private static @Nullable CameraRenderState camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
 	private static @Nullable GpuBufferSlice levelProjection;
+	private static float partialTick;
 
 	/** The portals open on the render thread, innermost last. They all belong to {@link #portalChannel}. */
 	private static final ArrayDeque<Saved> PORTALS = new ArrayDeque<>();
@@ -150,6 +151,31 @@ public final class ExitRuntime {
 
 	/** Counts render passes that a portal moved from the main target into a channel. Used by the checks. */
 	private static long redirectedPasses;
+	/** The render passes open now, on any command encoder. */
+	private static int openPasses;
+	/** Counts every render pass opened. */
+	private static long openedPasses;
+
+	/** Called when a command encoder opened a render pass. */
+	public static void passOpened() {
+		openPasses++;
+		openedPasses++;
+	}
+
+	/** Called when a command encoder submits an open render pass. */
+	public static void passClosed() {
+		if (openPasses > 0) {
+			openPasses--;
+		}
+	}
+
+	static int openPasses() {
+		return openPasses;
+	}
+
+	static long openedPasses() {
+		return openedPasses;
+	}
 
 	public static long redirectedPasses() {
 		return redirectedPasses;
@@ -175,24 +201,27 @@ public final class ExitRuntime {
 		}
 		// No pass is open yet, so the target may be cleared and seeded here.
 		RenderTarget target = portalChannel.prepareForDraw();
-		List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> colors = new ArrayList<>();
+		RenderPassDescriptor redirected = RenderPassDescriptor.create(descriptor.label());
 		for (RenderPassDescriptor.Attachment<Optional<Vector4fc>> color : descriptor.colorAttachments()) {
-			colors.add(color != null && color.textureView() == mainColor
-				? new RenderPassDescriptor.Attachment<>(target.getColorTextureView(), color.clearValue()) : color);
+			if (color == null) {
+				redirected.withUnusedColorAttachment();
+			} else {
+				redirected.withColorAttachment(color.textureView() == mainColor ? target.getColorTextureView() : color.textureView(), color.clearValue());
+			}
 		}
 		RenderPassDescriptor.Attachment<OptionalDouble> depth = descriptor.depthAttachment();
-		if (depth != null && depth.textureView() == mainDepth) {
-			depth = new RenderPassDescriptor.Attachment<>(target.getDepthTextureView(), depth.clearValue());
+		if (depth != null) {
+			redirected.withDepthAttachment(depth.textureView() == mainDepth ? target.getDepthTextureView() : depth.textureView(), depth.clearValue());
 		}
 		// The main target can be larger than the scene sized channel.
-		RenderPass.RenderArea area = descriptor.renderArea();
+		RenderPass.RenderArea area = descriptor.renderArea;
 		if (area != null) {
 			int x = Math.min(area.x(), target.width);
 			int y = Math.min(area.y(), target.height);
-			area = new RenderPass.RenderArea(x, y, Math.min(area.width(), target.width - x), Math.min(area.height(), target.height - y));
+			redirected.withRenderArea(new RenderPass.RenderArea(x, y, Math.min(area.width(), target.width - x), Math.min(area.height(), target.height - y)));
 		}
 		redirectedPasses++;
-		return new RenderPassDescriptor(descriptor.label(), colors, depth, area);
+		return redirected;
 	}
 
 	static CameraRenderState camera() {
@@ -201,6 +230,11 @@ public final class ExitRuntime {
 
 	static Matrix4fc viewRotation() {
 		return VIEW_ROTATION;
+	}
+
+	/** The partial tick the level renders with. The camera state of 26.2 does not hold it. */
+	static float partialTick() {
+		return partialTick;
 	}
 
 	static @Nullable GpuBufferSlice levelProjection() {
@@ -326,12 +360,13 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(CameraRenderState cameraState) {
+	public static void beginLevel(CameraRenderState cameraState, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
 		inLevel = true;
 		camera = cameraState;
+		partialTick = levelPartialTick;
 		VIEW_ROTATION.set(cameraState.viewRotationMatrix);
 		levelProjection = RenderSystem.getProjectionMatrixBuffer();
 	}

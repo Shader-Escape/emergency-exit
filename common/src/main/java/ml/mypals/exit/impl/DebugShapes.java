@@ -157,7 +157,7 @@ public final class DebugShapes {
 			boolean before = IrisCompat.skipExtension();
 			boolean[] ok = {true};
 			xray.portal(PortalOverrides.DEFAULT, () -> {
-				ok[0] &= IrisCompat.skipExtension() == IrisCompat.LOADED;
+				ok[0] &= IrisCompat.skipExtension() == IrisCompat.hasSkipExtension();
 				try {
 					Exit.redirect(Gpu.mainTarget());
 					ok[0] = false;

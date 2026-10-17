@@ -32,11 +32,11 @@ neoForge {
     runs {
         client {
             client()
-            gameDirectory = rootProject.file('run/neoforge')
+            gameDirectory = rootProject.file("run/neoforge-${minecraft_version}")
         }
         smokeClient {
             client()
-            gameDirectory = rootProject.file('run/neoforge')
+            gameDirectory = rootProject.file("run/neoforge-${minecraft_version}")
             loadedMods = [mods.emergency_exit, mods.emergency_exit_smoke]
             // Headless, so startup errors end the run instead of opening a dialog. The game window still opens.
             jvmArgument('-Djava.awt.headless=true')

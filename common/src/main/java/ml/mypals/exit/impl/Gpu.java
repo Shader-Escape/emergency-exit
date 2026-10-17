@@ -3,20 +3,18 @@ package ml.mypals.exit.impl;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.CompareOp;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
-import com.mojang.renderpearl.api.textures.FilterMode;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
-import com.mojang.renderpearl.frontend.FrontendCommandEncoder;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.mixin.RenderPipelinesAccessor;
 import net.minecraft.client.Minecraft;
 import org.joml.Vector4f;
@@ -39,9 +37,12 @@ final class Gpu {
 		return Minecraft.getInstance().gameRenderer.mainRenderTarget();
 	}
 
-	/** Whether a render pass is open. While it is, no other pass can be opened and no target can be cleared. */
+	/**
+	 * Whether a render pass is open. EXIT then opens no other pass and clears no target. Each command encoder only knows
+	 * its own passes, so the passes of all encoders are counted (see PortalPassMixin).
+	 */
 	static boolean isInRenderPass() {
-		return RenderSystem.getDevice().createCommandEncoder() instanceof FrontendCommandEncoder encoder && encoder.isInRenderPass();
+		return ExitRuntime.openPasses() > 0;
 	}
 
 	/** When true, passes cover the whole output instead of the scene area. */
@@ -57,16 +58,16 @@ final class Gpu {
 
 	/** A colour and depth target. */
 	static TextureTarget colorDepthTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
+		return new TextureTarget(label, width, height, true, GpuFormat.RGBA8_UNORM);
 	}
 
 	static void resize(RenderTarget target, int width, int height) {
 		target.resize(width, height);
 	}
 
-	/** A target with only a depth texture. */
+	/** A target whose depth is used. It has a colour texture too, since every target has one. */
 	static TextureTarget depthTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, null, GpuFormat.D32_FLOAT);
+		return colorDepthTarget(label, width, height);
 	}
 
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
@@ -143,7 +144,7 @@ final class Gpu {
 	static void draw(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
 		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)
 			: pipeline.depthOnly ? depthPass(pipeline.label, output) : colorPass(pipeline.label, output)) {
-			pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline.pipeline));
+			pass.setPipeline(pipeline.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			for (Sampler sampler : samplers) {
 				bind(pass, sampler.name(), sampler.depth() ? depth(sampler.target()) : color(sampler.target()));
@@ -163,7 +164,7 @@ final class Gpu {
 			.withFragmentShader(ExitMod.id(fragmentShader));
 		BindGroupLayout.Builder layout = BindGroupLayout.builder();
 		for (String name : samplers) {
-			layout.withUniform(name, UniformType.COMBINED_IMAGE_SAMPLER);
+			layout.withSampler(name);
 		}
 		builder.withBindGroupLayout(layout.build()).withPrimitiveTopology(PrimitiveTopology.TRIANGLES);
 		return builder;
@@ -180,9 +181,13 @@ final class Gpu {
 			.withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true));
 	}
 
-	/** Makes a pipeline that only writes depth, with the default depth test. */
+	/**
+	 * Makes a pipeline that only writes depth, with the default depth test. A pipeline without colour targets still gets
+	 * a default one, so the pass attaches the target's colour and the pipeline writes none of it (see {@link #depthPass}).
+	 */
 	private static void depthOnly(RenderPipeline.Builder builder) {
-		builder.withDepthStencilState(DepthStencilState.DEFAULT);
+		builder.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_NONE))
+			.withDepthStencilState(DepthStencilState.DEFAULT);
 	}
 
 	/** Opens a pass on the colour of {@code target} and keeps its contents. */
@@ -190,9 +195,9 @@ final class Gpu {
 		return openPass(label, color(target), null, target);
 	}
 
-	/** Opens a pass on the depth of {@code target} and keeps its contents. */
+	/** Opens a pass on the depth of {@code target} and keeps its contents. Its colour is attached too, unwritten (see {@link #depthOnly}). */
 	private static RenderPass depthPass(String label, RenderTarget target) {
-		return openPass(label, null, depth(target), target);
+		return openPass(label, color(target), depth(target), target);
 	}
 
 	/** Draws the full-screen shape of a {@link #screenQuad} pipeline. */
@@ -209,7 +214,7 @@ final class Gpu {
 	}
 
 	private static RenderPass openPass(String label, @Nullable GpuTextureView color, @Nullable GpuTextureView depth, RenderTarget size) {
-		RenderPassDescriptor.Builder descriptor = RenderPassDescriptor.builder(() -> label);
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> label);
 		if (color != null) {
 			descriptor.withColorAttachment(color);
 		}
@@ -219,10 +224,10 @@ final class Gpu {
 		descriptor.withRenderArea(wholeOutput
 			? new RenderPass.RenderArea(0, 0, size.width, size.height)
 			: new RenderPass.RenderArea(0, 0, sceneWidth(), sceneHeight()));
-		return RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor.build());
+		return RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor);
 	}
 
 	private static void bind(RenderPass pass, String name, GpuTextureView view) {
-		pass.setUniform(name, view, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+		pass.bindTexture(name, view, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 	}
 }

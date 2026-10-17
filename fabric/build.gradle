@@ -74,13 +74,13 @@ loom {
         ideConfigGenerated(true)
         // Exports transformed classes, which the audit reads.
         vmArg('-Dmixin.debug.export=true')
-        runDir('../run/fabric')
+        runDir("../run/fabric-${minecraft_version}")
     }
 }
 
 // The audit reads the classes Mixin exports, so drop the ones from earlier runs.
 tasks.named('runAuditClient') {
-    def exported = rootProject.file('run/fabric/.mixin.out')
+    def exported = rootProject.file("run/fabric-${minecraft_version}/.mixin.out")
     doFirst { exported.deleteDir() }
 }
 

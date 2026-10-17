@@ -2,7 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.blaze3d.systems.RenderPass;
 import ml.mypals.exit.api.ExitContext;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -50,7 +50,7 @@ final class DrawContext implements ExitContext {
 
 	@Override
 	public float partialTick() {
-		return this.camera.cameraEntityPartialTicks;
+		return ExitRuntime.partialTick();
 	}
 
 	@Override

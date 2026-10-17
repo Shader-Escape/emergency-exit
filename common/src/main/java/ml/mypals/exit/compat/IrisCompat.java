@@ -18,6 +18,10 @@ public final class IrisCompat {
 			IrisHooks.setBypass(bypass);
 		}
 	}
+	/** Whether Iris has the skipExtension switch on this version. Without it, setting it does nothing. */
+	public static boolean hasSkipExtension() {
+		return LOADED && IrisHooks.HAS_SKIP_EXTENSION;
+	}
 	public static boolean skipExtension() {
 		return LOADED && IrisHooks.skipExtension();
 	}

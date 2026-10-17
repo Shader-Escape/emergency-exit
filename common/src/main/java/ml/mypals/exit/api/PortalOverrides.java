@@ -5,7 +5,8 @@ package ml.mypals.exit.api;
  *
  * @param bypass         {@code ImmediateState.bypass}. The shader pack does not replace vanilla pipelines.
  * @param skipExtension  {@code ImmediateState.skipExtension}, per thread. Vertex buffers built now keep the vanilla
- *                       formats.
+ *                       formats. Iris for 26.2 has no such switch and hands out its widened formats as the vanilla
+ *                       ones, so on 26.2 it does nothing.
  * @param renderingLevel {@code ImmediateState.isRenderingLevel}. While it is on, Iris widens the formats of vertices
  *                       written by the submit pipeline.
  */
