@@ -1,17 +1,19 @@
 plugins {
     id 'multiloader-loader'
-    id 'net.fabricmc.fabric-loom'
+    // Minecraft 1.21.11 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    id 'net.fabricmc.fabric-loom-remap'
 }
 
 dependencies {
     minecraft("com.mojang:minecraft:${minecraft_version}")
-    implementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
-    implementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
+    mappings(loom.officialMojangMappings())
+    modImplementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
 
     // Compiled against and loaded in the development runs, but not a dependency of the published library.
     for (mod in [iris_fabric, sodium_fabric]) {
-        compileOnly("maven.modrinth:${mod}")
-        localRuntime("maven.modrinth:${mod}")
+        modCompileOnly("maven.modrinth:${mod}")
+        modLocalRuntime("maven.modrinth:${mod}")
     }
     // Iris nests these libraries in its jar, but the development runs do not load nested jars.
     for (library in ['org.anarres:jcpp:1.4.14', 'org.antlr:antlr4-runtime:4.13.1', "io.github.douira:glsl-transformer:${glsl_transformer_version}"]) {
@@ -19,7 +21,7 @@ dependencies {
     }
     // -Pexit.superResolution adds the Super Resolution mod to the development runs.
     if (project.hasProperty('exit.superResolution')) {
-        localRuntime("maven.modrinth:${super_resolution_fabric}")
+        modLocalRuntime("maven.modrinth:${super_resolution_fabric}")
     }
 }
 

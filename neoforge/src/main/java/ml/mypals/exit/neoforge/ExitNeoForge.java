@@ -8,7 +8,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -29,8 +28,10 @@ public final class ExitNeoForge {
 	public ExitNeoForge() {
 		NeoForge.EVENT_BUS.addListener(ClientStoppingEvent.class, event -> ExitMod.close());
 		NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event -> event.getDispatcher().register(ExitMod.command(OUTPUT)));
-		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueFeatures.class, event -> DebugShapes.inMainPass(null));
-		NeoForge.EVENT_BUS.addListener(SubmitCustomGeometryEvent.class, event ->
-			DebugShapes.collectSubmits(event.getSubmitNodeCollector(), event.getLevelRenderState().cameraRenderState.pos));
+		// NeoForge for 1.21.11 has no event with the level's collector, so the batch is given no collector to pass to.
+		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueBlocks.class, event -> {
+			DebugShapes.inMainPass(null);
+			DebugShapes.collectSubmits(null, event.getLevelRenderState().cameraRenderState.pos);
+		});
 	}
 }

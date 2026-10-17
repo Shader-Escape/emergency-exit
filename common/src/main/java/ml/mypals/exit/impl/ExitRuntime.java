@@ -10,7 +10,7 @@ import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.state.CameraRenderState;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -335,14 +335,14 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(CameraRenderState cameraState, float levelPartialTick) {
+	public static void beginLevel(CameraRenderState cameraState, Matrix4fc viewRotation, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
 		inLevel = true;
 		camera = cameraState;
 		partialTick = levelPartialTick;
-		VIEW_ROTATION.set(cameraState.viewRotationMatrix);
+		VIEW_ROTATION.set(viewRotation);
 		levelProjection = RenderSystem.getProjectionMatrixBuffer();
 	}
 

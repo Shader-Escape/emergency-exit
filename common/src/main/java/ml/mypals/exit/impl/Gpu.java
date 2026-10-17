@@ -5,11 +5,9 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -140,6 +138,10 @@ final class Gpu {
 
 	/** Draws the pipeline over {@code output} and keeps what is already there. */
 	static void draw(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
+		if (pipeline.layer) {
+			// A layer replaces the whole target, see layerOutput.
+			clear(output);
+		}
 		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)
 			: pipeline.depthOnly ? depthPass(pipeline.label, output) : colorPass(pipeline.label, output)) {
 			pass.setPipeline(pipeline.pipeline);
@@ -169,13 +171,15 @@ final class Gpu {
 
 	/** Makes the pipeline write RGB into the target with the given blending, without depth. */
 	private static void colorOutput(RenderPipeline.Builder builder, Optional<BlendFunction> blend) {
-		builder.withColorTargetState(new ColorTargetState(blend, ColorTargetState.WRITE_COLOR));
+		blend.ifPresentOrElse(builder::withBlend, builder::withoutBlend);
+		builder.withColorWrite(true, false).withDepthWrite(false).withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST);
 	}
 
 	/** Makes the pipeline replace the target's RGBA colour and depth, without blending or depth test. */
 	private static void layerOutput(RenderPipeline.Builder builder) {
-		builder.withColorTargetState(new ColorTargetState(Optional.empty(), ColorTargetState.WRITE_ALL))
-			.withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true));
+		// Without a depth test nothing writes depth, so the target is cleared to far first (see draw) and the test lets
+		// every fragment through.
+		builder.withoutBlend().withColorWrite(true, true).withDepthWrite(true).withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST);
 	}
 
 	/**
@@ -183,8 +187,7 @@ final class Gpu {
 	 * a default one, so the pass attaches the target's colour and the pipeline writes none of it (see {@link #depthPass}).
 	 */
 	private static void depthOnly(RenderPipeline.Builder builder) {
-		builder.withColorTargetState(new ColorTargetState(Optional.empty(), ColorTargetState.WRITE_NONE))
-			.withDepthStencilState(DepthStencilState.DEFAULT);
+		builder.withColorWrite(false, false).withDepthWrite(true).withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST);
 	}
 
 	/** Opens a pass on the colour of {@code target} and keeps its contents. */

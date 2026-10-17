@@ -3,7 +3,7 @@ package ml.mypals.exit.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.opengl.GlCommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.impl.ExitRuntime;
@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * {@code createRenderPass} overload ends up in this method. EXIT also counts the open passes here, see
  * {@link RenderPassMixin}.
  */
-@Mixin(CommandEncoder.class)
+@Mixin(GlCommandEncoder.class)
 public class PortalPassMixin {
 	@WrapMethod(method = "createRenderPass(Ljava/util/function/Supplier;Lcom/mojang/blaze3d/textures/GpuTextureView;Ljava/util/OptionalInt;Lcom/mojang/blaze3d/textures/GpuTextureView;Ljava/util/OptionalDouble;)Lcom/mojang/blaze3d/systems/RenderPass;")
 	private RenderPass emergency_exit$redirectPass(Supplier<String> label, GpuTextureView color, OptionalInt clearColor,

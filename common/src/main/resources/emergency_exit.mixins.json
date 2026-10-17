@@ -6,6 +6,7 @@
   "client": [
     "CompiledPipelineMixin",
     "FeatureRenderDispatcherAccessor",
+    "FeatureRenderDispatcherMixin",
     "LevelRendererMixin",
     "PortalPassMixin",
     "RenderPassMixin",

@@ -86,7 +86,7 @@ public final class DebugShapes {
 	}
 
 	/** Called while the level collects its submits. The green box goes to the main channel's batch. */
-	public static void collectSubmits(SubmitNodeCollector collector, Vec3 camera) {
+	public static void collectSubmits(@Nullable SubmitNodeCollector collector, Vec3 camera) {
 		Vec3 at = center;
 		if (at == null) {
 			return;

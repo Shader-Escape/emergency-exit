@@ -6,7 +6,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.network.chat.Component;
 
 public final class ExitFabric implements ClientModInitializer {
@@ -26,8 +26,10 @@ public final class ExitFabric implements ClientModInitializer {
 	public void onInitializeClient() {
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ExitMod.close());
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(ExitMod.command(OUTPUT)));
-		LevelRenderEvents.AFTER_SOLID_FEATURES.register(context -> DebugShapes.inMainPass(context.submitNodeCollector()));
-		LevelRenderEvents.COLLECT_SUBMITS.register(context ->
-			DebugShapes.collectSubmits(context.submitNodeCollector(), context.levelState().cameraRenderState.pos));
+		// Before the entities are submitted, so what goes to the level's collector is still drawn this frame.
+		WorldRenderEvents.BEFORE_ENTITIES.register(context -> {
+			DebugShapes.inMainPass(context.commandQueue());
+			DebugShapes.collectSubmits(context.commandQueue(), context.worldState().cameraRenderState.pos);
+		});
 	}
 }

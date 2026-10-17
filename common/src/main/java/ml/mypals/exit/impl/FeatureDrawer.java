@@ -24,11 +24,14 @@ import java.util.function.Consumer;
  * Renders submit storages into a target with our own feature dispatcher. It sets this frame's camera rotation and
  * projection itself, because the level renderer may have reset them by the time EXIT renders. Before 26.2 the features
  * are drawn into a buffer source, and each batch opens its own pass on the output target when it ends, so the output
- * is pointed at the target while the features are drawn.
+ * is pointed at the target while the features are drawn. In 1.21.11 the dispatcher draws all features at once and then
+ * empties the storage; {@link #keepSubmits} keeps them for the second drawing of the translucent depth.
  */
-final class FeatureDrawer {
+public final class FeatureDrawer {
 	private static RenderBuffers buffers;
 	private static FeatureRenderDispatcher dispatcher;
+	/** While true, the dispatcher keeps the submits after drawing them, see FeatureRenderDispatcherMixin. */
+	public static boolean keepSubmits;
 
 	private FeatureDrawer() {}
 
@@ -59,31 +62,33 @@ final class FeatureDrawer {
 		try {
 			long opened = ExitRuntime.openedPasses();
 			executeInto(Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView(), () -> {
-				dispatcher.renderSolidFeatures();
-				bufferSource.endBatch();
-				renderTranslucent(dispatcher, bufferSource);
+				renderAll(dispatcher, bufferSource);
 				buffers.outlineBufferSource().endOutlineBatch();
 				if (direct != null) {
 					direct.accept(bufferSource);
 					bufferSource.endBatch();
 				}
-				dispatcher.renderTranslucentParticles();
-				bufferSource.endBatch();
 			});
 			// Inside a portal a pass on the main target was moved into the channel's target.
 			Channel channel = ExitRuntime.routingChannel();
 			if (ExitRuntime.openedPasses() != opened && channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
-				TranslucentDepth.record(() -> renderTranslucent(dispatcher, bufferSource), channel.prepareForDraw(), channel.translucentDepth());
+				// All features are drawn again. The solid ones only write the depth the channel already has.
+				TranslucentDepth.record(() -> renderAll(dispatcher, bufferSource), channel.prepareForDraw(), channel.translucentDepth());
 			}
 		} finally {
 			modelView.popMatrix();
 			IrisCompat.setRenderingLevel(renderingLevel);
-			dispatcher.clearSubmitNodes();
+			storage.clear();
 		}
 	}
 
-	private static void renderTranslucent(FeatureRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource) {
-		dispatcher.renderTranslucentFeatures();
+	private static void renderAll(FeatureRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource) {
+		keepSubmits = true;
+		try {
+			dispatcher.renderAllFeatures();
+		} finally {
+			keepSubmits = false;
+		}
 		bufferSource.endBatch();
 		buffers.crumblingBufferSource().endBatch();
 	}
@@ -146,8 +151,8 @@ final class FeatureDrawer {
 			Minecraft mc = Minecraft.getInstance();
 			buffers = new RenderBuffers(1);
 			// The dispatcher renders the storage it was created with. FeatureRenderDispatcherAccessor swaps it.
-			dispatcher = new FeatureRenderDispatcher(new SubmitNodeStorage(), mc.getModelManager(), buffers.bufferSource(), mc.getAtlasManager(),
-				buffers.outlineBufferSource(), buffers.crumblingBufferSource(), mc.font, mc.gameRenderer.getGameRenderState());
+			dispatcher = new FeatureRenderDispatcher(new SubmitNodeStorage(), mc.getBlockRenderer(), buffers.bufferSource(), mc.getAtlasManager(),
+				buffers.outlineBufferSource(), buffers.crumblingBufferSource(), mc.font);
 		}
 		return dispatcher;
 	}

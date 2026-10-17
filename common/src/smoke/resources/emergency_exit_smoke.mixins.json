@@ -3,7 +3,8 @@
   "package": "ml.mypals.exit.smoke.mixin",
   "compatibilityLevel": "${mixin_java}",
   "client": [
-    "CreateWorldScreenAccessor"
+    "CreateWorldScreenAccessor",
+    "ShadowRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

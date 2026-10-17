@@ -16,6 +16,7 @@ import net.minecraft.gizmos.Gizmos;
 import net.minecraft.gizmos.SimpleGizmoCollector;
 import net.minecraft.util.Util;
 import net.minecraft.resources.Identifier;
+import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -210,7 +211,7 @@ final class Channel implements ExitChannel {
 		}
 		Consumer<MultiBufferSource> gizmos = primitives.isEmpty() ? null : bufferSource -> {
 			for (DrawableGizmoPrimitives gizmo : primitives) {
-				gizmo.render(new PoseStack(), bufferSource, ExitRuntime.camera(), ExitRuntime.viewRotation());
+				gizmo.render(new PoseStack(), bufferSource, ExitRuntime.camera(), new Matrix4f(ExitRuntime.viewRotation()));
 			}
 		};
 		boolean routed = ExitRuntime.begin(this, null);

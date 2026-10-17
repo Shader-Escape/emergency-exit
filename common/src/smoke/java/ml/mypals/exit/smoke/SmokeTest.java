@@ -7,7 +7,6 @@ import ml.mypals.exit.impl.DebugView;
 import ml.mypals.exit.impl.ExitRuntime;
 import ml.mypals.exit.impl.SceneSize;
 import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
-import net.irisshaders.iris.api.v0.IrisApi;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -61,17 +60,19 @@ public final class SmokeTest {
 	public void init(String loader) {
 		this.loader = loader;
 		deleteOldWorld();
-		if (IrisCompat.LOADED) {
-			// EXIT must skip what is drawn in Iris's shadow pass.
-			IrisApi.getInstance().registerShadowRenderCallback((modelView, projection, x, y, z, tickDelta) -> {
-				if (!DebugShapes.isOn() || !IrisCompat.isRenderingShadowPass()) {
-					return;
-				}
-				shadowCallbacks++;
-				Exit.draw(exit -> shadowPassRuns++);
-				Exit.portal(() -> shadowPassRuns++);
-			});
+	}
+
+	/**
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.11 has no shadow render callback). EXIT
+	 * must skip what is drawn there.
+	 */
+	public static void inShadowPass() {
+		if (!DebugShapes.isOn() || !IrisCompat.isRenderingShadowPass()) {
+			return;
 		}
+		shadowCallbacks++;
+		Exit.draw(exit -> shadowPassRuns++);
+		Exit.portal(() -> shadowPassRuns++);
 	}
 
 	/** Called at the end of each client tick. */

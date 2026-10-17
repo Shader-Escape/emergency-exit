@@ -1,9 +1,7 @@
 package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.platform.CompareOp;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import net.minecraft.resources.Identifier;
 
@@ -57,22 +55,18 @@ public final class TranslucentDepth {
 	private static final class DepthWriting extends RenderPipeline {
 		DepthWriting(RenderPipeline original) {
 			super(variantId(original.getLocation()), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
-				original.getSamplers(), original.getUniforms(),
-				new ColorTargetState(original.getColorTargetState().blendFunction(), ColorTargetState.WRITE_NONE),
-				depthWriting(original.getDepthStencilState()), original.getPolygonMode(), original.isCull(),
-				original.getVertexFormat(), original.getVertexFormatMode(), original.getSortKey());
+				original.getSamplers(), original.getUniforms(), original.getBlendFunction(), depthTest(original.getDepthTestFunction()),
+				original.getPolygonMode(), original.isCull(), false, false, true, original.getColorLogic(), original.getVertexFormat(),
+				original.getVertexFormatMode(), original.getDepthBiasScaleFactor(), original.getDepthBiasConstant(), original.getSortKey());
 		}
 
 		private static Identifier variantId(Identifier location) {
 			return ExitMod.id("translucent_depth/" + location.getNamespace() + "/" + location.getPath());
 		}
 
-		/** The original depth test, or the default one if it had none, with depth writing on. */
-		private static DepthStencilState depthWriting(DepthStencilState original) {
-			if (original == null || original.depthTest() == CompareOp.ALWAYS_PASS) {
-				return new DepthStencilState(DepthStencilState.DEFAULT.depthTest(), true);
-			}
-			return new DepthStencilState(original.depthTest(), true, original.depthBiasScaleFactor(), original.depthBiasConstant());
+		/** The original depth test, or the default one if it had none. Without a depth test nothing writes depth. */
+		private static DepthTestFunction depthTest(DepthTestFunction original) {
+			return original == DepthTestFunction.NO_DEPTH_TEST ? DepthTestFunction.LEQUAL_DEPTH_TEST : original;
 		}
 	}
 }
