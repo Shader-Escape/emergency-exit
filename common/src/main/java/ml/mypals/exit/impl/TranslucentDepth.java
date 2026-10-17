@@ -5,10 +5,8 @@ import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.resources.Identifier;
 
-import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -35,16 +33,13 @@ public final class TranslucentDepth {
 	}
 
 	/**
-	 * Draws the translucent phases of {@code frame} again into {@code depth}. The colour of {@code colorTarget} is
+	 * Draws the translucent features again ({@code translucent}) into {@code depth}. The colour of {@code colorTarget} is
 	 * attached, since the pipelines expect one, but nothing is written to it.
 	 */
-	static void record(FeatureRenderDispatcher.PreparedFrame frame, RenderTarget colorTarget, RenderTarget depth) {
+	static void record(Runnable translucent, RenderTarget colorTarget, RenderTarget depth) {
 		recording = true;
 		try {
-			FeatureDrawer.executeInto(Objects.requireNonNull(colorTarget.getColorTextureView(), "target without colour"), depth.getDepthTextureView(), () -> {
-				frame.executeTranslucent();
-				frame.executeTranslucentAfterTerrain();
-			});
+			FeatureDrawer.executeInto(Objects.requireNonNull(colorTarget.getColorTextureView(), "target without colour"), depth.getDepthTextureView(), translucent);
 		} finally {
 			recording = false;
 		}
@@ -62,12 +57,10 @@ public final class TranslucentDepth {
 	private static final class DepthWriting extends RenderPipeline {
 		DepthWriting(RenderPipeline original) {
 			super(variantId(original.getLocation()), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
-				original.getBindGroupLayouts(),
-				Arrays.stream(original.getColorTargetStates())
-					.map(state -> state == null ? null : new ColorTargetState(state.blendFunction(), state.format(), ColorTargetState.WRITE_NONE))
-					.toArray(ColorTargetState[]::new),
+				original.getSamplers(), original.getUniforms(),
+				new ColorTargetState(original.getColorTargetState().blendFunction(), ColorTargetState.WRITE_NONE),
 				depthWriting(original.getDepthStencilState()), original.getPolygonMode(), original.isCull(),
-				original.getVertexFormatBindings(), original.getPrimitiveTopology(), original.getSortKey());
+				original.getVertexFormat(), original.getVertexFormatMode(), original.getSortKey());
 		}
 
 		private static Identifier variantId(Identifier location) {

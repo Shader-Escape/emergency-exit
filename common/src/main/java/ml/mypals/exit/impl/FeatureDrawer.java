@@ -7,6 +7,8 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.Minecraft;
+import ml.mypals.exit.mixin.FeatureRenderDispatcherAccessor;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
@@ -14,13 +16,15 @@ import org.joml.Matrix4fStack;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.function.Consumer;
 
 /**
  * Renders submit storages into a target with our own feature dispatcher. It sets this frame's camera rotation and
- * projection itself, because the level renderer may have reset them by the time EXIT renders. Each feature opens its
- * own pass on the output target, so the output is pointed at the target while the features are drawn.
+ * projection itself, because the level renderer may have reset them by the time EXIT renders. Before 26.2 the features
+ * are drawn into a buffer source, and each batch opens its own pass on the output target when it ends, so the output
+ * is pointed at the target while the features are drawn.
  */
 final class FeatureDrawer {
 	private static RenderBuffers buffers;
@@ -29,43 +33,59 @@ final class FeatureDrawer {
 	private FeatureDrawer() {}
 
 	static SubmitNodeStorage newStorage() {
-		SubmitNodeStorage storage = new SubmitNodeStorage();
-		return storage;
+		return new SubmitNodeStorage();
 	}
 
 	/** Renders {@code storage} into {@code target} and empties it. */
 	static void draw(SubmitNodeStorage storage, RenderTarget target) {
-		// The vertices are written here. Iris would widen their format while the level renders, but the vanilla
-		// pipelines expect the vanilla format.
+		draw(storage, target, null);
+	}
+
+	/**
+	 * Renders {@code storage} into {@code target} and empties it. {@code direct} draws into the buffer source after the
+	 * translucent features, for what cannot be submitted before 26.2, such as gizmos.
+	 */
+	static void draw(SubmitNodeStorage storage, RenderTarget target, @Nullable Consumer<MultiBufferSource> direct) {
+		FeatureRenderDispatcher dispatcher = dispatcher();
+		((FeatureRenderDispatcherAccessor) dispatcher).emergency_exit$setSubmitNodeStorage(storage);
+		MultiBufferSource.BufferSource bufferSource = buffers.bufferSource();
+		// The vertices are written while the features are drawn. Iris would widen their format while the level renders,
+		// but the vanilla pipelines expect the vanilla format.
 		boolean renderingLevel = IrisCompat.isRenderingLevel();
 		IrisCompat.setRenderingLevel(false);
 		Matrix4fStack modelView = RenderSystem.getModelViewStack();
 		modelView.pushMatrix();
 		modelView.set(ExitRuntime.viewRotation());
-		FeatureRenderDispatcher.PreparedFrame frame;
 		try {
-			frame = dispatcher().prepareFrame(storage);
-		} finally {
-			modelView.popMatrix();
-			IrisCompat.setRenderingLevel(renderingLevel);
-		}
-
-		try (frame) {
 			long opened = ExitRuntime.openedPasses();
 			executeInto(Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView(), () -> {
-				frame.executeSolid();
-				frame.executeTranslucent();
-				frame.executeTranslucentAfterTerrain();
-				frame.executeAlwaysOnTop();
+				dispatcher.renderSolidFeatures();
+				bufferSource.endBatch();
+				renderTranslucent(dispatcher, bufferSource);
+				buffers.outlineBufferSource().endOutlineBatch();
+				if (direct != null) {
+					direct.accept(bufferSource);
+					bufferSource.endBatch();
+				}
+				dispatcher.renderTranslucentParticles();
+				bufferSource.endBatch();
 			});
 			// Inside a portal a pass on the main target was moved into the channel's target.
 			Channel channel = ExitRuntime.routingChannel();
 			if (ExitRuntime.openedPasses() != opened && channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
-				TranslucentDepth.record(frame, channel.prepareForDraw(), channel.translucentDepth());
+				TranslucentDepth.record(() -> renderTranslucent(dispatcher, bufferSource), channel.prepareForDraw(), channel.translucentDepth());
 			}
 		} finally {
-			buffers.endFrame();
+			modelView.popMatrix();
+			IrisCompat.setRenderingLevel(renderingLevel);
+			dispatcher.clearSubmitNodes();
 		}
+	}
+
+	private static void renderTranslucent(FeatureRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource) {
+		dispatcher.renderTranslucentFeatures();
+		bufferSource.endBatch();
+		buffers.crumblingBufferSource().endBatch();
 	}
 
 	/**
@@ -102,7 +122,7 @@ final class FeatureDrawer {
 	/** Opens a pass on the given colour and depth with the default uniforms and the level projection bound. */
 	static RenderPass openPass(String label, GpuTextureView color, @Nullable GpuTextureView depth) {
 		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-			() -> label, color, Optional.empty(), depth, OptionalDouble.empty());
+			() -> label, color, OptionalInt.empty(), depth, OptionalDouble.empty());
 		GpuBufferSlice projection = ExitRuntime.levelProjection();
 		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
 		if (projection != null && projection != current) {
@@ -125,7 +145,9 @@ final class FeatureDrawer {
 		if (dispatcher == null) {
 			Minecraft mc = Minecraft.getInstance();
 			buffers = new RenderBuffers(1);
-			dispatcher = new FeatureRenderDispatcher(buffers, mc.getModelManager(), mc.getAtlasManager(), mc.font, mc.gameRenderer.gameRenderState());
+			// The dispatcher renders the storage it was created with. FeatureRenderDispatcherAccessor swaps it.
+			dispatcher = new FeatureRenderDispatcher(new SubmitNodeStorage(), mc.getModelManager(), buffers.bufferSource(), mc.getAtlasManager(),
+				buffers.outlineBufferSource(), buffers.crumblingBufferSource(), mc.font, mc.gameRenderer.getGameRenderState());
 		}
 		return dispatcher;
 	}
@@ -135,9 +157,6 @@ final class FeatureDrawer {
 			dispatcher.close();
 			dispatcher = null;
 		}
-		if (buffers != null) {
-			buffers.close();
-			buffers = null;
-		}
+		buffers = null;
 	}
 }

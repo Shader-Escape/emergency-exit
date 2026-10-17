@@ -3,8 +3,6 @@ package ml.mypals.exit.impl;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
@@ -16,7 +14,6 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
-import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -26,8 +23,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
@@ -183,45 +178,25 @@ public final class ExitRuntime {
 
 	/**
 	 * Called before a render pass is opened. While a portal routes, attachments on the main target are swapped for the
-	 * channel's. Passes that are already open, and clears and copies, are not moved.
+	 * channel's: the returned target is the one to draw into, or null to keep the pass as it is. Passes that are
+	 * already open, and clears and copies, are not moved.
 	 */
-	public static RenderPassDescriptor redirectPass(RenderPassDescriptor descriptor) {
+	public static @Nullable RenderTarget redirectPass(GpuTextureView color, @Nullable GpuTextureView depth) {
 		if (!isRouting() || Gpu.isInRenderPass()) {
-			return descriptor;
+			return null;
 		}
 		RenderTarget main = Gpu.mainTarget();
-		GpuTextureView mainColor = main.getColorTextureView();
-		GpuTextureView mainDepth = main.getDepthTextureView();
-		boolean onMain = descriptor.depthAttachment() != null && descriptor.depthAttachment().textureView() == mainDepth;
-		for (RenderPassDescriptor.Attachment<Optional<Vector4fc>> color : descriptor.colorAttachments()) {
-			onMain |= color != null && color.textureView() == mainColor;
-		}
-		if (!onMain) {
-			return descriptor;
-		}
-		// No pass is open yet, so the target may be cleared and seeded here.
-		RenderTarget target = portalChannel.prepareForDraw();
-		RenderPassDescriptor redirected = RenderPassDescriptor.create(descriptor.label());
-		for (RenderPassDescriptor.Attachment<Optional<Vector4fc>> color : descriptor.colorAttachments()) {
-			if (color == null) {
-				redirected.withUnusedColorAttachment();
-			} else {
-				redirected.withColorAttachment(color.textureView() == mainColor ? target.getColorTextureView() : color.textureView(), color.clearValue());
-			}
-		}
-		RenderPassDescriptor.Attachment<OptionalDouble> depth = descriptor.depthAttachment();
-		if (depth != null) {
-			redirected.withDepthAttachment(depth.textureView() == mainDepth ? target.getDepthTextureView() : depth.textureView(), depth.clearValue());
-		}
-		// The main target can be larger than the scene sized channel.
-		RenderPass.RenderArea area = descriptor.renderArea;
-		if (area != null) {
-			int x = Math.min(area.x(), target.width);
-			int y = Math.min(area.y(), target.height);
-			redirected.withRenderArea(new RenderPass.RenderArea(x, y, Math.min(area.width(), target.width - x), Math.min(area.height(), target.height - y)));
+		if (color != main.getColorTextureView() && (depth == null || depth != main.getDepthTextureView())) {
+			return null;
 		}
 		redirectedPasses++;
-		return redirected;
+		// No pass is open yet, so the target may be cleared and seeded here.
+		return portalChannel.prepareForDraw();
+	}
+
+	/** The main render target. */
+	public static RenderTarget mainTarget() {
+		return Gpu.mainTarget();
 	}
 
 	static CameraRenderState camera() {

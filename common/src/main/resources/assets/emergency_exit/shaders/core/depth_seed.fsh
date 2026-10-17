@@ -6,9 +6,9 @@ uniform sampler2D NoHandDepth;
 
 const float PUSH = 0.9995;
 
-// Depth is reversed, so closeness is larger for nearer depths and 0 far away.
-float closeness(float depth) { return depth; }
-float depthOf(float closeness) { return closeness; }
+// Depth is standard (near = 0, far = 1). Closeness is larger for nearer depths and 0 far away.
+float closeness(float depth) { return 1.0 - depth; }
+float depthOf(float closeness) { return 1.0 - closeness; }
 
 // HIDE_UNDER_HAND keeps the hand in front. OCCLUDED_BY_WORLD lets the world hide the channel.
 void main() {

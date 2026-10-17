@@ -9,8 +9,8 @@ uniform sampler2D OpaqueDepth;
 
 layout(location = 0) out vec4 fragColor;
 
-// Depth is reversed, so closeness is larger for nearer depths and 0 far away.
-float closeness(float depth) { return depth; }
+// Depth is standard (near = 0, far = 1). Closeness is larger for nearer depths and 0 far away.
+float closeness(float depth) { return 1.0 - depth; }
 
 // Shows closeness as grey. Far away, where the buffer was cleared, is dark blue.
 vec3 depthColor(float depth) {

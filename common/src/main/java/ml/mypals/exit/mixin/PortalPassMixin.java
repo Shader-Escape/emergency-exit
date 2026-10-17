@@ -1,36 +1,41 @@
 package ml.mypals.exit.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.impl.ExitRuntime;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.function.Supplier;
 
 /**
  * While a portal routes, render passes opened on the main target draw into the channel's target instead. Every
- * {@code createRenderPass} overload ends up in this method. Each encoder only knows its own open pass, so EXIT counts
- * the open passes of all encoders here.
+ * {@code createRenderPass} overload ends up in this method. EXIT also counts the open passes here, see
+ * {@link RenderPassMixin}.
  */
 @Mixin(CommandEncoder.class)
 public class PortalPassMixin {
-	private static final String CREATE = "createRenderPass(Lcom/mojang/blaze3d/systems/RenderPassDescriptor;)Lcom/mojang/blaze3d/systems/RenderPass;";
-
-	@ModifyVariable(method = CREATE, at = @At("HEAD"), argsOnly = true)
-	private RenderPassDescriptor emergency_exit$redirectPass(RenderPassDescriptor descriptor) {
-		return ExitRuntime.redirectPass(descriptor);
-	}
-
-	@Inject(method = CREATE, at = @At("RETURN"))
-	private void emergency_exit$passOpened(RenderPassDescriptor descriptor, CallbackInfoReturnable<?> cir) {
+	@WrapMethod(method = "createRenderPass(Ljava/util/function/Supplier;Lcom/mojang/blaze3d/textures/GpuTextureView;Ljava/util/OptionalInt;Lcom/mojang/blaze3d/textures/GpuTextureView;Ljava/util/OptionalDouble;)Lcom/mojang/blaze3d/systems/RenderPass;")
+	private RenderPass emergency_exit$redirectPass(Supplier<String> label, GpuTextureView color, OptionalInt clearColor,
+		@Nullable GpuTextureView depth, OptionalDouble clearDepth, Operation<RenderPass> original) {
+		RenderTarget target = ExitRuntime.redirectPass(color, depth);
+		if (target != null) {
+			RenderTarget main = ExitRuntime.mainTarget();
+			if (color == main.getColorTextureView()) {
+				color = target.getColorTextureView();
+			}
+			if (depth != null && depth == main.getDepthTextureView()) {
+				depth = target.getDepthTextureView();
+			}
+		}
+		RenderPass pass = original.call(label, color, clearColor, depth, clearDepth);
 		ExitRuntime.passOpened();
-	}
-
-	@Inject(method = "submitRenderPass", at = @At("HEAD"))
-	private void emergency_exit$passClosed(CallbackInfo ci) {
-		ExitRuntime.passClosed();
+		return pass;
 	}
 }

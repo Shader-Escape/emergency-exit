@@ -7,6 +7,8 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitContext;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.gizmos.DrawableGizmoPrimitives;
@@ -16,6 +18,7 @@ import net.minecraft.util.Util;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -38,6 +41,8 @@ final class Channel implements ExitChannel {
 	private boolean usedLastFrame;
 	private @Nullable SubmitNodeStorage batch;
 	private final SimpleGizmoCollector gizmos = new SimpleGizmoCollector();
+	/** The gizmos to draw with this frame's batch. Before 26.2 they cannot be submitted to a storage. */
+	private final List<DrawableGizmoPrimitives> gizmoPrimitives = new ArrayList<>();
 
 	Channel(Identifier id, ExitOptions options, int order) {
 		this.id = id;
@@ -164,7 +169,10 @@ final class Channel implements ExitChannel {
 		return this.usedLastFrame || this.usedThisFrame || this.batch != null;
 	}
 
-	/** Submits the gizmos collected in portals to the batch. Gizmos that persist stay for later frames. */
+	/**
+	 * Adds the gizmos collected in portals to the batch. Gizmos that persist stay for later frames. Gizmos that are always
+	 * on top are drawn with the others, after the channel's features, and the depth still hides them.
+	 */
 	int submitGizmos() {
 		List<SimpleGizmoCollector.GizmoInstance> collected = this.gizmos.drainGizmos();
 		if (collected.isEmpty()) {
@@ -176,10 +184,10 @@ final class Channel implements ExitChannel {
 		for (SimpleGizmoCollector.GizmoInstance gizmo : collected) {
 			gizmo.gizmo().emit(gizmo.isAlwaysOnTop() ? onTop : standard, gizmo.getAlphaMultiplier(now));
 		}
-		SubmitNodeStorage storage = this.batchStorage();
-        assert ExitRuntime.camera() != null;
-        standard.submit(storage, ExitRuntime.camera(), false);
-		onTop.submit(storage, ExitRuntime.camera(), true);
+		// The batch is drawn only when it exists.
+		this.batchStorage();
+		this.gizmoPrimitives.add(standard);
+		this.gizmoPrimitives.add(onTop);
 		return collected.size();
 	}
 
@@ -195,12 +203,19 @@ final class Channel implements ExitChannel {
 	void drawBatch() {
 		SubmitNodeStorage submitted = this.batch;
 		this.batch = null;
+		List<DrawableGizmoPrimitives> primitives = List.copyOf(this.gizmoPrimitives);
+		this.gizmoPrimitives.clear();
 		if (submitted == null) {
 			return;
 		}
+		Consumer<MultiBufferSource> gizmos = primitives.isEmpty() ? null : bufferSource -> {
+			for (DrawableGizmoPrimitives gizmo : primitives) {
+				gizmo.render(new PoseStack(), bufferSource, ExitRuntime.camera(), ExitRuntime.viewRotation());
+			}
+		};
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
-			FeatureDrawer.draw(submitted, routed ? this.prepareForDraw() : Gpu.mainTarget());
+			FeatureDrawer.draw(submitted, routed ? this.prepareForDraw() : Gpu.mainTarget(), gizmos);
 		} finally {
 			ExitRuntime.end();
 		}
@@ -289,6 +304,7 @@ final class Channel implements ExitChannel {
 		this.usedThisFrame = false;
 		this.translucentDrawn = false;
 		this.batch = null;
+		this.gizmoPrimitives.clear();
 	}
 
 	void close() {

@@ -117,13 +117,13 @@ public final class SmokeTest {
 		}
 		if (this.ticks > TIMEOUT_TICKS) {
 			this.done = true;
-			log("RESULT: FAILED (no world after " + TIMEOUT_TICKS + " ticks; screen: " + mc.gui.screen() + ")");
+			log("RESULT: FAILED (no world after " + TIMEOUT_TICKS + " ticks; screen: " + mc.screen + ")");
 			Runtime.getRuntime().halt(2);
 		}
 		if (this.created) {
 			return;
 		}
-		if (mc.gui.screen() instanceof CreateWorldScreen screen) {
+		if (mc.screen instanceof CreateWorldScreen screen) {
 			WorldCreationUiState state = screen.getUiState();
 			state.setName(WORLD);
 			state.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE);
@@ -133,7 +133,7 @@ public final class SmokeTest {
 			return;
 		}
 		// Wait for the title screen to settle, then open the create world screen.
-		if (!this.requestedScreen && mc.gui.overlay() == null && this.ticks > 40) {
+		if (!this.requestedScreen && mc.getOverlay() == null && this.ticks > 40) {
 			this.requestedScreen = true;
 			log("opening the create-world screen");
 			CreateWorldScreen.openFresh(mc, () -> {});
@@ -165,7 +165,7 @@ public final class SmokeTest {
 		switch (this.ticksInWorld - this.placedAt) {
 			case 100 -> {
 				log("scene " + SceneSize.width() + "x" + SceneSize.height() + ", window " + mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight()
-					+ ", main target " + mc.gameRenderer.mainRenderTarget().width + "x" + mc.gameRenderer.mainRenderTarget().height
+					+ ", main target " + mc.getMainRenderTarget().width + "x" + mc.getMainRenderTarget().height
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				screenshot(mc, "normal");
 			}
@@ -202,7 +202,7 @@ public final class SmokeTest {
 
 	private void screenshot(Minecraft mc, String view) {
 		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
-		Screenshot.grab(mc.gameDirectory, name, mc.gameRenderer.mainRenderTarget(), 1, message -> log("screenshot " + name));
+		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), 1, message -> log("screenshot " + name));
 	}
 
 	/**

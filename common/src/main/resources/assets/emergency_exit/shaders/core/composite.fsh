@@ -21,8 +21,8 @@ layout(location = 0) out vec4 fragColor;
 const float TRANSLUCENT_EXISTS = 1.0005;
 const float BEHIND = 0.999;
 
-// Depth is reversed, so closeness is larger for nearer depths and 0 far away.
-float closeness(float depth) { return depth; }
+// Depth is standard (near = 0, far = 1). Closeness is larger for nearer depths and 0 far away.
+float closeness(float depth) { return 1.0 - depth; }
 
 // HIDE_UNDER_HAND drops the pixels of the hand. DIM_PERCENT is the brightness behind translucent surfaces.
 void main() {

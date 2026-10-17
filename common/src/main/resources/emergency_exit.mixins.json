@@ -5,8 +5,10 @@
   "compatibilityLevel": "${mixin_java}",
   "client": [
     "CompiledPipelineMixin",
+    "FeatureRenderDispatcherAccessor",
     "LevelRendererMixin",
     "PortalPassMixin",
+    "RenderPassMixin",
     "RenderPipelinesAccessor",
     "StrictValidationMixin",
     "iris.IrisRenderingPipelineMixin"
