@@ -13,7 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
-
+import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -25,6 +25,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
@@ -168,7 +169,7 @@ public final class SmokeTest {
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				screenshot(mc, "normal");
 			}
-			case 102 -> presented(mc);
+			case 102 -> presented(mc, "presented");
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
 			case 115 -> screenshot(mc, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
@@ -176,9 +177,27 @@ public final class SmokeTest {
 			case 131 -> DebugView.set(DebugView.Mode.SCENE_DEPTH, Exit.MAIN);
 			case 145 -> screenshot(mc, "scene_depth");
 			case 146 -> DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
+			case 150 -> viewFromTheSide(mc);
+			case 200 -> presented(mc, "side");
 			default -> {
 			}
 		}
+	}
+
+	/**
+	 * Moves the player beside the row of boxes, so the red one is in front of the green and yellow ones and the blue
+	 * one is behind them. It shows whether translucent drawings are sorted by depth with the other channels.
+	 */
+	private void viewFromTheSide(Minecraft mc) {
+		Vec3 center = DebugShapes.center();
+		if (center == null) {
+			return;
+		}
+		Vec3 look = mc.player.getLookAngle();
+		Vec3 right = new Vec3(-look.z, 0, look.x).normalize();
+		Vec3 eye = center.add(right.scale(7)).add(look.x * -1.5, 0.6, look.z * -1.5);
+		mc.player.connection.sendCommand(String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f facing %.3f %.3f %.3f",
+			eye.x, eye.y - mc.player.getEyeHeight(), eye.z, center.x, center.y, center.z));
 	}
 
 	private void screenshot(Minecraft mc, String view) {
@@ -190,7 +209,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc) {
+	private void presented(Minecraft mc, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -208,7 +227,7 @@ public final class SmokeTest {
 				image.setRGB(x, y, (pixels.get(i) & 0xFF) << 16 | (pixels.get(i + 1) & 0xFF) << 8 | pixels.get(i + 2) & 0xFF);
 			}
 		}
-		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-presented.png";
+		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
 		try {
 			ImageIO.write(image, "png", mc.gameDirectory.toPath().resolve("screenshots").resolve(name).toFile());
 			log("screenshot " + name);

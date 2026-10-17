@@ -89,10 +89,13 @@ Drawings of one channel hide each other by depth (one target). Channels that ble
 nearer one is drawn over the other with their alpha (the hand and the dimming behind translucent surfaces are applied
 as they join), and the layer is then merged onto the frame; priority only decides where they are at the same depth.
 The layer keeps one depth per pixel, so two channels blend exactly and three or more overlapping at one pixel
-approximately; only content that writes depth sorts (translucent render types that write none, such as vanilla's
-`debugQuads`, keep the seeded scene depth and count as far away). Channels with `blendWithChannels(false)` are merged
-over the layer by priority, then creation order. Each channel costs one RGBA8 + D32 target at the scene size, and
-blending two or more costs two more.
+approximately. Translucent render types write no depth, so EXIT draws the translucent submits of its own drawings
+(immediate drawings, batches, and submits rendered through EXIT inside a portal) a second time with depth-only copies
+of their pipelines, into a depth target of the channel; before merging, the nearer of both depths becomes the
+channel's depth. Translucent content in passes you open yourself (in a portal, or with `ExitContext.openPass`) writes
+no depth, keeps the seeded scene depth and counts as far away. Channels with `blendWithChannels(false)` are merged
+over the layer by priority, then creation order. Each channel costs one RGBA8 + D32 target at the scene size, one more
+D32 target once it draws translucent submits, and blending two or more costs two more.
 
 ### Rules
 

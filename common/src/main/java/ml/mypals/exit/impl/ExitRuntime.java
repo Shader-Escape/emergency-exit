@@ -118,6 +118,11 @@ public final class ExitRuntime {
 		return RenderSystem.isOnRenderThread() && !PORTALS.isEmpty() && portalRouted;
 	}
 
+	/** The channel the open portals route into, or null when nothing routes. */
+	static @Nullable Channel routingChannel() {
+		return isRouting() ? portalChannel : null;
+	}
+
 	public static boolean inPortal() {
 		return RenderSystem.isOnRenderThread() && !PORTALS.isEmpty();
 	}
@@ -353,6 +358,9 @@ public final class ExitRuntime {
 			for (Channel channel : mergeOrder) {
 				redirectedGizmos += channel.submitGizmos();
 				channel.drawBatch();
+			}
+			for (Channel channel : mergeOrder) {
+				channel.foldTranslucentDepth();
 			}
 			RenderTarget mainTarget = Gpu.mainTarget();
 			boolean saved = IrisCompat.bypass();

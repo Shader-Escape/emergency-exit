@@ -4,12 +4,14 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import org.joml.Matrix4fStack;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -53,6 +55,11 @@ final class FeatureDrawer {
 				try (RenderPass pass = openPass("emergency_exit_features", target)) {
 					FeatureRenderDispatcher.renderAllFeatures(pass, frame);
 				}
+				// Inside a portal a pass on the main target was moved into the channel's target.
+				Channel channel = ExitRuntime.routingChannel();
+				if (channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
+					TranslucentDepth.record(frame, channel.prepareForDraw(), channel.translucentDepth());
+				}
 			}
 		} finally {
 			buffers.endFrame();
@@ -61,9 +68,13 @@ final class FeatureDrawer {
 
 	/** Opens a pass on {@code target} with the default uniforms and the level projection bound. */
 	static RenderPass openPass(String label, RenderTarget target) {
+		return openPass(label, Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView());
+	}
+
+	/** Opens a pass on the given colour and depth with the default uniforms and the level projection bound. */
+	static RenderPass openPass(String label, GpuTextureView color, @Nullable GpuTextureView depth) {
 		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-			() -> label, Objects.requireNonNull(target.getColorTextureView(), "target without colour"), Optional.empty(),
-			target.getDepthTextureView(), OptionalDouble.empty());
+			() -> label, color, Optional.empty(), depth, OptionalDouble.empty());
 		GpuBufferSlice projection = ExitRuntime.levelProjection();
 		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
 		if (projection != null && projection != current) {

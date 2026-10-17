@@ -4,6 +4,7 @@
   "plugin": "ml.mypals.exit.plugin.ExitMixinPlugin",
   "compatibilityLevel": "${mixin_java}",
   "client": [
+    "CompiledPipelineMixin",
     "LevelRendererMixin",
     "PortalPassMixin",
     "RenderPipelinesAccessor",

@@ -17,6 +17,7 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -29,6 +30,9 @@ final class Channel implements ExitChannel {
 	final int order;
 
 	private @Nullable TextureTarget target;
+	/** The depth of the translucent drawings, see {@link TranslucentDepth}. */
+	private @Nullable TextureTarget translucentDepth;
+	private boolean translucentDrawn;
 	private boolean preparedThisFrame;
 	private boolean usedThisFrame;
 	private boolean usedLastFrame;
@@ -209,16 +213,47 @@ final class Channel implements ExitChannel {
 			Gpu.clear(output);
 			DepthSeed.seed(Gpu.mainTarget(), output, this.options);
 			this.preparedThisFrame = true;
+			this.translucentDrawn = false;
 		}
 		this.usedThisFrame = true;
 		return output;
+	}
+
+	/**
+	 * The target for the depth of the translucent drawings. On its first use in a frame it starts from the seeded
+	 * depth, so the world hides them there too. Call it after {@link #prepareForDraw}.
+	 */
+	RenderTarget translucentDepth() {
+		RenderTarget output = Objects.requireNonNull(this.target);
+		if (this.translucentDepth == null) {
+			this.translucentDepth = Gpu.depthTarget(this.label() + "_translucent_depth", output.width, output.height);
+		} else if (this.translucentDepth.width != output.width || this.translucentDepth.height != output.height) {
+			Gpu.resize(this.translucentDepth, output.width, output.height);
+		}
+		if (!this.translucentDrawn) {
+			Gpu.copyDepth(this.translucentDepth, output);
+			this.translucentDrawn = true;
+		}
+		return this.translucentDepth;
+	}
+
+	/** Makes the channel's depth the nearer of its own and the translucent drawings'. Called before merging. */
+	void foldTranslucentDepth() {
+		if (this.translucentDrawn && this.usedThisFrame && this.target != null && this.translucentDepth != null) {
+			TranslucentDepth.fold(this.target, this.translucentDepth);
+		}
+		this.translucentDrawn = false;
+	}
+
+	private String label() {
+		return "emergency_exit_" + this.id.getNamespace() + "_" + this.id.getPath().replace('/', '_');
 	}
 
 	private TextureTarget ensureTarget() {
 		int width = Gpu.sceneWidth();
 		int height = Gpu.sceneHeight();
 		if (this.target == null) {
-			this.target = Gpu.colorDepthTarget("emergency_exit_" + this.id.getNamespace() + "_" + this.id.getPath().replace('/', '_'), width, height);
+			this.target = Gpu.colorDepthTarget(this.label(), width, height);
 		} else if (this.target.width != width || this.target.height != height) {
 			Gpu.resize(this.target, width, height);
 		}
@@ -252,6 +287,7 @@ final class Channel implements ExitChannel {
 		this.usedLastFrame = this.usedThisFrame;
 		this.preparedThisFrame = false;
 		this.usedThisFrame = false;
+		this.translucentDrawn = false;
 		this.batch = null;
 	}
 
@@ -260,6 +296,11 @@ final class Channel implements ExitChannel {
 			this.target.destroyBuffers();
 			this.target = null;
 		}
+		if (this.translucentDepth != null) {
+			this.translucentDepth.destroyBuffers();
+			this.translucentDepth = null;
+		}
+		this.translucentDrawn = false;
 		this.preparedThisFrame = false;
 		this.usedThisFrame = false;
 		this.batch = null;
