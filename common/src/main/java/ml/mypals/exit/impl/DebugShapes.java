@@ -1,0 +1,240 @@
+package ml.mypals.exit.impl;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import ml.mypals.exit.api.Exit;
+import ml.mypals.exit.api.ExitChannel;
+import ml.mypals.exit.api.ExitOptions;
+import ml.mypals.exit.api.PortalOverrides;
+import ml.mypals.exit.compat.IrisCompat;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.gizmos.GizmoStyle;
+import net.minecraft.gizmos.Gizmos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Test boxes for {@code /emergency_exit debug shapes}, placed 5 blocks in front of the player.
+ * <ul>
+ *     <li>Red, on the right, is an immediate drawing on the main channel. It runs inside the main pass, so it is
+ *     deferred to the batch.</li>
+ *     <li>Green, in the middle, is drawn with the main channel's batch.</li>
+ *     <li>Yellow sits behind the green box on another channel. The channels blend by depth, so green covers it where
+ *     they overlap.</li>
+ *     <li>Blue, on the left, is a pass on the main target inside a portal. The portal moves it into a channel that
+ *     shows through the world. The cyan outline around it is a gizmo added in the same portal.</li>
+ * </ul>
+ */
+public final class DebugShapes {
+	public static final double DISTANCE = 5;
+	private static final Identifier WHITE = ExitMod.id("textures/misc/white.png");
+	private static final int FULL_BRIGHT = 0xF000F0;
+
+	/** The centre of the middle box, or null while the shapes are off. */
+	private static @Nullable Vec3 center;
+	/** The player's horizontal right when the shapes were turned on. */
+	private static Vec3 right = new Vec3(-1, 0, 0);
+	/** The player's horizontal forward direction when the shapes were turned on. */
+	private static Vec3 forward = new Vec3(0, 0, 1);
+	private static @Nullable ExitChannel xray;
+	private static @Nullable ExitChannel mix;
+	private static final Stats STATS = new Stats();
+
+	/** Counters for the checks. */
+	public static final class Stats {
+		public int immediateDraws;
+		public int deferredDraws;
+		public int routedDraws;
+		public int batchDraws;
+		public int portalDraws;
+		/** Portals whose pass on the main target was moved into the channel. */
+		public int portalRedirectedPasses;
+		public int portalRoutingMismatches;
+		/** Redirects outside a portal that did not throw. Should stay 0. */
+		public int unguardedRedirects;
+		/** Whether the portal on a worker thread behaved. Null until it ran. */
+		public volatile @Nullable Boolean offThreadOk;
+	}
+
+	private DebugShapes() {}
+
+	/**
+	 * Called inside the main render pass, after the solid features. {@code passThrough} is the level's collector,
+	 * used when nothing is routed. The drawing is deferred to the batch, since no pass can be opened here.
+	 */
+	public static void inMainPass(SubmitNodeCollector passThrough) {
+		Vec3 at = center;
+		if (at == null) {
+			return;
+		}
+		Exit.draw(passThrough, exit -> {
+			STATS.immediateDraws++;
+			if (exit.deferred()) {
+				STATS.deferredDraws++;
+			}
+			if (exit.routed()) {
+				STATS.routedDraws++;
+			}
+			box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(right.scale(2)), 0xC0FF3030);
+		});
+	}
+
+	/** Called while the level collects its submits. The green box goes to the main channel's batch. */
+	public static void collectSubmits(SubmitNodeCollector collector, Vec3 camera) {
+		Vec3 at = center;
+		if (at == null) {
+			return;
+		}
+		STATS.batchDraws++;
+		box(Exit.batch(collector), new PoseStack(), camera, at, 0xFF30FF30, true);
+	}
+
+	/** Called at the end of the level rendering, outside any pass, before the batches are drawn. */
+	static void atLevelEnd() {
+		Vec3 at = center;
+		if (at == null) {
+			return;
+		}
+		// A channel of its own, blended with the main channel by depth.
+		if (mix == null) {
+			mix = Exit.channel(ExitMod.id("debug_mix"), ExitOptions.DEFAULT);
+		}
+		mix.draw(exit -> box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(forward.scale(0.5)).add(right.scale(0.5)).add(0, 0.3, 0), 0xFFFFE030, true));
+
+		// A portal around code with its own render context.
+		if (xray == null) {
+			xray = Exit.channel(ExitMod.id("debug_xray"), ExitOptions.builder().occludedByWorld(false).priority(10).build());
+			checkOffThread();
+		}
+		checkRedirectGuard();
+		xray.portal(() -> {
+			STATS.portalDraws++;
+			boolean routing = Exit.isRouting();
+			if ((xray.redirect(Gpu.mainTarget()) == Gpu.mainTarget()) == routing) {
+				STATS.portalRoutingMismatches++;
+			}
+			// Rendered into the main target without redirect. The portal moves the pass into the channel.
+			long redirectedBefore = ExitRuntime.redirectedPasses();
+			SubmitNodeStorage storage = FeatureDrawer.newStorage();
+			box(storage, new PoseStack(), ExitRuntime.camera().pos, at.subtract(right.scale(2)), 0xC03030FF);
+			FeatureDrawer.draw(storage, Gpu.mainTarget());
+			boolean moved = ExitRuntime.redirectedPasses() > redirectedBefore;
+			if (moved) {
+				STATS.portalRedirectedPasses++;
+			}
+			if (moved != routing) {
+				STATS.portalRoutingMismatches++;
+			}
+			// A gizmo added in the portal is drawn with the channel instead of by vanilla.
+			Vec3 blue = at.subtract(right.scale(2));
+			Gizmos.cuboid(new AABB(blue, blue).inflate(0.65), GizmoStyle.stroke(0xFF30FFFF, 3));
+		});
+	}
+
+	/** Checks that redirect throws outside a portal. */
+	private static void checkRedirectGuard() {
+		try {
+			Exit.redirect(Gpu.mainTarget());
+			STATS.unguardedRedirects++;
+		} catch (IllegalStateException expected) {
+		}
+		try {
+			xray.redirect(Gpu.mainTarget());
+			STATS.unguardedRedirects++;
+		} catch (IllegalStateException expected) {
+		}
+	}
+
+	/** Checks that a portal on a worker thread only sets that thread's format switch, and that redirect throws. */
+	private static void checkOffThread() {
+		Thread worker = new Thread(() -> {
+			boolean before = IrisCompat.skipExtension();
+			boolean[] ok = {true};
+			xray.portal(PortalOverrides.DEFAULT, () -> {
+				ok[0] &= IrisCompat.skipExtension() == IrisCompat.LOADED;
+				try {
+					Exit.redirect(Gpu.mainTarget());
+					ok[0] = false;
+				} catch (IllegalStateException expected) {
+				}
+			});
+			STATS.offThreadOk = ok[0] && IrisCompat.skipExtension() == before;
+		}, "emergency_exit-portal-check");
+		worker.setDaemon(true);
+		worker.start();
+	}
+
+	public static boolean isOn() {
+		return center != null;
+	}
+
+	/** Turns the shapes on in front of {@code viewer}, or off. Returns whether they are on now. */
+	public static boolean toggle(Entity viewer) {
+		if (center != null) {
+			center = null;
+			return false;
+		}
+		Vec3 look = viewer.getLookAngle();
+		center = viewer.getEyePosition().add(look.scale(DISTANCE));
+		Vec3 flat = new Vec3(look.x, 0, look.z);
+		if (flat.lengthSqr() > 1.0E-6) {
+			flat = flat.normalize();
+			forward = flat;
+			right = new Vec3(-flat.z, 0, flat.x);
+		}
+		return true;
+	}
+
+	public static @Nullable Vec3 center() {
+		return center;
+	}
+
+	public static Stats stats() {
+		return STATS;
+	}
+
+	/** A translucent box of one block centred at {@code at}. It writes no depth. */
+	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb) {
+		box(collector, poseStack, camera, at, argb, false);
+	}
+
+	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
+	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
+		poseStack.pushPose();
+		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
+		collector.submitCustomGeometry(poseStack, solid ? RenderTypes.entitySolid(WHITE) : RenderTypes.debugQuads(), (pose, buffer) -> {
+			quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
+			quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1);
+			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);
+			quad(buffer, pose, argb, solid, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1);
+			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0);
+			quad(buffer, pose, argb, solid, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
+		});
+		poseStack.popPose();
+	}
+
+	private static void quad(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float... corners) {
+		for (int i = 0; i < 12; i += 3) {
+			vertex(buffer, pose, argb, solid, corners, i);
+		}
+		if (solid) {
+			// The solid render type culls back faces, so draw the other side too.
+			for (int i = 9; i >= 0; i -= 3) {
+				vertex(buffer, pose, argb, true, corners, i);
+			}
+		}
+	}
+
+	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
+		VertexConsumer vertex = buffer.addVertex(pose, corners[i], corners[i + 1], corners[i + 2]).setColor(argb);
+		if (solid) {
+			vertex.setUv(0, 0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(FULL_BRIGHT).setNormal(pose, 0, 1, 0);
+		}
+	}
+}

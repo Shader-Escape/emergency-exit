@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-EXIT 是一个 Fabric 库，让自定义的世界渲染绕过光影包（Iris）。通过 EXIT 绘制的内容会画进一个独立的渲染目标，
+EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕过光影包（Iris）。通过 EXIT 绘制的内容会画进一个独立的渲染目标，
 等光影包完成整帧的着色之后，再按深度合并回画面上。光影包既不会替换你的渲染管线，也不会把你的绘制吞掉。
 
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
@@ -10,6 +10,21 @@ EXIT 是一个 Fabric 库，让自定义的世界渲染绕过光影包（Iris）
 
 目前只支持 Minecraft **26.3**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。其它版本会陆续移植，
 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码。
+
+### 加载器
+
+两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+26.3`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+
+调用时机要在关卡渲染期间（`LevelRenderer.render` 里面）。各加载器可用的位置：
+
+| 用途 | Fabric | NeoForge |
+|---|---|---|
+| 提交到批量 | `LevelRenderEvents.COLLECT_SUBMITS` | `SubmitCustomGeometryEvent` |
+| 在主渲染通道内（即时绘制会被推迟到批量） | `LevelRenderEvents.AFTER_SOLID_FEATURES` 等 | `RenderLevelStageEvent.AfterOpaqueFeatures` 等 |
+| 主渲染通道之后、不在任何通道内（即时绘制、portal） | `LevelRenderEvents.END_MAIN` | 没有对应的事件 |
+
+NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才触发，那时 EXIT 已经合并完本帧，在里面调用会被丢弃。
 
 ## 基础概念
 
@@ -51,7 +66,7 @@ EXIT 是一个 Fabric 库，让自定义的世界渲染绕过光影包（Iris）
 
 ## 快速开始
 
-所有调用都要在渲染线程上、关卡渲染进行期间进行，最方便的是放在 Fabric 的 `LevelRenderEvents` 里。
+所有调用都要在渲染线程上、关卡渲染进行期间进行，比如 Fabric 的 `LevelRenderEvents` 或 NeoForge 的渲染事件（见上文"加载器"）。
 
 ### 1. 即时绘制（托管上下文）
 
@@ -216,22 +231,26 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * `main_depth`：最终的主深度
   * `translucent_depth`：只含半透明表面的深度
 * `/emergency_exit debug shapes`：在玩家视线前方 5 格处生成三个测试方块，再输入一次关闭：
-  * 红色（右）：主通道上的即时绘制（`AFTER_SOLID_FEATURES`，在主渲染通道内，因此被推迟到批量）
-  * 绿色（中）：主通道的批量（`COLLECT_SUBMITS`），不透明、写深度
-  * 黄色（中，绿色后方偏右上）：另一个通道上的即时绘制（`END_MAIN`），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 pass 绘制（`END_MAIN`，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
+  * 红色（右）：主通道上的即时绘制（Fabric 的 `AFTER_SOLID_FEATURES`、NeoForge 的 `AfterOpaqueFeatures`，在主渲染通道内，因此被推迟到批量）
+  * 绿色（中）：主通道的批量（Fabric 的 `COLLECT_SUBMITS`、NeoForge 的 `SubmitCustomGeometryEvent`），不透明、写深度
+  * 黄色（中，绿色后方偏右上）：另一个通道上的即时绘制（关卡渲染结束时，在任何渲染通道之外），不透明、写深度；与主通道按深度混合，重叠处绿色在前
+  * 蓝色（左）：portal 里直接对主目标开 pass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
 
 ## 开发
 
-* `./gradlew build`：构建库。
-* `./gradlew runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes` 的测试方块，截图到
-  `run/screenshots/` 后退出；日志最后是 `RESULT: OK`。要测试改道，需要在 `run/shaderpacks` 放入光影包并在
-  `run/config/iris.properties` 里启用。
-* `./gradlew runAuditClient`：检查每个 mixin 都已生效。
-* `./gradlew runSmokeClient -Pexit.superResolution`：同上，但加载 Super Resolution 模组（只在开发运行时加入），
-  检查拉伸合并。需要支持 SR 的光影包（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/config/super_resolution/config.toml`
+项目分三个子工程：`common`（与加载器无关的全部代码，包括 API、渲染和 mixin）、`fabric` 和 `neoforge`（入口、元数据、
+命令注册和调试方块的事件挂钩），结构来自 MultiLoader-Template。加载器相关的功能通过 `Platform` 服务提供。
+
+* `./gradlew build`：构建两个加载器的 jar（`fabric/build/libs`、`neoforge/build/libs`）。
+* `./gradlew :fabric:runSmokeClient`、`./gradlew :neoforge:runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes`
+  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric` 和 `run/neoforge`，要测试改道，需要在
+  其中的 `shaderpacks` 放入光影包并在 `config/iris.properties` 里启用。
+* `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
+* `./gradlew :fabric:runSmokeClient -Pexit.superResolution`：同上，但加载 Super Resolution 模组（只在开发运行时加入），
+  检查拉伸合并。需要支持 SR 的光影包（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
   里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
   即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
+* `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 
 ## 与 LitematicaPass 的关系（计划）
 

@@ -1,0 +1,103 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.fabricmc.fabric-loom'
+}
+
+dependencies {
+    minecraft("com.mojang:minecraft:${minecraft_version}")
+    implementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
+    implementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
+
+    // Compiled against and loaded in the development runs, but not a dependency of the published library.
+    for (mod in [iris_fabric, sodium_fabric]) {
+        compileOnly("maven.modrinth:${mod}")
+        localRuntime("maven.modrinth:${mod}")
+    }
+    // Iris nests these libraries in its jar, but the development runs do not load nested jars.
+    for (library in ['org.anarres:jcpp:1.4.14', 'org.antlr:antlr4-runtime:4.13.1', "io.github.douira:glsl-transformer:${glsl_transformer_version}"]) {
+        localRuntime(library) { transitive = false }
+    }
+    // -Pexit.superResolution adds the Super Resolution mod to the development runs.
+    if (project.hasProperty('exit.superResolution')) {
+        localRuntime("maven.modrinth:${super_resolution_fabric}")
+    }
+}
+
+// Development mod that checks every mixin applies. Run it with runAuditClient.
+sourceSets.create('audit') {
+    compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+    runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+}
+
+// Development mod that creates a world and checks the rendering. Run it with runSmokeClient.
+sourceSets.create('smoke') {
+    java.srcDirs = [project(':common').file('src/smoke/java'), file('src/smoke/java')]
+    resources.srcDirs = [project(':common').file('src/smoke/resources'), file('src/smoke/resources')]
+    compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+    runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+}
+
+def smokeProps = ['mixin_java': "JAVA_${java_version}".toString()]
+tasks.named('processSmokeResources', ProcessResources) {
+    inputs.properties(smokeProps)
+    filesMatching('*.mixins.json') {
+        expand(smokeProps)
+    }
+}
+
+loom {
+    mods {
+        register(mod_id) { sourceSet(sourceSets.main) }
+        register('emergency_exit_audit') { sourceSet(sourceSets.audit) }
+        register('emergency_exit_smoke') { sourceSet(sourceSets.smoke) }
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+        }
+        auditClient {
+            client()
+            source(sourceSets.audit)
+            // Headless, so startup errors end the run instead of opening a dialog.
+            vmArg('-Djava.awt.headless=true')
+        }
+        smokeClient {
+            client()
+            source(sourceSets.smoke)
+            // Headless, so startup errors end the run instead of opening a dialog. The game window still opens.
+            vmArg('-Djava.awt.headless=true')
+        }
+        remove server
+    }
+    runConfigs.configureEach {
+        ideConfigGenerated(true)
+        // Exports transformed classes, which the audit reads.
+        vmArg('-Dmixin.debug.export=true')
+        runDir('../run/fabric')
+    }
+}
+
+// The audit reads the classes Mixin exports, so drop the ones from earlier runs.
+tasks.named('runAuditClient') {
+    def exported = rootProject.file('run/fabric/.mixin.out')
+    doFirst { exported.deleteDir() }
+}
+
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named(variant) {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named(variant) {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}

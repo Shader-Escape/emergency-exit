@@ -2,13 +2,29 @@
 
 [中文文档](README.zh-CN.md)
 
-A Fabric library that lets custom world rendering bypass shader packs (Iris). What you draw through EXIT goes into an
+A library for Fabric and NeoForge that lets custom world rendering bypass shader packs (Iris). What you draw through EXIT goes into an
 independent render target and is merged onto the frame by depth after the shader pack has shaded it, so the shader pack
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
 Minecraft **26.3** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
 its own git branch with plain code for that version.
+
+### Loaders
+
+Both loaders share one API, with one jar each: `emergency_exit-fabric` and `emergency_exit-neoforge` (Maven
+`ml.mypals.exit:emergency_exit-<loader>:0.1.0+26.3`). Iris is optional. Without a shader pack nothing is routed.
+
+Call EXIT while the level renders, inside `LevelRenderer.render`.
+
+| Purpose | Fabric | NeoForge |
+|---|---|---|
+| Submit to a batch | `LevelRenderEvents.COLLECT_SUBMITS` | `SubmitCustomGeometryEvent` |
+| Inside the main pass (immediate drawings are deferred to the batch) | `LevelRenderEvents.AFTER_SOLID_FEATURES` and others | `RenderLevelStageEvent.AfterOpaqueFeatures` and others |
+| After the main pass, outside any pass (immediate drawings, portals) | `LevelRenderEvents.END_MAIN` | no matching event |
+
+NeoForge's `RenderLevelStageEvent.AfterLevel` fires after the level rendering has ended, when EXIT has already merged
+the frame, so drawings there are dropped.
 
 * The world still hides your drawing: the channel's depth is seeded from the scene depth before translucent surfaces.
 * Translucent surfaces of the scene (water, glass) are drawn by the shader pack after your drawing left the frame; the
@@ -21,7 +37,7 @@ its own git branch with plain code for that version.
 
 ## Use
 
-Call EXIT on the render thread while the level renders, for example from Fabric's `LevelRenderEvents`.
+Call EXIT on the render thread while the level renders, for example from Fabric's `LevelRenderEvents` or NeoForge's render events (see Loaders above).
 
 ```java
 // 1. Immediate drawing with a managed context: collector, camera-relative pose stack, camera.
@@ -128,15 +144,20 @@ portal, moved into a channel that shows through the world, with a cyan gizmo out
 
 ## Development
 
-* `./gradlew build` builds the library.
-* `./gradlew runSmokeClient` creates a world, turns on the test shapes of `/emergency_exit debug shapes`, takes
-  screenshots into `run/screenshots/` and quits; the log ends with `RESULT: OK`.
-* `./gradlew runAuditClient` checks that every mixin applies.
-* `./gradlew runSmokeClient -Pexit.superResolution` does the same with the Super Resolution mod loaded (in the
-  development runs only), to check the stretched merge. It needs a shader pack SR supports (for example Sundial Lite;
-  SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/config/super_resolution/config.toml` (the other
-  algorithms do not upscale properly there). The smoke test also saves `*-presented.png`, the window's front buffer:
-  what the player sees (with SR the main target is not the presented frame).
+The project has three subprojects, laid out like MultiLoader-Template. `common` holds all loader-independent code
+(API, rendering, mixins). `fabric` and `neoforge` hold the entry points, metadata, command registration and the
+event hooks of the debug shapes. Loader-specific queries go through the `Platform` service.
+
+* `./gradlew build` builds both jars (`fabric/build/libs`, `neoforge/build/libs`).
+* `./gradlew :fabric:runSmokeClient` and `./gradlew :neoforge:runSmokeClient` create a world, turn on the test shapes,
+  take screenshots and quit. The log ends with `RESULT: OK`. They run in `run/fabric` and `run/neoforge`. To test
+  routing, put a shader pack into its `shaderpacks` folder and enable it in `config/iris.properties`.
+* `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
+* `./gradlew :fabric:runSmokeClient -Pexit.superResolution` does the same with the Super Resolution mod loaded (in the
+  development runs only), to check the stretched merge. It needs a shader pack SR supports (for example Sundial Lite,
+  SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/fabric/config/super_resolution/config.toml`. The smoke test
+  also saves `*-presented.png`, the window's front buffer, which is what the player sees.
+* `./gradlew publishToMavenLocal` publishes both jars for other mods' development setups.
 
 ## LitematicaPass on EXIT (plan)
 
