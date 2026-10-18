@@ -12,6 +12,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
 | 1.21.10 | `port/1.21.10` | 21 | 混淆，Mojang 映射 | 1.9.7 |
 | 1.21.8 | `port/1.21.8` | 21 | 混淆，Mojang 映射 | 1.9.6 |
+| 1.21.5 | `port/1.21.5` | 21 | 混淆，Mojang 映射 | 1.8.11 |
 
 ## 26.2（相对 26.3）
 
@@ -224,3 +225,42 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - NeoForge 开发运行同样要在 `run/neoforge-1.21.8/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
 - 冒烟测试另外检查 EXIT 的每条管线都能编译（`precompilePipeline(...).isValid()`）。没有这一项时，全屏着色器缺失只会
   在日志里报错，计数照样通过。
+
+## 1.21.5（相对 1.21.8）
+
+**构建**
+- NeoForm `1.21.5-20250325.162830`，NeoForge `21.5.101`，Fabric API `0.128.2+1.21.5`，Iris 1.8.11、Sodium 0.6.13，
+  glsl-transformer 2.0.1。
+
+**渲染通道和纹理**
+- 没有 `GpuTextureView`：通道附件、采样器、目标都直接用 `GpuTexture`（`getColorTexture()`、`getDepthTexture()`）。
+- `createRenderPass(color, OptionalInt, depth, OptionalDouble)` 没有标签；`RenderPass.drawIndexed(first, count)`。
+- 没有 `bindDefaultUniforms`、`DynamicUniforms`：画的时候直接从 `RenderSystem` 读投影和 model-view。投影是 `Matrix4f`，
+  EXIT 用 `backupProjectionMatrix`/`restoreProjectionMatrix` 换关卡投影；缩放探针在 model-view 栈上压入自己的矩阵。
+- `GpuBuffer` 用 `BufferType`/`BufferUsage` 创建，回读用 `readBuffer`。`RenderPipeline` 构造没有排序键。
+- 没有 `BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA`，直接写 `(ONE, ONE_MINUS_SRC_ALPHA)` 两组因子。
+
+**输出覆盖**
+- 没有 `RenderSystem.outputColorTextureOverride`。EXIT 自己记一个输出（`ExitRuntime.setOutput`），`PortalPassMixin`
+  在 `GlCommandEncoder.createRenderPass` 里把主目标的附件换成它；批量的渲染类型就这样画进通道目标。portal 仍用同一个混入改道
+  （没有照 LitematicaPass 换 `getMainRenderTarget()`，因为 1.21.5 的绘制都经过 `createRenderPass`）。
+
+**关卡钩子和加载器事件**
+- `LevelRenderer.renderLevel(allocator, DeltaTracker, renderOutline, Camera, GameRenderer, Matrix4f modelView, Matrix4f projection)`。
+- NeoForge 21.5 只有一个 `RenderLevelStageEvent`，用 `getStage()` 区分；调试方块用 `Stage.AFTER_CUTOUT_BLOCKS`。
+- Fabric API 的 `WorldRenderEvents` 同 1.21.8。
+
+**Iris**
+- Iris 1.8.11 只要光影包在用，就加宽之后新建的每个 `BufferBuilder` 的格式，除非设了 `ImmediateState.skipExtension`；
+  `isRenderingLevel` 开着时，原版管线（`getVertexFormat()`，也就是 `RenderType.format()`）也换成加宽的格式。
+  批量开始缓冲时两个都要设（`skipExtension` 开、`isRenderingLevel` 关）。只关 `isRenderingLevel` 时，实体方块（绿、黄）
+  在光影下完全画不出来，计数却照样通过。
+- 所以 1.21.5 上 `skipExtension` 是真的开关：`IrisCompat.hasSkipExtension()` 为 true，portal 和 `plainFormat` 都会设它，
+  和 26.3 一样（1.21.6 到 26.2 的 Iris 把加宽格式当原版格式交出，EXIT 在那些版本不动它）。
+- Iris 1.8 只要它想替换着色器（不管 bypass），就锁住它不认识的原版程序的颜色和深度写入。`IrisShaderOverrideMixin`
+  让 `shouldOverrideShaders` 在 bypass 时返回 false（和 LitematicaPass 一样）。
+- 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
+
+**开发运行**
+- NeoForge 开发运行同样要在 `run/neoforge-1.21.5/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
+- 冒烟测试另外读呈现帧中心附近的像素，绿色方块不在就判失败（计数只说明调用过，上面的问题就是这样漏掉的）。
