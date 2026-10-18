@@ -7,15 +7,33 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-Minecraft **26.3** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
-its own git branch with plain code for that version.
+Mod id `emergency_exit`, API package `ml.mypals.exit.api`. Each Minecraft version has its own git branch with plain
+code for that version. This README, kept on `master` only, describes what all versions share; the examples use 26.3.
+What differs on another version (events, API types, missing features) is in that version's section of
+[ChangeLog.md](ChangeLog.md), under **Use**. The branches themselves carry a short README that points here.
+
+### Versions
+
+| Minecraft | Branch | Maven version | Drawings and batches take | Notes |
+|---|---|---|---|---|
+| 26.3 | `master` | `0.1.0+26.3` | `SubmitNodeCollector` | |
+| 26.2 | `port/26.2` | `0.1.0+26.2` | `SubmitNodeCollector` | |
+| 26.1.2 | `port/26.1.2` | `0.1.0+26.1.2` | `SubmitNodeCollector` | |
+| 1.21.11 | `port/1.21.11` | `0.1.0+1.21.11` | `SubmitNodeCollector` | NeoForge has no event with the level's collector |
+| 1.21.10 | `port/1.21.10` | `0.1.0+1.21.10` | `SubmitNodeCollector` | `ResourceLocation`; no gizmos |
+| 1.21.8 | `port/1.21.8` | `0.1.0+1.21.8` | `MultiBufferSource` | `ExitContext.camera()` is the `Camera` |
+| 1.21.5 | `port/1.21.5` | `0.1.0+1.21.5` | `MultiBufferSource` | |
+| 1.21.4 | `port/1.21.4` | `0.1.0+1.21.4` | `MultiBufferSource` | plain OpenGL: portals bind the channel's target |
+| 1.21.3 | `port/1.21.3` | `0.1.0+1.21.3` | `MultiBufferSource` | |
+| 1.21.1 | `port/1.21.1` | `0.1.0+1.21.1` | `MultiBufferSource` | |
 
 ### Loaders
 
 Both loaders share one API, with one jar each: `emergency_exit-fabric` and `emergency_exit-neoforge` (Maven
-`ml.mypals.exit:emergency_exit-<loader>:0.1.0+26.3`). Iris is optional. Without a shader pack nothing is routed.
+`ml.mypals.exit:emergency_exit-<loader>:<Maven version>`, see Versions). Iris is optional. Without a shader pack
+nothing is routed.
 
-Call EXIT while the level renders, inside `LevelRenderer.render`.
+Call EXIT while the level renders, inside `LevelRenderer.render`. The events on 26.3 (other versions: ChangeLog, **Use**):
 
 | Purpose | Fabric | NeoForge |
 |---|---|---|
@@ -111,8 +129,9 @@ D32 target once it draws translucent submits, and blending two or more costs two
   pack is in use outside its shadow pass. While it routes, EXIT stands in for the output override of 1.21.6–26.2
   (gone in 26.3) with a mixin: every render pass **opened** in the portal with the main target as its colour or depth
   attachment draws into the channel's target instead (its render area kept within the channel, for Super Resolution),
-  for any mod. Not moved, so use `channel.redirect(yourTarget)` there: other targets, a pass already open when the
-  portal began (one handed to you by an event), and clears and copies of the main target. Gizmos added on the render
+  for any mod. (How a portal moves drawings differs by version, see ChangeLog: before 1.21.5 it binds the channel's
+  target and makes `getMainRenderTarget()` return it.) Not moved, so use `channel.redirect(yourTarget)` there: other targets, a pass already open when the
+  portal began (one handed to you by an event), and clears and copies of the main target. Gizmos (1.21.11 and newer) added on the render
   thread while the portal routes (vanilla `Gizmos.cuboid`, `Gizmos.line` and so on) go to the channel too and are
   drawn with its batch, with their persistence, fading and always-on-top settings kept. `redirect` (also
   the static `Exit.redirect`) throws outside a portal (or a `draw` lambda), off the render thread and inside a portal
@@ -149,7 +168,8 @@ D32 target once it draws translucent submits, and blending two or more costs two
   its `wantsFrame`, or by default "it drew in the previous frame". A channel that draws without it still works, with
   occlusion against the main depth at that moment for that frame.
 * **API stability.** `ml.mypals.exit.api` is the API; `impl`, `compat` and `mixin` are not. The API names Minecraft
-  types (`SubmitNodeCollector`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version.
+  types (`SubmitNodeCollector`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version. Where a
+  type does not exist on an older version, that branch takes the type with the same job (see Versions).
 
 Debug: `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [channel]` shows a
 channel's buffers instead of the frame (with a shader pack in use). `/emergency_exit debug shapes` turns three test boxes
@@ -168,9 +188,10 @@ event hooks of the debug shapes. Loader-specific queries go through the `Platfor
   Iris, so put BSL, Kappa, Sundial Lite and so on there). Each phase takes screenshots
   (`screenshots/emergency_exit-smoke-<version>-<loader>-<pack>-<view>.png`) and checks what EXIT did; then the game
   quits. The log ends with `RESULT: OK`. `-Demergency_exit.smoke.packs=none,BSL.zip` picks the phases instead. They run
-  in `run/fabric` and `run/neoforge`.
+  in `run/fabric` and `run/neoforge` (on the port branches `run/<loader>-<version>`).
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
-* `./gradlew :fabric:runSmokeClient -Pexit.superResolution` does the same with the Super Resolution mod loaded (in the
+* `./gradlew :fabric:runSmokeClient -Pexit.superResolution` (on the versions where the development runs can load SR,
+  see ChangeLog) does the same with the Super Resolution mod loaded (in the
   development runs only), to check the stretched merge in the phases of the packs SR supports (for example Sundial
   Lite; SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/fabric/config/super_resolution/config.toml`. The smoke test
   also saves `*-presented.png`, the window's front buffer, which is what the player sees.

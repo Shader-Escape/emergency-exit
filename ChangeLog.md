@@ -4,6 +4,9 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 按版本从新到旧，记下每个版本和**上一个更新的版本**相比，Minecraft、加载器和 Iris 的哪些差异影响到 EXIT。
 移植到更旧的版本时，从最接近的分支开出，照着这里改。
 
+每节开头的 **使用** 写给用 EXIT 的 mod：这个版本的 Maven 坐标、各加载器在哪些事件里调用 EXIT、API 类型和 README（以 26.3 为准）
+有什么不同。README 只在 `master` 上维护，各分支的 README 只指向这里。
+
 | Minecraft | 分支 | Java | 映射 | Iris（开发运行） |
 |---|---|---|---|---|
 | 26.3 | `master` | 25 | 无混淆 | 1.11.x |
@@ -18,6 +21,9 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.1 | `port/1.21.1` | 21 | 混淆，Mojang 映射 | 1.8.8 |
 
 ## 26.2（相对 26.3）
+
+**使用**
+- Maven `ml.mypals.exit:emergency_exit-<加载器>:0.1.0+26.2`。事件和 API 同 26.3（见 README）。
 
 **包名**
 - 渲染 API 还在 `com.mojang.blaze3d`，没有 `com.mojang.renderpearl`。例如 `RenderPass`、`RenderPassDescriptor` 在
@@ -59,6 +65,9 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 26.1.2（相对 26.2）
 
+**使用**
+- Maven `…:0.1.0+26.1.2`。事件和 API 同 26.3。
+
 **深度方向**
 - 深度是标准方向：近 = 0，远 = 1，默认深度测试是 `LESS_THAN_OR_EQUAL`。26.2 起是反向（近 = 1，远 = 0）。
 - `Gpu.FAR_DEPTH = 1.0`。着色器里 `closeness(depth) = 1.0 - depth`，`depthOf(c) = 1.0 - c`。
@@ -92,6 +101,13 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - Iris 同 26.2：没有 `skipExtension`。
 
 ## 1.21.11（相对 26.1.2）
+
+**使用**
+- Maven `…:0.1.0+1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
+- Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1.world`）：批量和绘制在 `BEFORE_ENTITIES`
+  （直通 `context.commandQueue()`），绘制也可在 `AFTER_ENTITIES`、`END_MAIN` 等；portal 在 `END_MAIN`。
+- NeoForge：`RenderLevelStageEvent.AfterOpaqueBlocks` 等。没有交出关卡收集器的事件，没东西可直通：用 `Exit.batch()`、
+  `Exit.draw(null, …)`，没有光影包时批量在关卡渲染结束时画进主目标。
 
 **构建**
 - Java 21。Minecraft 是混淆的。
@@ -143,6 +159,12 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.21.10（相对 1.21.11）
 
+**使用**
+- Maven `…:0.1.0+1.21.10`。事件同 1.21.11。
+- API 用 `ResourceLocation` 代替 `Identifier`（`Exit.MAIN`、`Exit.channel`、`ExitChannel.id()`），`@Nullable` 是
+  `org.jetbrains.annotations.Nullable`。
+- 没有 Gizmo：README 里 portal 收 Gizmo 的规则和调试方块的青色线框都没有。
+
 **构建**
 - NeoForm `1.21.10-20251010.172816`，NeoForge `21.10.64`，Fabric API `0.138.4+1.21.10`，Iris 1.9.7、Sodium 0.7.3。
 - NeoForm 1.21.10 把 ASM 钉死在 9.6（`strictly`），和 sponge-mixin 要的 9.8 冲突。common 里 sponge-mixin 不带传递依赖，另加 `asm-tree:9.6`。
@@ -181,6 +203,17 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   截图名里带上光影包名。
 
 ## 1.21.8（相对 1.21.10）
+
+**使用**
+- Maven `…:0.1.0+1.21.8`。
+- API 的 `SubmitNodeCollector` 换成 `MultiBufferSource`：`Exit.draw(MultiBufferSource, …)`、`ExitContext.bufferSource()`
+  （代替 `collector()`）、`Exit.batch(MultiBufferSource)` 收、交 `MultiBufferSource`；`ExitContext.camera()` 是 `Camera`。
+  绘制和批量里画的东西照样记进通道的批量，帧末先实体后半透明。
+- Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1`）：批量和绘制在 `BEFORE_ENTITIES`
+  （直通 `context.consumers()`），也可在 `AFTER_ENTITIES`、`LAST`；portal 也能在这些事件里用（关卡不会一直开着一个渲染通道）。
+  不要用 `END`：它和 EXIT 的合并在同一处。
+- NeoForge：`RenderLevelStageEvent.AfterOpaqueBlocks` 等，不给 buffer source：用 `Exit.batch()`、`Exit.draw(null, …)`。
+  `AfterLevel` 同样不要用。
 
 **构建**
 - NeoForm `1.21.8-20250717.133445`，NeoForge `21.8.57`，Fabric API `0.136.1+1.21.8`，Iris 1.9.6、Sodium 0.7.3。
@@ -231,6 +264,11 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.21.5（相对 1.21.8）
 
+**使用**
+- Maven `…:0.1.0+1.21.5`。API 和 Fabric 事件同 1.21.8。
+- NeoForge 只有一个 `RenderLevelStageEvent`，看 `getStage()`：比如 `Stage.AFTER_CUTOUT_BLOCKS`；不要用 `Stage.AFTER_LEVEL`。
+- `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和 26.3 一样。
+
 **构建**
 - NeoForm `1.21.5-20250325.162830`，NeoForge `21.5.101`，Fabric API `0.128.2+1.21.5`，Iris 1.8.11、Sodium 0.6.13，
   glsl-transformer 2.0.1。
@@ -270,6 +308,11 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.21.4（相对 1.21.5）
 
+**使用**
+- Maven `…:0.1.0+1.21.4`。API 和事件同 1.21.5。
+- 没有渲染通道：portal 改道时绑定通道目标，并让 `Minecraft.getMainRenderTarget()` 返回它，所以画进主目标的代码（含渲染类型）
+  自动画进通道。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha。portal 开始之前就拿到的主目标不会被换掉，要用 `redirect`。
+
 **构建**
 - NeoForm `1.21.4-20241203.161809`，NeoForge `21.4.161`，Fabric API `0.119.4+1.21.4`，Iris 1.8.8、Sodium 0.6.13。
 
@@ -302,6 +345,10 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.21.3（相对 1.21.4）
 
+**使用**
+- Maven `…:0.1.0+1.21.3`。API、事件、portal 同 1.21.4。
+- `PortalOverrides.bypass` 是 EXIT 自己的开关（Iris 1.8.1 没有），效果相同：开着时 Iris 不替换原版着色器。
+
 **构建**
 - NeoForm `1.21.3-20241023.131943`，NeoForge `21.3.100`，Fabric API `0.114.1+1.21.3`，Iris 1.8.1、Sodium 0.6.8（同 LitematicaPass）。
 - NeoForm 1.21.3 把 ASM 钉死在 9.3：common 编译时用的 `asm-tree:9.6` 也不带传递依赖。
@@ -318,6 +365,10 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - `BufferBuilder` 的格式加宽和 1.8.8、1.8.11 一样只看 `skipExtension` 和光影包是否在用；批量照旧开缓冲时设 `skipExtension`、关 `isRenderingLevel`。
 
 ## 1.21.1（相对 1.21.3）
+
+**使用**
+- Maven `…:0.1.0+1.21.1`。API、事件、portal 同 1.21.4。
+- 没有帧图：关卡清空主目标、开始绘制之后才能改道（主渲染通道里的事件都可以）。
 
 **构建**
 - NeoForm `1.21.1-20240808.144430`，NeoForge `21.1.262`，Fabric API `0.116.17+1.21.1`，两个加载器都用 Iris 1.8.8、Sodium 0.6.13
