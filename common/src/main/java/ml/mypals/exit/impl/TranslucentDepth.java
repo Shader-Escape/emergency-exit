@@ -67,7 +67,7 @@ public final class TranslucentDepth {
 					.map(state -> state == null ? null : new ColorTargetState(state.blendFunction(), state.format(), ColorTargetState.WRITE_NONE))
 					.toArray(ColorTargetState[]::new),
 				depthWriting(original.getDepthStencilState()), original.getPolygonMode(), original.isCull(),
-				original.getVertexFormatBindings(), original.getPrimitiveTopology(), original.getSortKey());
+				Gpu.vertexFormats(original), original.getPrimitiveTopology(), original.getSortKey());
 		}
 
 		private static Identifier variantId(Identifier location) {

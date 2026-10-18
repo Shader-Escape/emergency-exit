@@ -15,6 +15,7 @@ import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import ml.mypals.exit.mixin.RenderPipelinesAccessor;
 import net.minecraft.client.Minecraft;
 import org.joml.Vector4f;
@@ -153,6 +154,17 @@ final class Gpu {
 			}
 			this.pipeline = RenderPipelinesAccessor.emergency_exit$register(builder.build());
 		}
+	}
+
+	/**
+	 * The vertex formats of {@code pipeline}, one slot per vertex buffer, for a copy of it. The constructor copies
+	 * {@link RenderPass#MAX_VERTEX_BUFFERS} slots, but a pipeline Iris changed may return fewer.
+	 */
+	static VertexFormat[] vertexFormats(RenderPipeline pipeline) {
+		VertexFormat[] formats = new VertexFormat[RenderPass.MAX_VERTEX_BUFFERS];
+		VertexFormat[] own = pipeline.getVertexFormatBindings();
+		System.arraycopy(own, 0, formats, 0, Math.min(own.length, formats.length));
+		return formats;
 	}
 
 	/** Draws the pipeline over {@code output} and keeps what is already there. */

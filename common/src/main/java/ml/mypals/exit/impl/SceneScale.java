@@ -254,7 +254,7 @@ final class SceneScale {
 			super(ExitMod.id("scale_probe"), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
 				original.getBindGroupLayouts(), noColor(original.getColorTargetStates()[0]),
 				new DepthStencilState(CompareOp.ALWAYS_PASS, true), original.getPolygonMode(), false,
-				original.getVertexFormatBindings(), original.getPrimitiveTopology(), original.getSortKey());
+				Gpu.vertexFormats(original), original.getPrimitiveTopology(), original.getSortKey());
 		}
 
 		private static ColorTargetState[] noColor(ColorTargetState first) {
