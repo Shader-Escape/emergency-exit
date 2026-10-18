@@ -30,7 +30,10 @@ final class Channel implements ExitChannel {
 	private boolean preparedThisFrame;
 	private boolean usedThisFrame;
 	private boolean usedLastFrame;
+	/** The channel's batch, kept across frames so its builders are allocated once. */
 	private @Nullable FeatureDrawer.Batch batch;
+	/** Whether something was recorded into the batch this frame. */
+	private boolean batchUsed;
 
 	Channel(ResourceLocation id, ExitOptions options, int order) {
 		this.id = id;
@@ -129,6 +132,7 @@ final class Channel implements ExitChannel {
 		if (this.batch == null) {
 			this.batch = FeatureDrawer.newBatch();
 		}
+		this.batchUsed = true;
 		return this.batch;
 	}
 
@@ -137,7 +141,7 @@ final class Channel implements ExitChannel {
 		if (this.options.wantsFrame() != null) {
 			return this.options.wantsFrame().getAsBoolean();
 		}
-		return this.usedLastFrame || this.usedThisFrame || this.batch != null;
+		return this.usedLastFrame || this.usedThisFrame || this.batchUsed;
 	}
 
 	@Override
@@ -150,8 +154,8 @@ final class Channel implements ExitChannel {
 
 	/** Renders this frame's batch into the channel's target, or into the main target when not routed. */
 	void drawBatch() {
-		FeatureDrawer.Batch submitted = this.batch;
-		this.batch = null;
+		FeatureDrawer.Batch submitted = this.batchUsed ? this.batch : null;
+		this.batchUsed = false;
 		if (submitted == null) {
 			return;
 		}
@@ -245,7 +249,8 @@ final class Channel implements ExitChannel {
 		this.preparedThisFrame = false;
 		this.usedThisFrame = false;
 		this.translucentDrawn = false;
-		this.batch = null;
+		// The batch stays for the next frame; only this frame's use is forgotten.
+		this.batchUsed = false;
 	}
 
 	void close() {
