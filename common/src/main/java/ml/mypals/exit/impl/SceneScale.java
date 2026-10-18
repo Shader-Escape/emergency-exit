@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -218,17 +219,20 @@ final class SceneScale {
 		// OpenGL masks the colour of every draw buffer at once before 26.2, so a pipeline that writes no colour masks all the
 		// buffers the pack's program writes to.
 		GpuBuffer vertices = pipeline.getVertexFormat().uploadImmediateVertexBuffer(mesh.vertexBuffer());
+		// Writing the transform maps a buffer and getting the indices may upload them, which cannot happen inside a pass.
+		GpuBufferSlice transform = RenderSystem.getDynamicUniforms()
+			.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f());
+		GpuBuffer indexBuffer = indices.getBuffer(6);
 		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "emergency_exit scale probe",
 			main.getColorTextureView(), OptionalInt.empty(), main.getDepthTextureView(), OptionalDouble.empty())) {
 			pass.setPipeline(pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
-			pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms()
-				.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f()));
+			pass.setUniform("DynamicTransforms", transform);
 			for (Map.Entry<String, RenderSetup.TextureAndSampler> texture : textures.entrySet()) {
 				pass.bindTexture(texture.getKey(), texture.getValue().textureView(), texture.getValue().sampler());
 			}
 			pass.setVertexBuffer(0, vertices);
-			pass.setIndexBuffer(indices.getBuffer(6), indices.type());
+			pass.setIndexBuffer(indexBuffer, indices.type());
 			pass.drawIndexed(0, 0, 6, 1);
 		}
 	}
