@@ -7,7 +7,6 @@ import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v1.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.network.chat.Component;
 
 public final class ExitFabric implements ClientModInitializer {
@@ -28,14 +27,12 @@ public final class ExitFabric implements ClientModInitializer {
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ExitMod.close());
 		// Fabric's client command API is still the v1 one here (no ClientCommandRegistrationCallback before 1.19).
 		ClientCommandManager.DISPATCHER.register(ExitMod.command(OUTPUT));
-		// Before the entities are submitted, so what goes to the level's buffer source is still drawn this frame.
+		// Before the entities are submitted. Null: EXIT records the shapes into its own batch, drawn at the end of the
+		// frame. This Fabric API's context.consumers() is not flushed again after this callback, so geometry written
+		// to it would be dropped.
 		WorldRenderEvents.BEFORE_ENTITIES.register(context -> {
-			MultiBufferSource consumers = context.consumers();
-			if (consumers == null) {
-				return;
-			}
-			DebugShapes.inMainPass(consumers);
-			DebugShapes.collectSubmits(consumers, context.camera().getPosition());
+			DebugShapes.inMainPass(null);
+			DebugShapes.collectSubmits(null, context.camera().getPosition());
 		});
 	}
 }

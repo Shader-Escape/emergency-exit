@@ -29,7 +29,12 @@ public final class FeatureDrawer {
 
 	private FeatureDrawer() {}
 
-	/** A new batch to record into this frame. Also used where a drawing must be dropped: it is simply never drawn. */
+	/**
+	 * A batch to record into. A channel keeps its batch and records into it again every frame, so the builders and
+	 * their native stores are allocated once: this version's {@code BufferBuilder} mallocs its store through
+	 * {@code MemoryTracker} and has no way to free it, so a new builder every frame would leak that malloc (dropping
+	 * the Java reference does not free it, and neither does drawing the buffer).
+	 */
 	static Batch newBatch() {
 		return new Batch();
 	}
@@ -44,10 +49,69 @@ public final class FeatureDrawer {
 	static void close() {
 	}
 
-	/** Collects submits per render type and draws them in one go. */
+	/** A source whose drawings are thrown away: nothing is recorded and nothing is drawn. */
+	static MultiBufferSource discard() {
+		return Discard.INSTANCE;
+	}
+
+	/**
+	 * Swallows whatever is drawn through it. Dropped drawings must not be recorded into a batch: a batch that is never
+	 * drawn keeps buffers that are never released.
+	 */
+	private enum Discard implements MultiBufferSource, VertexConsumer {
+		INSTANCE;
+
+		@Override
+		public VertexConsumer getBuffer(RenderType type) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer vertex(double x, double y, double z) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer color(int red, int green, int blue, int alpha) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer uv(float u, float v) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer overlayCoords(int u, int v) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer uv2(int u, int v) {
+			return this;
+		}
+
+		@Override
+		public VertexConsumer normal(float x, float y, float z) {
+			return this;
+		}
+
+		@Override
+		public void endVertex() {
+		}
+
+		@Override
+		public void defaultColor(int red, int green, int blue, int alpha) {
+		}
+
+		@Override
+		public void unsetDefaultColor() {
+		}
+	}
+
+	/** Collects submits per render type and draws them in one go. The builders stay and are reused across frames. */
 	static final class Batch implements MultiBufferSource {
 		private final Map<RenderType, Buffers> buffers = new LinkedHashMap<>();
-		private boolean closed;
 
 		@Override
 		public VertexConsumer getBuffer(RenderType type) {
@@ -56,14 +120,12 @@ public final class FeatureDrawer {
 				entry = new Buffers(type, isTranslucent(type));
 				this.buffers.put(type, entry);
 			}
+			// draw ended or discarded the builders, so begin this frame's recording again where that is needed.
+			entry.open();
 			return entry;
 		}
 
 		void draw(RenderTarget target, @Nullable RenderTarget translucentDepth) {
-			if (this.closed) {
-				return;
-			}
-			this.closed = true;
 			if (this.buffers.isEmpty()) {
 				return;
 			}
@@ -87,6 +149,8 @@ public final class FeatureDrawer {
 						buffers.depth.discard();
 					}
 				}
+				// The builders stay for the next frame; only this frame's vertex count is forgotten.
+				buffers.endFrame();
 			}
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
@@ -123,7 +187,8 @@ public final class FeatureDrawer {
 				RenderSystem.setProjectionMatrix(projection);
 				modelView.popPose();
 				RenderSystem.applyModelViewMatrix();
-				this.buffers.clear();
+				// Do not clear the map: the builders hold the only reference to their malloc'd store, and getBuffer
+				// reopens them for the next frame.
 			}
 		}
 
@@ -161,25 +226,40 @@ public final class FeatureDrawer {
 	 * anything was written at all.
 	 */
 	private static final class Buffers implements VertexConsumer {
+		final RenderType type;
 		final BufferBuilder colour;
 		@Nullable final BufferBuilder depth;
 		final boolean translucent;
 		private int vertices;
 
 		Buffers(RenderType type, boolean translucent) {
+			this.type = type;
 			this.translucent = translucent;
-			this.colour = begin(type);
-			this.depth = translucent ? begin(type) : null;
+			this.colour = new BufferBuilder(INITIAL_BUFFER_SIZE);
+			this.depth = translucent ? new BufferBuilder(INITIAL_BUFFER_SIZE) : null;
 		}
 
 		boolean written() {
 			return this.vertices > 0;
 		}
 
-		private static BufferBuilder begin(RenderType type) {
-			BufferBuilder builder = new BufferBuilder(INITIAL_BUFFER_SIZE);
-			builder.begin(type.mode(), type.format());
-			return builder;
+		/** Starts this frame's recording. Nothing to do while the builders are already building. */
+		void open() {
+			begin(this.colour);
+			if (this.depth != null) {
+				begin(this.depth);
+			}
+		}
+
+		private void begin(BufferBuilder builder) {
+			if (!builder.building()) {
+				builder.begin(this.type.mode(), this.type.format());
+			}
+		}
+
+		/** Forgets this frame's vertex count, so the next frame's recording starts empty again. */
+		void endFrame() {
+			this.vertices = 0;
 		}
 
 		@Override
