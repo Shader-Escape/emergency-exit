@@ -27,14 +27,12 @@ public final class ExitFabric implements ClientModInitializer {
 	public void onInitializeClient() {
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ExitMod.close());
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(ExitMod.command(OUTPUT)));
-		// Before the entities are submitted, so what goes to the level's buffer source is still drawn this frame.
+		// Before the entities are submitted. A null pass-through makes EXIT record the shapes into its own batches and
+		// draw them at the end of the level rendering: with no shader pack the drawings sent to the level's buffer
+		// source here never showed up (only the channel's own batch did), so they no longer go there.
 		WorldRenderEvents.BEFORE_ENTITIES.register(context -> {
-			MultiBufferSource consumers = context.consumers();
-			if (consumers == null) {
-				return;
-			}
-			DebugShapes.inMainPass(consumers);
-			DebugShapes.collectSubmits(consumers, context.camera().getPosition());
+			DebugShapes.inMainPass(null);
+			DebugShapes.collectSubmits(null, context.camera().getPosition());
 		});
 	}
 }

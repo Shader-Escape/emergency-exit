@@ -297,9 +297,9 @@ public final class ExitRuntime {
 		return false;
 	}
 
-	/** A buffer source whose content is thrown away at the end of the frame. */
+	/** A buffer source whose content is thrown away. */
 	static MultiBufferSource discard() {
-		return FeatureDrawer.newBatch();
+		return FeatureDrawer.discard();
 	}
 
 	public static void plainFormat(Runnable build) {
