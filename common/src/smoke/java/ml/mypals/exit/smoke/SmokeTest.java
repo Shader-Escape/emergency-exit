@@ -5,6 +5,7 @@ import ml.mypals.exit.compat.IrisCompat;
 import ml.mypals.exit.impl.DebugShapes;
 import ml.mypals.exit.impl.DebugView;
 import ml.mypals.exit.impl.ExitRuntime;
+import ml.mypals.exit.impl.FrameDump;
 import ml.mypals.exit.impl.SceneSize;
 import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
 import net.irisshaders.iris.api.v0.IrisApi;
@@ -164,6 +165,8 @@ public final class SmokeTest {
 			return;
 		}
 		switch (this.ticksInWorld - this.placedAt) {
+			// Pictures of EXIT's buffers in one frame, in screenshots/exit-frame-dump.
+			case 90 -> FrameDump.arm();
 			case 100 -> {
 				log("scene " + SceneSize.width() + "x" + SceneSize.height() + ", window " + mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight()
 					+ ", main target " + mc.gameRenderer.mainRenderTarget().width + "x" + mc.gameRenderer.mainRenderTarget().height

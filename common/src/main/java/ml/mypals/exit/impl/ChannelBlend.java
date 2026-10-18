@@ -32,13 +32,26 @@ final class ChannelBlend {
 		front = ensure(front, "emergency_exit_blend_a", width, height);
 		back = ensure(back, "emergency_exit_blend_b", width, height);
 		Gpu.clear(front);
+		dumpMasks(main);
 		for (Channel channel : channels) {
 			join(main, channel.drawnTarget(), channel.options());
+			FrameDump.color("layer-after-" + channel.dumpName(), back);
+			FrameDump.depth("layer-depth-after-" + channel.dumpName(), back);
 			TextureTarget swap = front;
 			front = back;
 			back = swap;
 		}
 		Composite.draw(main, front, PLAIN);
+	}
+
+	/** The hand and the translucent surfaces as the joins see them, for {@link FrameDump}. */
+	private static void dumpMasks(RenderTarget main) {
+		RenderTarget opaque = SceneDepth.opaque();
+		RenderTarget noHand = SceneDepth.noHand();
+		if (FrameDump.active() && opaque != null && noHand != null) {
+			FrameDump.different("hand-mask", opaque, noHand);
+			FrameDump.nearer("translucent-in-front", SceneDepth.current(main), opaque);
+		}
 	}
 
 	/** Writes {@code front} with {@code channel} joined into {@code back}. */

@@ -1,369 +1,469 @@
-<title>EXIT 渲染缩放对齐</title>
+<meta charset="utf-8">
+<title>EXIT 绕过光影的一帧</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* 布局：一列正文（约 46em），截图对比用两列网格，手机上叠成一列。
-   编辑说明：文字直接改 HTML；流程图改下面 <pre class="mermaid"> 里的文本；图片在 img/ 目录。 */
+/* 布局：正文一列；中间是一张四泳道的大流程图（可横向滚动），节点里嵌截图。
+   编辑说明：
+   - 流程图的节点和连线都在页面底部 <script> 的 NODES、EDGES 两个数组里，改文字、换图、调位置都只改数据。
+   - 图片在 img/frame/，由冒烟测试的 FrameDump 生成（run/fabric/screenshots/exit-frame-dump）。 */
 :root {
-  --bg: #f4f6fa;          /* 页面底色，偏冷的纸色 */
-  --surface: #ffffff;     /* 卡片、图框 */
-  --fg: #1a2033;          /* 正文 */
-  --muted: #5b6478;       /* 次要文字、图注 */
-  --line: #d8deea;        /* 分隔线、边框 */
-  --depth: #2f4fc4;       /* 主色：深度缓冲的蓝 */
-  --probe: #c97a12;       /* 探针、测量相关的强调色 */
-  --bad: #b8433a;         /* 修复前 */
-  --good: #2c8a55;        /* 修复后 */
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --fg: #1a2033;
+  --muted: #5b6478;
+  --line: #d8deea;
+  --depth: #2f4fc4;   /* EXIT 的深度处理 */
+  --probe: #c97a12;   /* 缩放测量 */
+  --pack: #6b4fa8;    /* 光影自己的步骤 */
+  --merge: #2c8a55;   /* 合并 */
+  --bad: #b8433a;
   --code-bg: #e9edf5;
+  --lane-a: #f1edf9; --lane-b: #eaeffc; --lane-c: #f7f1e6; --lane-d: #e8f4ed;
   --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #10131c; --surface: #181c28; --fg: #e3e7f1; --muted: #9aa3b8; --line: #2b3142;
-    --depth: #8ea4ff; --probe: #f0a845; --bad: #ef8a80; --good: #6fcf97; --code-bg: #20263a;
+    --depth: #8ea4ff; --probe: #f0a845; --pack: #b79cf0; --merge: #6fcf97; --bad: #ef8a80; --code-bg: #20263a;
+    --lane-a: #1b1828; --lane-b: #161c2e; --lane-c: #211d17; --lane-d: #15221b;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #10131c; --surface: #181c28; --fg: #e3e7f1; --muted: #9aa3b8; --line: #2b3142;
-  --depth: #8ea4ff; --probe: #f0a845; --bad: #ef8a80; --good: #6fcf97; --code-bg: #20263a;
+  --depth: #8ea4ff; --probe: #f0a845; --pack: #b79cf0; --merge: #6fcf97; --bad: #ef8a80; --code-bg: #20263a;
+  --lane-a: #1b1828; --lane-b: #161c2e; --lane-c: #211d17; --lane-d: #15221b;
   color-scheme: dark;
 }
 
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.75;
-}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.75; }
 .page {
-  max-width: 62rem;
-  margin: 0 auto;
-  padding-block: 2.5rem 4rem;
+  max-width: 76rem; margin: 0 auto; padding-block: 2.5rem 4rem;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
-  display: grid;
-  gap: 3rem;
+  display: grid; gap: 2.75rem;
 }
 .prose { max-width: 46em; min-width: 0; }
 h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
-h1 { font-size: 2rem; font-weight: 700; }
-h2 { font-size: 1.4rem; font-weight: 700; }
-h3 { font-size: 1.05rem; font-weight: 700; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.05rem; }
 p { margin: 0; }
 .stack { display: grid; gap: 1rem; }
-.eyebrow {
-  font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted);
-}
-code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
-code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
-a { color: var(--depth); }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--probe); outline-offset: 2px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible, .node img:focus-visible { outline: 2px solid var(--probe); outline-offset: 2px; }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 0.35rem; }
 
-/* 顶部：问题一句话 + 两张对比 */
-header.lead { display: grid; gap: 1.25rem; }
-.lead .summary { color: var(--muted); max-width: 46em; }
-
-/* 截图对比 */
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-@media (max-width: 720px) { .pair, .trio { grid-template-columns: 1fr; } }
-figure { margin: 0; display: grid; gap: 0.5rem; align-content: start; min-width: 0; }
-figure .frame {
-  position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
-  background: #000; aspect-ratio: 854 / 480; max-width: 100%;
-}
-figure img, figure svg.overlay { display: block; width: 100%; height: 100%; }
-figure svg.overlay { position: absolute; inset: 0; }
+@media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
+figure { margin: 0; display: grid; gap: 0.5rem; min-width: 0; }
+figure img { display: block; width: 100%; aspect-ratio: 854 / 480; border-radius: 6px; border: 1px solid var(--line); background: #000; }
 figcaption { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
-.tag {
-  display: inline-block; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
-  letter-spacing: 0.04em; padding: 0.05em 0.5em; border-radius: 999px; margin-right: 0.4em;
-  border: 1px solid currentColor;
-}
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.04em;
+  padding: 0.05em 0.5em; border-radius: 999px; margin-right: 0.4em; border: 1px solid currentColor; }
 .tag.bad { color: var(--bad); }
-.tag.good { color: var(--good); }
-.tag.probe { color: var(--probe); }
+.tag.good { color: var(--merge); }
 
-/* 流程图 */
-.chart {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 1rem; overflow-x: auto;
+/* 图例 */
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.88rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.swatch { width: 1.6rem; height: 0; border-top: 2.5px solid; display: inline-block; }
+.swatch.dash { border-top-style: dashed; }
+.chip { width: 0.9rem; height: 0.9rem; border-radius: 3px; display: inline-block; border: 1px solid var(--line); }
+
+/* ===== 流程图 ===== */
+.flow-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.flow {
+  position: relative; min-width: 84rem; padding: 0.75rem;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 5.5rem; row-gap: 2.2rem;
 }
-.chart pre.mermaid { margin: 0; background: transparent; font-family: var(--font-body); min-width: 40rem; }
-
-/* 步骤：真实的执行顺序，所以用编号 */
-ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.5rem; counter-reset: step; }
-ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr); gap: 0 1rem; }
-ol.steps > li::before {
-  content: counter(step); font-family: var(--font-mono); font-weight: 500; font-size: 0.95rem;
-  width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
-  border: 1.5px solid var(--depth); color: var(--depth); margin-top: 0.1rem;
+.lane-bg { border-radius: 8px; margin: -0.25rem -1.2rem; z-index: 0; }
+.lane-head {
+  grid-row: 1; z-index: 2; font-weight: 700; font-size: 0.95rem; padding: 0.35rem 0.25rem 0;
+  display: grid; gap: 0.1rem;
 }
-ol.steps > li.probe-step::before { border-color: var(--probe); color: var(--probe); }
-.step-body { display: grid; gap: 0.85rem; min-width: 0; }
-.where { font-size: 0.85rem; color: var(--muted); }
+.lane-head small { font-weight: 400; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+svg.edges text { font-family: var(--font-body); font-size: 12px; }
+.node {
+  position: relative; z-index: 2; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px;
+  padding: 0.6rem 0.7rem 0.7rem; display: grid; gap: 0.45rem; align-content: start; min-width: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.node[data-kind="pack"] { border-color: var(--pack); }
+.node[data-kind="depth"] { border-color: var(--depth); }
+.node[data-kind="probe"] { border-color: var(--probe); }
+.node[data-kind="channel"] { border-color: var(--line); border-left: 4px solid var(--depth); }
+.node[data-kind="merge"] { border-color: var(--merge); }
+.node .when { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); letter-spacing: 0.02em; }
+.node h3 { font-size: 0.93rem; }
+.node p { font-size: 0.82rem; line-height: 1.6; color: var(--muted); }
+.node .imgs { display: grid; gap: 0.35rem; grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr)); }
+.node .imgs figure { gap: 0.15rem; }
+.node .imgs img { cursor: zoom-in; border-radius: 4px; }
+.node .crop { position: relative; overflow: hidden; border-radius: 4px; border: 1px solid var(--line); background: #000; max-width: 100%; }
+.node .crop img { position: absolute; max-width: none; aspect-ratio: auto; height: auto; border: none; border-radius: 0; }
+.node .imgs figcaption { font-size: 0.7rem; line-height: 1.4; }
+.node code { font-size: 0.78em; }
 
-/* 数字表 */
+/* 放大查看 */
+dialog.zoom { border: none; padding: 0; background: transparent; max-width: min(96vw, 1300px); }
+dialog.zoom::backdrop { background: rgba(8, 10, 18, 0.82); }
+dialog.zoom figure { background: var(--surface); padding: 0.75rem; border-radius: 10px; }
+dialog.zoom img { width: 100%; height: auto; }
+dialog.zoom figcaption { color: var(--fg); font-size: 0.95rem; }
+dialog.zoom button { justify-self: end; font: inherit; font-size: 0.85rem; background: var(--code-bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 0.2rem 0.8rem; cursor: pointer; }
+
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; min-width: 32rem; }
 th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; border-bottom: 1px solid var(--line); }
 th { font-weight: 500; color: var(--muted); }
 td.num { font-family: var(--font-mono); }
-
-.note {
-  border-left: 3px solid var(--line); padding: 0.25rem 0 0.25rem 1rem; color: var(--muted); font-size: 0.92rem;
-}
-ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 0.35rem; }
+.note { border-left: 3px solid var(--line); padding: 0.25rem 0 0.25rem 1rem; color: var(--muted); font-size: 0.92rem; }
+@media (prefers-reduced-motion: no-preference) { .node { transition: box-shadow 0.15s; } .node:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.12); } }
 </style>
 
 <main class="page">
 
-  <!-- ========== 开头：问题 ========== -->
-  <header class="lead">
+  <header class="stack">
     <p class="eyebrow">EXIT · Minecraft 26.3 · Iris · Kappa v5.3</p>
-    <h1>降分辨率光影下的遮挡对齐</h1>
-    <p class="summary">
-      Kappa 这类 TAAU 光影把整个场景画进深度缓冲左下角 75% 的区域，再在 composite 放大回全屏。
-      EXIT 按全分辨率坐标读这些深度，于是石头、手、玻璃的遮挡都跑到了缩小后的位置。
-      现在 EXIT 先测出光影的缩放，再把深度重采样回全分辨率，所有遮挡判断就对齐了。
+    <h1>EXIT 绕过光影的一帧</h1>
+    <p class="prose">
+      开着光影时，模组自己画的东西（这里是四个彩色方块）如果交给光影去画，会被光影的光照、雾、TAA 改得面目全非。
+      EXIT 的做法是：让光影照常画完整个世界，模组的东西则用原版着色器画进 EXIT 自己的“通道”，最后再按深度叠回光影的成品画面上。
+      要叠得对，EXIT 得知道世界、手、玻璃在哪里，这些信息来自它在光影画到一半时复制下来的深度。
+    </p>
+    <p class="prose">
+      Kappa 这类光影会把整个场景缩到缓冲左下角 75% 去画（TAAU），所以 EXIT 先量出这个缩放，再把复制的深度放大回全分辨率。
+      下面的流程图就是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
     </p>
     <div class="pair">
       <figure>
-        <div class="frame"><img src="img/before-normal.png" alt="修复前：红色方块画在右边石头上面，绿色方块在玻璃后面没有变暗"></div>
-        <figcaption><span class="tag bad">修复前</span>右边的石头没有挡住红色方块；绿色方块在浅蓝玻璃后面仍是原本的亮度。</figcaption>
+        <img src="img/before-normal.png" alt="不做缩放对齐：红色方块画在右边石头上面，绿色方块在玻璃后面没有变暗">
+        <figcaption><span class="tag bad">不对齐缩放</span>右边石头挡不住红色方块；绿色方块在浅蓝玻璃后面也没有变暗。</figcaption>
       </figure>
       <figure>
-        <div class="frame"><img src="img/after-normal.png" alt="修复后：石头挡住红色方块的下半部分，绿色方块在玻璃后面的部分变暗"></div>
-        <figcaption><span class="tag good">修复后</span>石头挡住了红色方块的右下角；绿色方块被玻璃盖住的下半部分变暗到 50%。左边的蓝色方块走的是透视通道，穿过石头照常显示。</figcaption>
+        <img src="img/frame/32-final.png" alt="对齐后：石头挡住红色方块的右下角，绿色方块在玻璃后面的部分变暗">
+        <figcaption><span class="tag good">对齐后</span>石头挡住红色方块的右下角；绿色方块被玻璃盖住的部分变暗到 50%；蓝色方块走透视通道，穿过石头照常显示；手在最前面。</figcaption>
       </figure>
     </div>
-    <p class="note">截图来自 EXIT 自带的冒烟测试 <code>./gradlew :fabric:runSmokeClient</code>，854×480，光影 Kappa v5.3（默认 <code>ResolutionScale = 0.75</code>）。“修复前”是同一份代码临时关掉缩放测量拍的。</p>
   </header>
 
-  <!-- ========== 流程图 ========== -->
   <section class="stack" aria-labelledby="flow-title">
-    <h2 id="flow-title">一帧里发生了什么</h2>
-    <p class="prose">橙色是测量缩放的部分，每次换光影或改窗口大小后只跑一次；蓝色是每帧都走的深度处理。</p>
-    <div class="chart">
-<!-- 流程图源码：直接改文字即可。语法见 https://mermaid.js.org/syntax/flowchart.html -->
-<pre class="mermaid">
-flowchart TD
-  A["光影画世界<br/>顶点 xy × 0.75，内容挤在缓冲左下角"] --> B{"Iris beginHand<br/>（没有手时是 beginTranslucents）"}
-  B --> C["复制场景深度<br/>noHand / opaque 两份"]
-  C --> D{"这个光影、这个尺寸<br/>测过缩放了吗？"}
-  D -- 测过 --> R
-  D -- 没测过 --> P1["备份主深度 before"]
-  P1 --> P2["用 entity 管线副本画探针四边形<br/>裁剪坐标 ±0.9，Iris 换成光影程序<br/>不写颜色，深度总是写入"]
-  P2 --> P3["复制主深度 after<br/>用 before 写回主深度<br/>清一次掩码纹理，恢复写入掩码"]
-  P3 --> P4["掩码通道：after ≠ before 的像素记为白"]
-  P4 --> P5["异步读回 CPU<br/>找白色包围盒，解出每轴 a、b"]
-  P5 --> P6{"|a−1| &lt; 0.01 且 |b| &lt; 2px？"}
-  P6 -- 是：只是 TAA 抖动 --> P7["按全分辨率处理"]
-  P6 -- 否：光影在缩放 --> P8["记下 a、b，下一帧起生效"]
-  P7 --> R
-  P8 --> R
-  R{"缩放了吗？"} -- 没有 --> S1["深度副本直接复制"]
-  R -- 有 --> S2["深度副本重采样<br/>全分辨率像素 p 读光影像素 a·p + b"]
-  S1 --> T
-  S2 --> T
-  T["EXIT 通道绘制<br/>DepthSeed 用 opaque 打底，手的位置设为最近"] --> U["帧末合并<br/>手的像素不画；半透明后面变暗<br/>主深度同样先重采样再比较"]
-  U --> V["输出画面"]
-
-  classDef probe fill:#fbecd6,stroke:#c97a12,color:#3a2606;
-  classDef depth fill:#e3e9fb,stroke:#2f4fc4,color:#14204d;
-  class P1,P2,P3,P4,P5,P6,P7,P8,D probe;
-  class C,R,S1,S2,T,U depth;
-</pre>
+    <h2 id="flow-title">流程图：一帧从头到尾</h2>
+    <div class="legend">
+      <span><i class="swatch" style="border-color: var(--pack)"></i>光影自己的步骤</span>
+      <span><i class="swatch" style="border-color: var(--depth)"></i>深度的复制和使用</span>
+      <span><i class="swatch dash" style="border-color: var(--probe)"></i>缩放测量（换光影或改窗口后一次）</span>
+      <span><i class="swatch" style="border-color: var(--merge)"></i>合并</span>
+      <span>深度图：越近越白，远处是深蓝；<span style="color: var(--probe)">橙色</span>是标出的区域；棋盘格是透明</span>
     </div>
+    <div class="flow-scroll">
+      <div class="flow" id="flow">
+        <svg class="edges" id="edges" aria-hidden="true"></svg>
+      </div>
+    </div>
+    <p class="note">点图片可以放大。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出：<code>./gradlew :fabric:runSmokeClient</code>，854×480，光影 Kappa v5.3。</p>
   </section>
 
-  <!-- ========== 分步说明 ========== -->
-  <section class="stack" aria-labelledby="steps-title">
-    <h2 id="steps-title">分步说明</h2>
-    <ol class="steps">
-
-      <!-- 步骤 1 -->
-      <li>
-        <div class="step-body">
-          <h3>光影把场景缩进左下角</h3>
-          <p class="prose">
-            Kappa 的每个 gbuffers 顶点着色器最后都会调用 <code>VertexDownscaling(gl_Position)</code>，把裁剪坐标的 xy 乘以 <code>ResolutionScale</code>。
-            缓冲本身还是全尺寸，只是内容被画在左下角 75% 的区域里，到 composite 才由 TAAU 放大。
-            画面看起来正常，但深度缓冲里的东西是缩小的。
-          </p>
-          <div class="pair">
-            <figure>
-              <div class="frame"><img src="img/before-scene-depth.png" alt="修复前的场景深度：两块石头和手都缩到了左下方"></div>
-              <figcaption><span class="tag bad">修复前</span>EXIT 拿到的场景深度（越近越白）。两块石头和右下角的手都比画面里的位置更靠左下，也更小。</figcaption>
-            </figure>
-            <figure>
-              <div class="frame"><img src="img/after-scene-depth.png" alt="修复后的场景深度：石头和手与画面位置一致"></div>
-              <figcaption><span class="tag good">修复后</span>重采样之后，石头和手的位置和画面一致。浅蓝玻璃不在这份深度里，它是半透明的，在这次复制之后才画。</figcaption>
-            </figure>
-          </div>
-          <p class="where">代码：<code>SceneDepth.captureBeforeHand()</code>、<code>captureBeforeTranslucents()</code></p>
-        </div>
-      </li>
-
-      <!-- 步骤 2 -->
-      <li class="probe-step">
-        <div class="step-body">
-          <h3>让光影自己画一个已知位置的四边形</h3>
-          <p class="prose">
-            EXIT 不知道光影怎么变换顶点，所以干脆让光影画一个 EXIT 知道位置的东西。
-            它按原版的投影矩阵算出一个四边形，正好覆盖屏幕中间 90%（裁剪坐标 ±0.9），再用原版 <code>ENTITY_SOLID</code> 管线的副本去画。
-            这个副本登记给 Iris（<code>IrisPipelines.copyPipeline</code>），Iris 就会换成光影自己的 entity 程序，于是顶点照样经过光影的缩放和抖动。
-          </p>
-          <ul class="plain prose">
-            <li><strong>不弄脏画面</strong>：副本给每个 draw buffer 都声明了一个“不写颜色”的目标（最多 8 个），光影的 colortex 一个像素都不会被写。OpenGL 上这些写入掩码画完后不会自己恢复，所以紧接着清一次掩码纹理，让所有 buffer 恢复可写。</li>
-            <li><strong>不留深度</strong>：画之前把主深度备份成 <code>before</code>，画完复制一份 <code>after</code>，再用 <code>before</code> 写回去。光影后面完全看不到这个四边形。</li>
-            <li><strong>只用 renderpearl API</strong>：没有直接调用 OpenGL，为以后支持 Vulkan 留了余地。</li>
-          </ul>
-          <p class="where">代码：<code>SceneScale.drawProbe()</code>、<code>SceneScale.Probe</code></p>
-        </div>
-      </li>
-
-      <!-- 步骤 3 -->
-      <li class="probe-step">
-        <div class="step-body">
-          <h3>看深度哪里变了，量出缩放</h3>
-          <p class="prose">
-            掩码通道（<code>scale_probe.fsh</code>）比较 <code>before</code> 和 <code>after</code>，深度变了的像素输出白色，得到下面这张图。
-            它被异步读回 CPU，不会让画面卡顿。EXIT 找出白色区域的包围盒，和四边形“本来应该在的位置”对比，每个方向解出一条直线：光影像素 = a × 全分辨率像素 + b。
-          </p>
-          <figure>
-            <div class="frame">
-              <img src="img/probe-mask.png" alt="探针掩码：白色矩形位于画面左下，比虚线框小">
-              <!-- 叠加层坐标和截图一样是 854×480，原点在左上角。虚线：不缩放时四边形应在的位置；橙色实线：测到的位置。 -->
-              <svg class="overlay" viewBox="0 0 854 480" aria-hidden="true">
-                <rect x="42.7" y="24" width="768.6" height="432" fill="none" stroke="var(--depth)" stroke-width="3" stroke-dasharray="10 7"/>
-                <rect x="32" y="138" width="577" height="324" fill="none" stroke="var(--probe)" stroke-width="3"/>
-                <text x="52" y="52" fill="var(--depth)" font-size="22" font-family="IBM Plex Mono, monospace">应在：x 42.7–811.3，y 24–456</text>
-                <text x="44" y="166" fill="var(--probe)" font-size="22" font-family="IBM Plex Mono, monospace">测到：x 32–608，y 18–341</text>
-              </svg>
-            </div>
-            <figcaption><span class="tag probe">探针掩码</span>白色是探针改过深度的像素。蓝色虚线是不缩放时它该在的位置，橙色是测到的位置：整体缩成 0.75，贴着左下角。图上的 y 从上往下数，表里的 y 和 <code>gl_FragCoord</code> 一样从下往上数。</figcaption>
-          </figure>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>轴</th><th>应在（像素）</th><th>测到（像素）</th><th>a（缩放）</th><th>b（偏移）</th></tr></thead>
-              <tbody>
-                <tr><td>x</td><td class="num">42.7 – 811.3</td><td class="num">32 – 609</td><td class="num">577 ÷ 768.6 = 0.7507</td><td class="num">32 − 0.7507 × 42.7 ≈ −0.06</td></tr>
-                <tr><td>y</td><td class="num">24 – 456</td><td class="num">18 – 342</td><td class="num">324 ÷ 432 = 0.75</td><td class="num">18 − 0.75 × 24 = 0</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="prose">
-            “测到”的右边和上边各加 1：一个像素只有中心在四边形里才算被盖住，所以边缘在最后一个白色像素的外侧。误差在半个像素以内，和 TAA 每帧的亚像素抖动差不多。
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>光影</th><th>测得</th><th>判定</th></tr></thead>
-              <tbody>
-                <tr><td>Kappa v5.3</td><td class="num">x 0.7494–0.7507，y 0.75，偏移约 0</td><td>缩放，重采样</td></tr>
-                <tr><td>BSL v8.4</td><td class="num">x 0.9992 + 0.33px，y 1.0</td><td>只是抖动，按全分辨率</td></tr>
-                <tr><td>Sundial Lite 1.2</td><td class="num">x 1.0005 − 0.72px，y 1.0</td><td>只是抖动，按全分辨率</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="where">代码：<code>SceneScale.readBack()</code>、<code>solve()</code>、<code>endFrame()</code>。日志里能看到 <code>EXIT: shader pack render transform …</code>。</p>
-        </div>
-      </li>
-
-      <!-- 步骤 4 -->
-      <li>
-        <div class="step-body">
-          <h3>把场景深度重采样回全分辨率</h3>
-          <p class="prose">
-            知道 a、b 之后，EXIT 复制场景深度时不再原样复制，而是对每个全分辨率像素 p，去光影深度里读第 <code>floor(a·p + b)</code> 个像素（<code>depth_resample.fsh</code>）。
-            两份副本（没有手的、没有半透明的）都这样处理，合并时要读的主深度也一样。
-            之后所有比较读到的都是和 EXIT 通道同一个坐标系的深度，原来那几个着色器一行都不用改。
-          </p>
-          <p class="prose">
-            测得接近 1 的光影（BSL、Sundial）不做重采样，仍是原样复制，行为和以前完全一样。
-          </p>
-          <p class="where">代码：<code>SceneScale.resample()</code>、<code>SceneDepth.copy()</code>、<code>SceneDepth.current()</code></p>
-        </div>
-      </li>
-
-      <!-- 步骤 5 -->
-      <li>
-        <div class="step-body">
-          <h3>EXIT 通道画在对齐的深度上</h3>
-          <p class="prose">
-            EXIT 的通道开始画之前，先用“没有半透明的场景深度”给自己打底（<code>DepthSeed</code>）：世界里的东西在前面，就挡住通道。
-            手所在的像素直接设成最近，这样手永远在通道前面。
-            打底用的深度已经对齐，所以石头和手挡住的就是它们在画面里的位置。
-          </p>
-          <div class="pair">
-            <figure>
-              <div class="frame"><img src="img/before-target-depth.png" alt="修复前的通道深度：石头和手在缩小后的位置"></div>
-              <figcaption><span class="tag bad">修复前</span>通道打底后的深度：石头和手（白色）在缩小后的位置，挡错了地方。</figcaption>
-            </figure>
-            <figure>
-              <div class="frame"><img src="img/after-target-depth.png" alt="修复后的通道深度：石头和手位置正确，中间是绿色和红色方块"></div>
-              <figcaption><span class="tag good">修复后</span>两块石头、右下角的手、中间的绿色和红色方块都在正确的位置。</figcaption>
-            </figure>
-          </div>
-          <p class="where">代码：<code>DepthSeed.seed()</code>、<code>depth_seed.fsh</code></p>
-        </div>
-      </li>
-
-      <!-- 步骤 6 -->
-      <li>
-        <div class="step-body">
-          <h3>帧末合并：手、半透明、多通道</h3>
-          <p class="prose">光影画完一整帧后，EXIT 把各通道合并回画面（<code>Composite</code>，两个以上通道时先 <code>ChannelBlend</code>）。这里有三种判断，都靠比较深度：</p>
-          <ul class="plain prose">
-            <li><strong>手</strong>：“有手”和“没手”两份深度不同的像素就是手，通道在这些像素不画。</li>
-            <li><strong>半透明</strong>：最终的主深度比“半透明之前”的深度更近，说明这里有水或玻璃；如果它还在通道前面，通道就按 <code>dimBehindTranslucent</code>（默认 50%）变暗。主深度同样先重采样再比较。</li>
-            <li><strong>多通道</strong>：各通道按深度前后排序，近的盖住远的。</li>
-          </ul>
-          <figure>
-            <div class="frame"><img src="img/after-side.png" alt="修复后的侧视图：红色方块在最前，绿色、黄色、蓝色依次在后，石头在左边"></div>
-            <figcaption><span class="tag good">修复后</span>侧面看：红色方块在最前，绿色、黄色、蓝色依次排在后面，左边的石头和右下的手都正常。</figcaption>
-          </figure>
-          <p class="where">代码：<code>Composite.draw()</code>、<code>composite.fsh</code>、<code>ChannelBlend</code>、<code>blend_layer.fsh</code></p>
-        </div>
-      </li>
-
-    </ol>
+  <section class="stack" aria-labelledby="scale-title">
+    <h2 id="scale-title">缩放是怎么量出来的</h2>
+    <p class="prose">
+      EXIT 不知道光影怎么变换顶点，所以让光影自己画一个 EXIT 知道位置的四边形：按原版投影算好，正好覆盖屏幕中间 90%（裁剪坐标 ±0.9）。
+      它用原版 <code>ENTITY_SOLID</code> 管线的副本去画，Iris 会换成光影自己的程序，所以顶点照样被缩放。
+      这个副本不写任何颜色，画完立刻把深度复原，光影看不到它。比较画前画后的深度，变了的地方就是四边形实际落在哪里（流程图里的探针掩码）。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>轴</th><th>应在（像素）</th><th>测到（像素）</th><th>缩放 a</th><th>偏移 b</th></tr></thead>
+        <tbody>
+          <tr><td>x</td><td class="num">42.7 – 811.3</td><td class="num">32 – 609</td><td class="num">577 ÷ 768.6 = 0.7507</td><td class="num">≈ −0.06</td></tr>
+          <tr><td>y</td><td class="num">24 – 456</td><td class="num">18 – 342</td><td class="num">324 ÷ 432 = 0.75</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">
+      之后每次复制深度，对全分辨率的每个像素 p，都去光影深度里读第 <code>floor(a·p + b)</code> 个像素。
+      BSL、Sundial 测得的 a 约等于 1、偏移不到 1 像素（只是 TAA 抖动），这时不重采样，和以前一样直接复制。
+    </p>
   </section>
 
-  <!-- ========== 限制 ========== -->
   <section class="stack prose" aria-labelledby="limits-title">
-    <h2 id="limits-title">限制和还没验证的</h2>
+    <h2 id="limits-title">限制</h2>
     <ul class="plain">
-      <li>只能处理“缩放 + 平移”这一类顶点变换。TAAU 光影都属于这一类；弯曲世界之类的任意变换处理不了。</li>
-      <li>只在光影管线或窗口尺寸变化后测一次。光影如果在同一个管线里动态改分辨率，EXIT 不会发现。</li>
-      <li>装了 Super Resolution 时不测量，仍走原来的放大处理；SR 和 TAAU 光影同时用的组合没有处理。</li>
-      <li>Aerixium SFA PTGI 没有本地验证；NeoForge 只编译过，没有在游戏里跑过。</li>
-      <li>Vulkan：探针本身只用 renderpearl API，但它只在 Iris 下运行，而 Iris 目前要求 OpenGL，所以 Vulkan 上还没法实际验证。</li>
+      <li>只能处理“缩放 + 平移”这一类顶点变换；弯曲世界之类的任意变换处理不了。</li>
+      <li>只在光影管线或窗口尺寸变化后测一次；同一个管线里动态改分辨率不会被发现。</li>
+      <li>装了 Super Resolution 时不测量；SR 和 TAAU 光影同时用没有处理。</li>
+      <li>Aerixium SFA PTGI 没有本地验证；NeoForge 只编译过；Vulkan 要等 Iris 支持后才能实际验证。</li>
     </ul>
   </section>
 
+  <dialog class="zoom" id="zoom">
+    <figure>
+      <button type="button" id="zoom-close">关闭</button>
+      <img id="zoom-img" alt="">
+      <figcaption id="zoom-cap"></figcaption>
+    </figure>
+  </dialog>
 </main>
 
 <script>
-// 在 claude.ai 的 Artifact 里，mermaid 会自动渲染；本地直接打开这个文件时没有，所以检测一下再加载。
+/* ===================== 流程图数据：改这里 =====================
+   lane：1 光影（Iris）  2 场景深度  3 EXIT 通道  4 合并
+   row：从 2 开始往下（第 1 行是泳道标题），同一行同一泳道只能放一个节点
+   kind：pack / depth / probe / channel / merge（决定边框颜色）
+   imgs：[["图片路径", "小标题", 裁剪], ...]，一个节点可以放一到两张。
+         裁剪可省略；写成 [x, y, 宽, 高]，单位是截图像素（854×480，原点左上角），只影响节点里的小图，点开仍是整张。 */
+const BOXES = [210, 140, 420, 140];   // 四个彩色方块所在的区域
+const LANES = [
+  ["光影（Iris）", "光影用自己的着色器画世界"],
+  ["场景深度", "EXIT 在光影画到一半时复制的深度"],
+  ["EXIT 通道", "模组的东西，用原版着色器画"],
+  ["合并", "帧末按深度叠回光影画面"],
+];
+
+const F = "img/frame/";
+const NODES = [
+  { id: "shadow", lane: 1, row: 2, kind: "pack", when: "帧开始",
+    title: "阴影 pass", text: "光影画阴影贴图。EXIT 在这里什么都不画，模组的东西不会投出光影的阴影。" },
+  { id: "collect", lane: 3, row: 2, kind: "channel", when: "整个关卡渲染期间",
+    title: "模组提交绘制", text: "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先把要画的东西收集起来，等光影画完再画进 EXIT 的通道。" },
+
+  { id: "gbuf", lane: 1, row: 3, kind: "pack", when: "gbuffers",
+    title: "光影画不透明世界", text: "天空、地形、石头这些不透明的东西。顶点着色器把 xy × 0.75，所以深度缓冲里的东西缩在左下角。",
+    imgs: [[F + "01-pack-depth-before-hand.png", "光影的深度（缩放空间）"]] },
+  { id: "noHand", lane: 2, row: 3, kind: "depth", when: "Iris beginHand",
+    title: "复制：没有手的深度", text: "手还没画。复制时按 a、b 重采样，石头回到画面里的位置。",
+    imgs: [[F + "02-no-hand-aligned.png", "对齐后"]] },
+
+  { id: "hand", lane: 1, row: 4, kind: "pack", when: "gbuffers_hand",
+    title: "光影画手", text: "手也被缩放，出现在缓冲右下偏左的位置。",
+    imgs: [[F + "03-pack-depth-before-translucents.png", "加上手的深度（缩放空间）"]] },
+  { id: "probe", lane: 2, row: 4, kind: "probe", when: "第一次 beginHand",
+    title: "量缩放：探针", text: "用光影的程序画一个覆盖中间 90% 的四边形（不写颜色，画完复原深度），看深度哪里变了。测得 x 0.75、y 0.75，偏移约 0。",
+    imgs: [[F + "05-probe-mask.png", "探针落点（红）"]] },
+
+  { id: "transl", lane: 1, row: 5, kind: "pack", when: "gbuffers_water 等",
+    title: "光影画半透明", text: "浅蓝玻璃写进深度，但不在之前的两份复制里。",
+    imgs: [[F + "07-main-depth-end.png", "带玻璃的深度（缩放空间）"]] },
+  { id: "opaque", lane: 2, row: 5, kind: "depth", when: "Iris beginTranslucents",
+    title: "复制：没有半透明的深度", text: "有手、没有玻璃。同样重采样对齐。",
+    imgs: [[F + "04-opaque-aligned.png", "对齐后"]] },
+
+  { id: "packframe", lane: 1, row: 6, kind: "pack", when: "deferred → composite → final",
+    title: "光影的成品画面", text: "光照、雾、TAAU 放大都做完了。这时画面里还没有模组的方块。",
+    imgs: [[F + "06-pack-frame.png", "光影成品"]] },
+  { id: "mainAligned", lane: 2, row: 6, kind: "depth", when: "帧末",
+    title: "最终深度也对齐", text: "合并时要用最终深度找玻璃，同样先重采样。",
+    imgs: [[F + "08-main-depth-end-aligned.png", "对齐后（有玻璃）"]] },
+
+  { id: "seed", lane: 3, row: 7, kind: "channel", when: "帧末 · 通道第一次使用",
+    title: "通道打底", text: "清空通道，用“没有半透明的深度”打底，世界在前面就挡住通道；手的位置设成最近。透视通道（蓝）不让世界遮挡，只放手。",
+    imgs: [[F + "11-main-seeded.png", "主通道"], [F + "10-debug_xray-seeded.png", "透视通道"]] },
+  { id: "draw", lane: 3, row: 8, kind: "channel", when: "原版着色器",
+    title: "画进通道", text: "绿色写颜色和深度；红色是半透明，被石头挡掉右下角，不写深度。",
+    imgs: [[F + "12-main-color.png", "主通道颜色", BOXES], [F + "13-main-depth.png", "主通道深度"]] },
+  { id: "fold", lane: 3, row: 9, kind: "channel", when: "合并前",
+    title: "补上半透明的深度", text: "半透明的东西再画一遍，只写深度到单独的缓冲，再取较近的折进通道深度，这样多个通道才能按前后排序。",
+    imgs: [[F + "14-main-translucent-depth.png", "半透明的深度"], [F + "15-main-depth-folded.png", "折叠后"]] },
+  { id: "others", lane: 3, row: 10, kind: "channel", when: "每个通道",
+    title: "其他通道同样处理", text: "黄色方块在 mix 通道；蓝色方块和青色线框在透视通道。",
+    imgs: [[F + "16-debug_mix-color.png", "mix 通道", BOXES], [F + "20-debug_xray-color.png", "透视通道", BOXES]] },
+
+  { id: "handMask", lane: 2, row: 9, kind: "depth", when: "合并时",
+    title: "找手", text: "“有手”和“没手”两份深度不一样的像素就是手（橙色）。通道在这里不画，手永远在最前。",
+    imgs: [[F + "24-hand-mask.png", "手的位置"]] },
+  { id: "transMask", lane: 2, row: 10, kind: "depth", when: "合并时",
+    title: "找半透明", text: "最终深度比“没有半透明的深度”更近的地方有玻璃（橙色）。通道如果在玻璃后面，就变暗到 50%。",
+    imgs: [[F + "25-translucent-in-front.png", "玻璃的位置"]] },
+
+  { id: "layer1", lane: 4, row: 11, kind: "merge", when: "ChannelBlend",
+    title: "叠第一个通道", text: "主通道去掉手的像素，玻璃后面的绿色下半部变暗。",
+    imgs: [[F + "26-layer-after-main.png", "混合层", BOXES], [F + "27-layer-depth-after-main.png", "混合层深度", BOXES]] },
+  { id: "layer2", lane: 4, row: 12, kind: "merge", when: "ChannelBlend",
+    title: "按深度叠 mix 通道", text: "每个像素比较深度，近的在前：绿色挡住黄色重叠的部分。",
+    imgs: [[F + "28-layer-after-debug_mix.png", "混合层", BOXES], [F + "29-layer-depth-after-debug_mix.png", "混合层深度", BOXES]] },
+  { id: "layer3", lane: 4, row: 13, kind: "merge", when: "ChannelBlend",
+    title: "叠透视通道", text: "蓝色方块和线框加入混合层。",
+    imgs: [[F + "30-layer-after-debug_xray.png", "混合层", BOXES], [F + "31-layer-depth-after-debug_xray.png", "混合层深度", BOXES]] },
+  { id: "final", lane: 4, row: 14, kind: "merge", when: "Composite",
+    title: "叠回光影画面", text: "混合层按透明度盖到光影成品上，得到最终画面。",
+    imgs: [[F + "32-final.png", "最终画面"]] },
+];
+
+/* 连线：[起点 id, 终点 id, 文字, 样式]；样式：pack / depth / probe / merge，probe 是虚线 */
+const EDGES = [
+  ["shadow", "gbuf", "", "pack"],
+  ["gbuf", "noHand", "复制 + 重采样", "depth"],
+  ["gbuf", "hand", "", "pack"],
+  ["noHand", "probe", "第一次：量缩放", "probe"],
+  ["hand", "transl", "", "pack"],
+  ["hand", "opaque", "复制 + 重采样", "depth"],
+  ["transl", "packframe", "", "pack"],
+  ["transl", "mainAligned", "帧末复制 + 重采样", "depth"],
+  ["collect", "seed", "等光影画完", "depth"],
+  ["opaque", "seed", "世界挡通道", "depth"],
+  ["noHand", "handMask", "", "depth"],
+  ["opaque", "handMask", "", "depth"],
+  ["mainAligned", "transMask", "", "depth"],
+  ["seed", "draw", "", "depth"],
+  ["draw", "fold", "", "depth"],
+  ["fold", "others", "", "depth"],
+  ["fold", "layer1", "", "merge"],
+  ["handMask", "layer1", "手的像素不画", "merge"],
+  ["transMask", "layer1", "玻璃后变暗", "merge"],
+  ["others", "layer2", "", "merge"],
+  ["layer1", "layer2", "", "merge"],
+  ["layer2", "layer3", "", "merge"],
+  ["layer3", "final", "", "merge"],
+  ["packframe", "final", "叠在光影成品上", "merge"],
+];
+/* ===================== 数据结束 ===================== */
+
 (function () {
-  function rendered() { return document.querySelector("pre.mermaid svg") !== null; }
-  function load() {
-    if (rendered() || window.mermaid) return;
-    var s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js";
-    s.onload = function () {
-      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      window.mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default", fontFamily: "Noto Sans SC, sans-serif" });
-      window.mermaid.run({ querySelector: "pre.mermaid" });
-    };
-    document.head.appendChild(s);
+  const flow = document.getElementById("flow");
+  const svg = document.getElementById("edges");
+  const laneBgs = ["--lane-a", "--lane-b", "--lane-c", "--lane-d"];
+  LANES.forEach(([name, sub], i) => {
+    const bg = document.createElement("div");
+    bg.className = "lane-bg";
+    bg.style.gridColumn = String(i + 1);
+    bg.style.gridRow = "1 / " + (Math.max(...NODES.map((n) => n.row)) + 1);
+    bg.style.background = "var(" + laneBgs[i] + ")";
+    flow.appendChild(bg);
+    const head = document.createElement("div");
+    head.className = "lane-head";
+    head.style.gridColumn = String(i + 1);
+    head.innerHTML = name + "<small>" + sub + "</small>";
+    flow.appendChild(head);
+  });
+
+  const byId = {};
+  NODES.forEach((n) => {
+    const el = document.createElement("article");
+    el.className = "node";
+    el.dataset.kind = n.kind;
+    el.style.gridColumn = String(n.lane);
+    el.style.gridRow = String(n.row);
+    let html = '<div class="when">' + n.when + "</div><h3>" + n.title + "</h3><p>" + n.text + "</p>";
+    if (n.imgs && n.imgs.length) {
+      html += '<div class="imgs" style="--n:' + n.imgs.length + '">';
+      n.imgs.forEach(([src, cap, crop]) => {
+        const img = '<img src="' + src + '" alt="' + n.title + "：" + cap + '" tabindex="0" data-cap="' + n.title + " · " + cap + '"';
+        if (crop) {
+          const [x, y, w, h] = crop;
+          const style = "width:" + (854 / w * 100) + "%;left:" + (-x / w * 100) + "%;top:" + (-y / h * 100) + "%";
+          html += '<figure><div class="crop" style="aspect-ratio:' + w + " / " + h + '">' + img + ' style="' + style + '"></div><figcaption>' + cap + "（局部）</figcaption></figure>";
+        } else {
+          html += "<figure>" + img + "><figcaption>" + cap + "</figcaption></figure>";
+        }
+      });
+      html += "</div>";
+    }
+    el.innerHTML = html;
+    flow.appendChild(el);
+    byId[n.id] = el;
+  });
+
+  const color = { pack: "var(--pack)", depth: "var(--depth)", probe: "var(--probe)", merge: "var(--merge)" };
+  const NS = "http://www.w3.org/2000/svg";
+
+  function draw() {
+    const box = flow.getBoundingClientRect();
+    svg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
+    svg.innerHTML = "";
+    const defs = document.createElementNS(NS, "defs");
+    Object.keys(color).forEach((k) => {
+      const m = document.createElementNS(NS, "marker");
+      m.setAttribute("id", "arrow-" + k);
+      m.setAttribute("viewBox", "0 0 10 10");
+      m.setAttribute("refX", "9"); m.setAttribute("refY", "5");
+      m.setAttribute("markerWidth", "7"); m.setAttribute("markerHeight", "7");
+      m.setAttribute("orient", "auto-start-reverse");
+      const p = document.createElementNS(NS, "path");
+      p.setAttribute("d", "M0,0 L10,5 L0,10 z");
+      p.setAttribute("fill", color[k]);
+      m.appendChild(p);
+      defs.appendChild(m);
+    });
+    svg.appendChild(defs);
+
+    EDGES.forEach(([from, to, label, style]) => {
+      const a = byId[from], b = byId[to];
+      if (!a || !b) return;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      const A = { l: ra.left - box.left, r: ra.right - box.left, t: ra.top - box.top, b: ra.bottom - box.top };
+      const B = { l: rb.left - box.left, r: rb.right - box.left, t: rb.top - box.top, b: rb.bottom - box.top };
+      let x1, y1, x2, y2, d;
+      const sameRow = Math.abs(A.t - B.t) < 4;
+      if (sameRow || (A.b > B.t && B.b > A.t)) {
+        // 同一行：从侧面连到侧面
+        const right = B.l >= A.r;
+        x1 = right ? A.r : A.l; y1 = Math.min(A.t + 40, A.b - 10);
+        x2 = right ? B.l : B.r; y2 = Math.min(B.t + 40, B.b - 10);
+        const k = (x2 - x1) / 2;
+        d = "M" + x1 + "," + y1 + " C" + (x1 + k) + "," + y1 + " " + (x2 - k) + "," + y2 + " " + x2 + "," + y2;
+      } else if (B.t >= A.b) {
+        // 往下：从底边连到顶边
+        x1 = (A.l + A.r) / 2; y1 = A.b;
+        x2 = (B.l + B.r) / 2; y2 = B.t;
+        if (Math.abs(x1 - x2) > 20) {
+          // 跨泳道：从靠近目标的一侧出发
+          x1 = x2 > x1 ? A.r - 24 : A.l + 24;
+        }
+        const k = Math.max(30, (y2 - y1) / 2);
+        d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 + k) + " " + x2 + "," + (y2 - k) + " " + x2 + "," + y2;
+      } else {
+        x1 = (A.l + A.r) / 2; y1 = A.t; x2 = (B.l + B.r) / 2; y2 = B.b;
+        d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 - 40) + " " + x2 + "," + (y2 + 40) + " " + x2 + "," + y2;
+      }
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", color[style]);
+      path.setAttribute("stroke-width", "2");
+      if (style === "probe") path.setAttribute("stroke-dasharray", "6 4");
+      path.setAttribute("marker-end", "url(#arrow-" + style + ")");
+      svg.appendChild(path);
+      if (label) {
+        const mid = path.getPointAtLength(path.getTotalLength() / 2);
+        const t = document.createElementNS(NS, "text");
+        t.setAttribute("x", mid.x); t.setAttribute("y", mid.y + 4);
+        t.setAttribute("text-anchor", "middle");
+        t.setAttribute("fill", color[style]);
+        t.setAttribute("paint-order", "stroke");
+        t.setAttribute("stroke", "var(--surface)");
+        t.setAttribute("stroke-width", "5");
+        t.setAttribute("font-weight", "500");
+        t.textContent = label;
+        svg.appendChild(t);
+      }
+    });
   }
-  window.addEventListener("load", function () { setTimeout(load, 400); });
+
+  let pending = 0;
+  function schedule() { cancelAnimationFrame(pending); pending = requestAnimationFrame(draw); }
+  window.addEventListener("resize", schedule);
+  flow.querySelectorAll("img").forEach((img) => img.addEventListener("load", schedule));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+  schedule();
+
+  // 点图放大
+  const dialog = document.getElementById("zoom");
+  const zImg = document.getElementById("zoom-img");
+  const zCap = document.getElementById("zoom-cap");
+  function open(img) {
+    zImg.src = img.src; zImg.alt = img.alt; zCap.textContent = img.dataset.cap || img.alt;
+    if (dialog.showModal) dialog.showModal();
+  }
+  flow.addEventListener("click", (e) => { if (e.target.matches(".imgs img")) open(e.target); });
+  flow.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".imgs img")) open(e.target); });
+  document.getElementById("zoom-close").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
 })();
 </script>

@@ -153,7 +153,7 @@ final class SceneScale {
 		boolean drawn = drawProbe(main, camera);
 		// On OpenGL the probe left the pack's other draw buffers masked, and the pack's own pipelines only set the masks
 		// of the buffers they know of. A clear makes every buffer writable again, as the rest of the game expects.
-		RenderSystem.getDevice().createCommandEncoder().clearColorTexture(probeMask.getColorTexture(), new Vector4f());
+		RenderSystem.getDevice().createCommandEncoder().clearColorTexture(probeMask.getColorTexture(), new Vector4f(0, 0, 0, 1));
 		if (!drawn) {
 			ExitRuntime.warnOnce("scene_scale_camera", "EXIT: could not place the render scale probe; occlusion assumes full resolution");
 			state = State.KNOWN;
@@ -379,6 +379,13 @@ final class SceneScale {
 			Gpu.resize(target, width, height);
 		}
 		return target;
+	}
+
+	/** The last probe's mask, for {@link FrameDump}. */
+	static void dumpProbeMask() {
+		if (probeMask != null) {
+			FrameDump.frame("probe-mask", probeMask);
+		}
 	}
 
 	static void close() {

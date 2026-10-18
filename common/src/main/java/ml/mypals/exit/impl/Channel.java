@@ -212,6 +212,7 @@ final class Channel implements ExitChannel {
 		if (!this.preparedThisFrame) {
 			Gpu.clear(output);
 			DepthSeed.seed(Gpu.mainTarget(), output, this.options);
+			FrameDump.depth(this.dumpName() + "-seeded", output);
 			this.preparedThisFrame = true;
 			this.translucentDrawn = false;
 		}
@@ -239,10 +240,20 @@ final class Channel implements ExitChannel {
 
 	/** Makes the channel's depth the nearer of its own and the translucent drawings'. Called before merging. */
 	void foldTranslucentDepth() {
+		if (this.usedThisFrame && this.target != null) {
+			FrameDump.color(this.dumpName() + "-color", this.target);
+			FrameDump.depth(this.dumpName() + "-depth", this.target);
+		}
 		if (this.translucentDrawn && this.usedThisFrame && this.target != null && this.translucentDepth != null) {
+			FrameDump.depth(this.dumpName() + "-translucent-depth", this.translucentDepth);
 			TranslucentDepth.fold(this.target, this.translucentDepth);
+			FrameDump.depth(this.dumpName() + "-depth-folded", this.target);
 		}
 		this.translucentDrawn = false;
+	}
+
+	String dumpName() {
+		return this.id.getPath().replace('/', '_');
 	}
 
 	private String label() {

@@ -332,6 +332,7 @@ public final class ExitRuntime {
 		}
 		inLevel = true;
 		camera = cameraState;
+		FrameDump.beginLevel();
 		VIEW_ROTATION.set(cameraState.viewRotationMatrix);
 		levelProjection = RenderSystem.getProjectionMatrixBuffer();
 	}
@@ -352,6 +353,15 @@ public final class ExitRuntime {
 			return;
 		}
 		try {
+			if (FrameDump.active()) {
+				RenderTarget main = Gpu.mainTarget();
+				SceneScale.dumpProbeMask();
+				FrameDump.frame("pack-frame", main);
+				FrameDump.depth("main-depth-end", main);
+				if (SceneScale.scaled()) {
+					FrameDump.depth("main-depth-end-aligned", SceneDepth.current(main));
+				}
+			}
 			if (DebugShapes.isOn() && !inShadowPass()) {
 				DebugShapes.atLevelEnd();
 			}
@@ -396,7 +406,9 @@ public final class ExitRuntime {
 			} finally {
 				IrisCompat.setBypass(saved);
 			}
+			FrameDump.frame("final", mainTarget);
 		} finally {
+			FrameDump.endLevel();
 			for (Channel channel : mergeOrder) {
 				channel.endFrame();
 			}
