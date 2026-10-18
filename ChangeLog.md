@@ -15,6 +15,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.5 | `port/1.21.5` | 21 | 混淆，Mojang 映射 | 1.8.11 |
 | 1.21.4 | `port/1.21.4` | 21 | 混淆，Mojang 映射 | 1.8.8 |
 | 1.21.3 | `port/1.21.3` | 21 | 混淆，Mojang 映射 | 1.8.1 |
+| 1.21.1 | `port/1.21.1` | 21 | 混淆，Mojang 映射 | 1.8.8 |
 
 ## 26.2（相对 26.3）
 
@@ -315,3 +316,31 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - 核实过：Iris 1.8.8 只在 `MixinShaderManager_Overrides` 里、和 `shouldOverrideShaders` 一起读 bypass（给原版着色器挑程序时）；
   1.8.1 里没有混入调用 `getPhase`。所以移植说明里提到的 `getPhase` 返回 `NONE` 不需要。
 - `BufferBuilder` 的格式加宽和 1.8.8、1.8.11 一样只看 `skipExtension` 和光影包是否在用；批量照旧开缓冲时设 `skipExtension`、关 `isRenderingLevel`。
+
+## 1.21.1（相对 1.21.3）
+
+**构建**
+- NeoForm `1.21.1-20240808.144430`，NeoForge `21.1.262`，Fabric API `0.116.17+1.21.1`，两个加载器都用 Iris 1.8.8、Sodium 0.6.13
+  （Fabric 这一对同 LitematicaPass）。
+
+**关卡钩子**
+- 没有帧图（1.21.2 才有）：`LevelRenderer.renderLevel(DeltaTracker, renderOutline, Camera, GameRenderer, LightTexture, Matrix4f modelView,
+  Matrix4f projection)` 直接画。EXIT 把它第一次 `RenderSystem.clear(int, boolean)`（清空主目标）之后算作关卡的绘制已经开始。
+
+**目标和投影**
+- `TextureTarget`、`RenderTarget.resize`、`clear` 都要多传 `Minecraft.ON_OSX`。
+- 投影配 `VertexSorting`（没有 `ProjectionType`）：`setProjectionMatrix(matrix, getVertexSorting())`，排序也用 `getVertexSorting()`。
+
+**model-view**
+- 绘制读的是 `RenderSystem` 的 model-view 矩阵，`applyModelViewMatrix()` 才把栈顶复制过去。EXIT 一开始用压栈 + `applyModelViewMatrix()`
+  设视图旋转、画完再 apply 回去：结果整个会话里实体模型（第一人称手、原版画的 `entity_solid`）都画不出来，两个加载器都会，
+  而 EXIT 自己的方块正常（冒烟测试的绿色方块检查发现的；去掉这两个调用，手就回来了）。原因看来是 apply 换掉了矩阵对象。
+  现在用 `RenderSystemAccessor` 直接换上 EXIT 的矩阵，画完放回**同一个对象**，不动栈（批量和缩放探针都是）。
+
+**Iris**
+- 1.21.1 的 Iris 1.8.8 又有 `ImmediateState.bypass`（在它的 `MixinGameRenderer` 里读，1.21.1 在那里挑着色器），EXIT 照 1.21.4 用它；
+  `IrisShaderOverrideMixin` 保留。
+
+**开发运行**
+- Super Resolution 1.21.1 的 1.21-0.9.2-alpha.2：开发运行里加上它内嵌的库后能启动，但实体模型（含手）画不出来、SR 不缩放（配 Sundial Lite
+  也是场景尺寸 = 窗口尺寸），退出时原生崩溃。所以 1.21.1 也不带 `-Pexit.superResolution`，没有测 SR。
