@@ -17,6 +17,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20 | `port/1.20` | 17 | 混淆，Mojang 映射 | 1.6.4 |
 | 1.19.3 | `port/1.19.3` | 17 | 混淆，Mojang 映射 | 1.5.2 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
+| 1.17.1 | `port/1.17.1` | 16 | 混淆，Mojang 映射 | 1.2.7 |
 | 1.16.5 | `port/1.16.5` | 16 | 混淆，Mojang 映射 | 1.4.5 |
 
 ## 26.2（相对 26.3）
@@ -373,6 +374,67 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   先删掉旧世界目录。
 
 其余同 1.20.2。
+
+
+## 1.17.1（相对 1.18.2）
+
+**构建**
+- Minecraft 1.17.1、Fabric API `0.46.1+1.17`、Fabric loader 0.19.5；Java 16。构建 JVM 用 JDK 25（Loom 1.18.1
+  要求），模组和开发客户端跑 JDK 16 toolchain。
+- 单个 Fabric Loom 工程（形状同 1.18.2）：`common` 的内容在 `fabric` 里，`build-logic` 和多加载器插件删掉。
+  只有 Fabric：这个版本的 Iris 没有 NeoForge 版。
+- **Fabric API 在这个版本上的 mod id 还是 `fabric`**：`fabric-api` 这个 id（和 `provides: fabric`）要到
+  0.76.0+1.18.2 才有。`fabric.mod.json` 里写 `fabric-api` 会让 Fabric Loader 直接拒绝启动：
+  `HARD_DEP_NO_CANDIDATE emergency_exit ... {depends fabric-api @ [*]}`。要依赖 `fabric`。
+- 这一代的 Fabric API 在 Maven 上是个空壳 jar（只有 `fabric.mod.json` 和图标，2.6 KB），真正的模块由它的 POM
+  拉进来，启动日志里是 59 个模组。
+
+**包名和类**
+- 渲染路径还没有 JOML：`com.mojang.math.Matrix4f` / `Matrix3f`（同 1.18.2）。`PoseStack` 的位姿矩阵用
+  `load()`；`RenderSystem.setProjectionMatrix()` 只有一个参数。
+- `TextureTarget` 和 `RenderSystem.getModelViewStack()` / `applyModelViewMatrix()` / `getProjectionMatrix()` /
+  `setProjectionMatrix()` 这一代都有了（1.16.5 没有）；`RenderType.format()` / `mode()` 也在，
+  `VertexConsumer` 有 `defaultColor` / `unsetDefaultColor`。
+- 1.17 没有 `RenderType.debugQuads()`（同 1.18.2）：半透明的测试盒子改用带本模组白纹理的 `entityTranslucent`，
+  两个测试盒子的渲染类型都是 entity 格式，写顶点时每个元素都要写。
+- 没有 gizmo（1.21.6 之前都没有）。
+- 文字是 `Component`：还没有 `Component.literal`，命令回显用 `new TextComponent(...)`。
+
+**Iris 1.2.7**
+- 包名 `net.coderbot.iris`；管线类是 `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`，阴影是
+  `net.coderbot.iris.pipeline.ShadowRenderer`。
+- **旁路开关**：Iris 1.2 没有独立的 bypass 开关，`IrisShaderOverrideMixin` 在
+  `net.coderbot.iris.pipeline.PipelineManager.getPipelineNullable()` 的返回值上做 `@ModifyVariable`，旁路时返回
+  null；`IrisCompat.bypass()` 读的是 EXIT 自己那个字段。
+- **`skipExtension` 和 `isRenderingLevel` 都是空实现**：Iris 1.2 不会加宽关卡的顶点格式，没有这两个开关
+  （1.16.5 的 Iris 1.4.5 反而有 `ImmediateState.isRenderingLevel`）。`IrisCompat.skipExtension()` /
+  `isRenderingLevel()` 恒为 false，`setRenderingLevel()` 什么都不做。
+- **场景深度**：1.2 的管线把场景深度放在自己的纹理里，不在主目标深度上。用 `LegacyIrisPipelineAccessor`
+  （`@Mixin(targets = ...NewWorldRenderingPipeline)` + `@Accessor("renderTargets")`）取
+  `RenderTargets.getDepthTexture()`；不同 1.17.1 构建返回的东西不一样（多数给 `DepthTexture` 对象，晚期的给纹理
+  id），所以反射调 `getTextureId()` 兜底。取之前要先把旁路关掉（`IrisShaderOverrideMixin` 旁路时管线是 null）。
+
+**开发运行**
+- 运行目录 `run/fabric-1.17.1`；无光影和 BSL 各跑一次都是 `RESULT: OK`（无光影：2213 次绘制、0 次改道；BSL：
+  2202 次绘制全部改道、2202 个 portal 把通过移进通道、0 次不匹配、2202 帧按深度混合、阴影回调 2202 次而 EXIT
+  在里面画了 0 次）。`runAuditClient` 每个 mixin 都应用（`GlStateManagerMixin` 三个、`LevelRendererMixin` 两个、
+  `MinecraftMixin`、`IrisRenderingPipelineMixin` 两个、`IrisShaderOverrideMixin`）。
+- 客户端命令注册用 Fabric API v1 的 `ClientCommandManager.DISPATCHER`（1.19 前没有
+  `ClientCommandRegistrationCallback`）。
+- 冒烟测试：1.17 没有 `WorldCreationUiState`，建世界界面的名字和游戏模式由它自己保管（accessor 取 `nameEdit`、
+  `modeButton`；游戏模式是 `CycleButton`，1.16.5 是普通 `Button`）；`CreateWorldScreen.openFresh()` 还没有，用
+  `CreateWorldScreen.create(null)` 加 `setScreen()`；`ClientPacketListener.sendCommand()` 要 1.19 才有，冒烟测试
+  直接 `absMoveTo(...)` 摆放玩家和视角；截图用带 target 的 `Screenshot.grab(...)`；每次运行开始先删掉旧世界目录。
+- **模组自己的资源在开发运行里看不见**（1.16.5 一样，这一支同样确认）：Fabric Loader 警告
+  `getRootPath access for emergency_exit ... with multiple paths, returning only one`，这一代 Fabric API 的
+  fabric-resource-loader 还调旧的 `getRootPath()`（只拿到 classes 目录），`assets/emergency_exit/**` 因此取不到，
+  `DebugShapes` 的白纹理加载失败（`Failed to load texture: emergency_exit:textures/misc/white.png`），测试盒子画成
+  黑色而不是四色。打包成 jar、或 1.18.2 及以后都没有这个问题；功能检查不受影响（`RESULT: OK`）。
+- Sodium 0.3（`net.coderbot.batchedentityrendering`）把关卡的 buffer source 换成了自己的
+  `FullyBufferedMultiBufferSource`，`Exit.draw` 拿到的 `passThrough` 就是它。
+
+其余同 1.18.2。
+
 
 
 ## 1.16.5（相对 1.17.1）
