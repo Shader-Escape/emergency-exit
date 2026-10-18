@@ -3,7 +3,6 @@ package ml.mypals.exit.impl;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
@@ -11,9 +10,8 @@ import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
+import com.mojang.math.Matrix4f;
 import net.minecraft.resources.ResourceLocation;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fc;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -70,7 +68,7 @@ public final class ExitRuntime {
 	}
 
 	public static ExitChannel channel(ResourceLocation id, ExitOptions options) {
-		RenderSystem.assertOnRenderThread();
+		RenderSystem.assertThread(RenderSystem::isOnRenderThread);
 		Channel existing = CHANNELS.get(id);
 		if (existing != null) {
 			if (!existing.options().equals(options)) {
@@ -175,11 +173,11 @@ public final class ExitRuntime {
 	}
 
 	/** The level's projection. */
-	static Matrix4fc projectionMatrix() {
+	static Matrix4f projectionMatrix() {
 		return PROJECTION;
 	}
 
-	static Matrix4fc viewRotation() {
+	static Matrix4f viewRotation() {
 		return VIEW_ROTATION;
 	}
 
@@ -210,7 +208,7 @@ public final class ExitRuntime {
 	 * inside another portal. The switches are only set while a shader pack is in use outside its shadow pass.
 	 */
 	static boolean begin(Channel channel, @Nullable PortalOverrides overrides) {
-		RenderSystem.assertOnRenderThread();
+		RenderSystem.assertThread(RenderSystem::isOnRenderThread);
 		if (!PORTALS.isEmpty() && portalChannel != channel) {
 			throw new IllegalStateException("EXIT: a portal on " + channel.id() + " inside one on " + portalChannel.id());
 		}
@@ -235,10 +233,10 @@ public final class ExitRuntime {
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().set(VIEW_ROTATION);
+			modelView.last().pose().load(VIEW_ROTATION);
 			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION), RenderSystem.getVertexSorting());
+			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION));
 		}
 		return portalRouted;
 	}
@@ -256,7 +254,7 @@ public final class ExitRuntime {
 		if (PORTALS.isEmpty()) {
 			if (portalRouted && restoreOutput != null) {
 				if (savedProjection != null) {
-					RenderSystem.setProjectionMatrix(savedProjection, RenderSystem.getVertexSorting());
+					RenderSystem.setProjectionMatrix(savedProjection);
 					savedProjection = null;
 				}
 				RenderSystem.getModelViewStack().popPose();
@@ -319,15 +317,15 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(Camera camera, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
+	public static void beginLevel(Camera camera, Matrix4f viewRotation, Matrix4f projection, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
 		inLevel = true;
 		ExitRuntime.camera = camera;
 		partialTick = levelPartialTick;
-		VIEW_ROTATION.set(viewRotation);
-		PROJECTION.set(projection);
+		VIEW_ROTATION.load(viewRotation);
+		PROJECTION.load(projection);
 	}
 
 	/**
@@ -355,6 +353,9 @@ public final class ExitRuntime {
 			for (Channel channel : mergeOrder) {
 				channel.foldTranslucentDepth();
 			}
+			// The merge compares the final main depth with the channel's; Iris 1.2 and older keep the pack's scene
+			// depth in a texture of their own.
+			SceneDepth.syncMainDepth();
 			RenderTarget mainTarget = Gpu.mainTarget();
 			boolean saved = IrisCompat.bypass();
 			IrisCompat.setBypass(true);

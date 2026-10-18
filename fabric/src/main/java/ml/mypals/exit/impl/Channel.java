@@ -50,7 +50,7 @@ final class Channel implements ExitChannel {
 
 	@Override
 	public void draw(@Nullable MultiBufferSource passThrough, Consumer<ExitContext> drawing) {
-		RenderSystem.assertOnRenderThread();
+		RenderSystem.assertThread(RenderSystem::isOnRenderThread);
 		DrawContext outer = ExitRuntime.drawing;
 		if (outer != null) {
 			if (outer.channel != this) {
@@ -111,7 +111,7 @@ final class Channel implements ExitChannel {
 
 	@Override
 	public MultiBufferSource batch(@Nullable MultiBufferSource passThrough) {
-		RenderSystem.assertOnRenderThread();
+		RenderSystem.assertThread(RenderSystem::isOnRenderThread);
 		if (!ExitRuntime.inLevel()) {
 			ExitRuntime.warnOnce("batch-outside-level", "EXIT: " + this.id + " asked for its batch outside the level rendering; it is dropped");
 			return passThrough != null ? passThrough : ExitRuntime.discard();
@@ -142,7 +142,7 @@ final class Channel implements ExitChannel {
 
 	@Override
 	public void flushBatch() {
-		RenderSystem.assertOnRenderThread();
+		RenderSystem.assertThread(RenderSystem::isOnRenderThread);
 		if (ExitRuntime.passesRunning() && !ExitRuntime.inShadowPass()) {
 			this.drawBatch();
 		}
@@ -168,6 +168,8 @@ final class Channel implements ExitChannel {
 		TextureTarget output = this.ensureTarget();
 		if (!this.preparedThisFrame) {
 			Gpu.clear(output);
+			// Iris 1.2 and older keep the pack's scene depth in a texture of their own; seeding reads the main depth.
+			SceneDepth.syncMainDepth();
 			DepthSeed.seed(Gpu.mainTarget(), output, this.options);
 			this.preparedThisFrame = true;
 			this.translucentDrawn = false;

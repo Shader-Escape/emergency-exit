@@ -10,8 +10,8 @@ import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
-import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -124,19 +124,23 @@ public final class SmokeTest {
 			return;
 		}
 		if (mc.screen instanceof CreateWorldScreen screen) {
-			WorldCreationUiState state = screen.getUiState();
-			state.setName(WORLD);
-			state.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE);
+			// 1.17 has no WorldCreationUiState: the screen keeps the name and the game mode itself.
+			CreateWorldScreenAccessor legacy = (CreateWorldScreenAccessor) screen;
+			legacy.emergency_exit$nameEdit().setValue(WORLD);
+			CycleButton<?> mode = legacy.emergency_exit$modeButton();
+			for (int i = 0; i < 4 && !"CREATIVE".equals(String.valueOf(mode.getValue())); i++) {
+				mode.onPress();
+			}
 			log("creating the world");
 			this.created = true;
-			((CreateWorldScreenAccessor) screen).emergency_exit$onCreate();
+			legacy.emergency_exit$onCreate();
 			return;
 		}
 		// Wait for the title screen to settle, then open the create world screen.
 		if (!this.requestedScreen && mc.getOverlay() == null && this.ticks > 40) {
 			this.requestedScreen = true;
 			log("opening the create-world screen");
-			CreateWorldScreen.openFresh(mc, null);
+			mc.setScreen(CreateWorldScreen.create(null));
 		}
 	}
 
@@ -146,7 +150,7 @@ public final class SmokeTest {
 	 */
 	private void showcase(Minecraft mc) {
 		if (this.ticksInWorld == 20) {
-			mc.player.connection.sendCommand("tp @s ~ 200 ~ 0 10");
+			mc.player.absMoveTo(mc.player.getX(), 200, mc.player.getZ(), 0, 10);
 		}
 		if (this.placedAt < 0 && this.ticksInWorld > 20 && mc.player.getY() > 190) {
 			// Fly in place so the view stays on the boxes.
@@ -196,8 +200,13 @@ public final class SmokeTest {
 		Vec3 look = mc.player.getLookAngle();
 		Vec3 right = new Vec3(-look.z, 0, look.x).normalize();
 		Vec3 eye = center.add(right.scale(7)).add(look.x * -1.5, 0.6, look.z * -1.5);
-		mc.player.connection.sendCommand(String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f facing %.3f %.3f %.3f",
-			eye.x, eye.y - mc.player.getEyeHeight(), eye.z, center.x, center.y, center.z));
+		double dx = center.x - eye.x;
+		double dy = center.y - (eye.y - mc.player.getEyeHeight());
+		double dz = center.z - eye.z;
+		double horizontal = Math.sqrt(dx * dx + dz * dz);
+		float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90);
+		float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
+		mc.player.absMoveTo(eye.x, eye.y - mc.player.getEyeHeight(), eye.z, yaw, pitch);
 	}
 
 	private void screenshot(Minecraft mc, String view) {

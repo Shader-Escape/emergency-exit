@@ -1,10 +1,10 @@
 package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Matrix4f;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4fc;
 
 /**
  * What a drawing gets. Positions are relative to the camera, so translate the pose by
@@ -24,8 +24,11 @@ public interface ExitContext {
 	/** The partial tick of the camera entity this frame. */
 	float partialTick();
 
-	/** The view rotation, the model-view matrix EXIT renders the submits with. */
-	Matrix4fc modelView();
+	/**
+	 * The view rotation, the model-view matrix EXIT renders the submits with. 1.17 has no read-only matrix type
+	 * (org.joml), so this is Minecraft's own Matrix4f; do not modify it.
+	 */
+	Matrix4f modelView();
 
 	/** Whether this drawing is routed past the shader pack. */
 	boolean routed();

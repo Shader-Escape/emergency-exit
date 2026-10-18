@@ -7,17 +7,18 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-Minecraft **1.20.2** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
-its own git branch with plain code for that version.
+Minecraft **1.17.1** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
+its own git branch with plain code for that version. 1.17 runs on Java 16, and only 1.17.1 is built and run here
+(`fabric.mod.json`: `>=1.17 <=1.17.1`).
 
 ### Loaders
 
-One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.20.2`). Iris is optional.
+One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.17.1`). Iris is optional.
 Without a shader pack nothing is routed. Iris has no NeoForge build for this Minecraft version, so this branch is
-Fabric only.
+Fabric only. Iris here is 1.2.7, in `net.coderbot.iris`.
 
-Call EXIT while the level renders, inside `LevelRenderer.renderLevel`. 1.20.6 has no `SubmitNodeCollector`, so the
-drawings and the batch are a `MultiBufferSource` and are drawn at the end of the level rendering.
+Call EXIT while the level renders, inside `LevelRenderer.renderLevel`. This version has no `SubmitNodeCollector`, so
+the drawings and the batch are a `MultiBufferSource` and are drawn at the end of the level rendering.
 
 | Purpose | Fabric |
 |---|---|
@@ -39,7 +40,7 @@ framebuffer and by handing the channel's target out of `Minecraft.getMainRenderT
 
 ## Use
 
-Call EXIT on the render thread while the level renders, for example from Fabric's `LevelRenderEvents` or NeoForge's render events (see Loaders above).
+Call EXIT on the render thread while the level renders, for example from Fabric's `WorldRenderEvents` (see Loaders above).
 
 ```java
 // 1. Drawing with a managed context: buffer source, camera-relative pose stack, camera. The submits are recorded into
@@ -49,7 +50,9 @@ WorldRenderEvents.BEFORE_ENTITIES.register(context ->
         PoseStack pose = exit.poseStack();
         Vec3 cam = exit.cameraPos();
         pose.translate(x - cam.x, y - cam.y, z - cam.z);
-        VertexConsumer buffer = exit.bufferSource().getBuffer(RenderType.debugQuads());
+        // 1.17 has no RenderType.debugQuads(); any vanilla render type does. This one is the entity format, so every
+        // element of the vertex has to be written.
+        VertexConsumer buffer = exit.bufferSource().getBuffer(RenderType.entitySolid(myTexture));
         // ... write vertices with pose.last()
     }));
 
@@ -104,7 +107,7 @@ D32 target once it draws translucent submits, and blending two or more costs two
 
 ### Rules
 
-* **Thread and time.** Render thread, between the start and the end of `LevelRenderer.render` (except `portal` off
+* **Thread and time.** Render thread, between the start and the end of `LevelRenderer.renderLevel` (except `portal` off
   the render thread and `plainFormat`, below). Outside it a drawing is dropped (logged once) and a portal does not
   route. A channel's target is seeded with the scene depth when it is first used in the frame, so route (portal or `redirect`) once the
   level's render passes run (as Litematica does), outside an open render pass, not before.
@@ -125,7 +128,7 @@ D32 target once it draws translucent submits, and blending two or more costs two
   drawing shares its collector). Opening another channel inside one throws.
 * **Shadow pass.** EXIT draws nothing into the shader pack's shadow map, so its drawings cast no shadows: in the
   shadow pass a `draw` lambda and a `portal` body do not run, and a `batch` collector drops what it gets
-  (`plainFormat` is not affected). Fabric's `LevelRenderEvents` do not fire in Iris's shadow pass anyway.
+  (`plainFormat` is not affected). Fabric's `WorldRenderEvents` do not fire in Iris's shadow pass anyway.
 * **Order.** A `draw` lambda runs at once, but what it submits joins the channel's batch, wherever it is called (also
   inside an open render pass, or before the level's render passes start). The batch is rendered at the end of the
   level rendering, or earlier with `flushBatch()`, in one frame: solid submits first, then translucent ones, so a solid
@@ -149,22 +152,26 @@ D32 target once it draws translucent submits, and blending two or more costs two
   its `wantsFrame`, or by default "it drew in the previous frame". A channel that draws without it still works, with
   occlusion against the main depth at that moment for that frame.
 * **API stability.** `ml.mypals.exit.api` is the API; `impl`, `compat` and `mixin` are not. The API names Minecraft
-  types (`SubmitNodeCollector`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version.
+  types (`MultiBufferSource`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version.
 
 Debug: `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [channel]` shows a
 channel's buffers instead of the frame (with a shader pack in use). `/emergency_exit debug shapes` turns three test boxes
 on, 5 blocks in front of you, or off again: red = translucent drawing, green = batch (solid), yellow = a solid box on another channel behind the green one, blended by depth, blue = a pass on the main target in a
-portal, moved into a channel that shows through the world, with a cyan gizmo outline added in the same portal.
+portal, moved into a channel that shows through the world.
 
 ## Development
 
-The project has three subprojects, laid out like MultiLoader-Template. `common` holds all loader-independent code
-(API, rendering, mixins). `fabric` and `neoforge` hold the entry points, metadata, command registration and the
-event hooks of the debug shapes. Loader-specific queries go through the `Platform` service.
+The project is one Fabric Loom project. `fabric/src/main` holds all of the code (API, rendering, mixins); the entry
+points, metadata, command registration and the event hooks of the debug shapes are in
+`fabric/src/main/java/ml/mypals/exit/fabric`. `fabric/src/audit` and `fabric/src/smoke` are the development checks.
+Loader-specific queries go through the `Platform` service.
+(Minecraft 1.20.1 and older have no NeoForm build for ModDevGradle, so there is no `common` subproject: Loom remaps the
+one project from Mojang names to intermediary. 1.17 additionally compiles at Java 16, so the build runs its own JDK 25
+while the development client runs a JDK 16 toolchain.)
 
 * `./gradlew build` builds the jar (`fabric/build/libs`).
 * `./gradlew :fabric:runSmokeClient` creates a world, turns on the test shapes, takes screenshots and quits. The log
-  ends with `RESULT: OK`. It runs in `run/fabric-1.20.2`. To test routing, put a shader pack into its `shaderpacks`
+  ends with `RESULT: OK`. It runs in `run/fabric-1.17.1`. To test routing, put a shader pack into its `shaderpacks`
   folder and enable it in `config/iris.properties`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * `./gradlew publishToMavenLocal` publishes the jar for other mods' development setups.

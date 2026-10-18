@@ -190,9 +190,13 @@ public final class DebugShapes {
 		box(source, poseStack, camera, at, argb, false);
 	}
 
-	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
+	/**
+	 * A box of one block centred at {@code at}. A solid box is opaque and writes depth. 1.17 has no
+	 * {@code RenderType.debugQuads()}, so the translucent box is drawn with the entity translucent type, which blends
+	 * the same way (no back-face culling) but writes depth too.
+	 */
 	private static void box(MultiBufferSource source, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
-		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads());
+		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.entityTranslucent(WHITE));
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
 		PoseStack.Pose pose = poseStack.last();
@@ -218,10 +222,14 @@ public final class DebugShapes {
 	}
 
 	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
-		VertexConsumer vertex = buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb);
-		if (solid) {
-			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0);
-		}
-		vertex.endVertex();
+		// Both render types use the entity format (position, colour, texture, overlay, light, normal); 1.17's
+		// BufferBuilder wants every element of the vertex.
+		buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2])
+			.color(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24 & 0xFF)
+			.uv(0.0F, 0.0F)
+			.overlayCoords(OverlayTexture.NO_OVERLAY)
+			.uv2(FULL_BRIGHT)
+			.normal(pose.normal(), 0.0F, 1.0F, 0.0F)
+			.endVertex();
 	}
 }

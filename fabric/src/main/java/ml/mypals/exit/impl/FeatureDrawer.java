@@ -6,11 +6,10 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexSorting;
+import com.mojang.math.Matrix4f;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import org.joml.Matrix4f;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 
@@ -19,7 +18,7 @@ import java.util.Map;
 
 /**
  * A channel's batch: a buffer source the caller records into, rendered into the channel's target at the end of the
- * level rendering. 1.20.6 has no {@code SubmitNodeCollector}, so the submits are collected as vanilla render types and
+ * level rendering. 1.17 has no {@code SubmitNodeCollector}, so the submits are collected as vanilla render types and
  * drawn here with plain OpenGL. The solid render types are drawn first, then the translucent ones; a translucent
  * submit is recorded into a second buffer as well, which is drawn colour off and depth on into the channel's
  * translucent-depth target, so the channel can be blended by depth.
@@ -67,45 +66,39 @@ public final class FeatureDrawer {
 			if (this.buffers.isEmpty()) {
 				return;
 			}
-			Map<RenderType, BufferBuilder.RenderedBuffer> solid = new LinkedHashMap<>();
-			Map<RenderType, BufferBuilder.RenderedBuffer> translucent = new LinkedHashMap<>();
-			Map<RenderType, BufferBuilder.RenderedBuffer> translucentDepthData = new LinkedHashMap<>();
+			Map<RenderType, BufferBuilder> solid = new LinkedHashMap<>();
+			Map<RenderType, BufferBuilder> translucent = new LinkedHashMap<>();
+			Map<RenderType, BufferBuilder> translucentDepthData = new LinkedHashMap<>();
 			for (Map.Entry<RenderType, Buffers> entry : this.buffers.entrySet()) {
-				BufferBuilder.RenderedBuffer colour = entry.getValue().colour.endOrDiscardIfEmpty();
-				if (colour != null) {
-					(entry.getValue().translucent ? translucent : solid).put(entry.getKey(), colour);
-				}
+				(entry.getValue().translucent ? translucent : solid).put(entry.getKey(), entry.getValue().colour);
 				if (entry.getValue().depth != null) {
-					BufferBuilder.RenderedBuffer depth = entry.getValue().depth.endOrDiscardIfEmpty();
-					if (depth != null) {
-						translucentDepthData.put(entry.getKey(), depth);
-					}
+					translucentDepthData.put(entry.getKey(), entry.getValue().depth);
 				}
 			}
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().set(ExitRuntime.viewRotation());
+			modelView.last().pose().load(ExitRuntime.viewRotation());
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()), VertexSorting.DISTANCE_TO_ORIGIN);
+			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()));
 			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
 			IrisCompat.setRenderingLevel(false);
 			Runnable restore = Gpu.bindForDrawing(target);
 			try {
 				// Solid render types first, then the translucent ones, so a solid submit never covers a nearer translucent.
-				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : solid.entrySet()) {
-					draw(entry.getKey(), entry.getValue(), false);
+				for (Map.Entry<RenderType, BufferBuilder> entry : solid.entrySet()) {
+					entry.getKey().end(entry.getValue(), 0, 0, 0);
 				}
-				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : translucent.entrySet()) {
-					draw(entry.getKey(), entry.getValue(), false);
+				for (Map.Entry<RenderType, BufferBuilder> entry : translucent.entrySet()) {
+					entry.getKey().end(entry.getValue(), 0, 0, 0);
 				}
 				if (translucentDepth != null) {
 					Runnable restoreDepth = Gpu.bindForDrawing(translucentDepth);
 					try {
-						for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : translucentDepthData.entrySet()) {
-							draw(entry.getKey(), entry.getValue(), true);
+						for (Map.Entry<RenderType, BufferBuilder> entry : translucentDepthData.entrySet()) {
+							drawDepthOnly(entry.getKey(), entry.getValue());
 						}
 					} finally {
 						restoreDepth.run();
@@ -114,7 +107,7 @@ public final class FeatureDrawer {
 			} finally {
 				restore.run();
 				IrisCompat.setRenderingLevel(renderingLevel);
-				RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
+				RenderSystem.setProjectionMatrix(projection);
 				modelView.popPose();
 				RenderSystem.applyModelViewMatrix();
 				this.buffers.clear();
@@ -131,19 +124,23 @@ public final class FeatureDrawer {
 			}
 		}
 
-		/** Draws one recorded buffer. With {@code depthOnly} nothing is written to colour. */
-		private static void draw(RenderType type, BufferBuilder.RenderedBuffer buffer, boolean depthOnly) {
+		/**
+		 * Draws one recorded buffer with nothing written to colour. 1.17's {@code RenderType.end(builder, x, y, z)}
+		 * does this for a normal draw (it is what {@code MultiBufferSource.BufferSource} uses); here the buffer is
+		 * ended and uploaded with the colour mask off instead.
+		 */
+		private static void drawDepthOnly(RenderType type, BufferBuilder buffer) {
+			if (!buffer.building()) {
+				return;
+			}
+			buffer.end();
 			type.setupRenderState();
 			try {
-				if (depthOnly) {
-					GL11.glColorMask(false, false, false, false);
-					GL11.glDepthMask(true);
-				}
-				BufferUploader.drawWithShader(buffer);
+				GL11.glColorMask(false, false, false, false);
+				GL11.glDepthMask(true);
+				BufferUploader.end(buffer);
 			} finally {
-				if (depthOnly) {
-					GL11.glColorMask(true, true, true, true);
-				}
+				GL11.glColorMask(true, true, true, true);
 				type.clearRenderState();
 			}
 		}

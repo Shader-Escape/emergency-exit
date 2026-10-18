@@ -9,7 +9,8 @@
     "MinecraftAccessor",
     "MinecraftMixin",
     "iris.IrisRenderingPipelineMixin",
-    "iris.IrisShaderOverrideMixin"
+    "iris.IrisShaderOverrideMixin",
+    "iris.LegacyIrisPipelineAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
