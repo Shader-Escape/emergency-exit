@@ -68,7 +68,7 @@ final class Gpu {
 
 	/** A target with only a colour texture. */
 	static TextureTarget colorTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, GpuFormat.RGBA8_UNORM, null);
+		return new TextureTarget(label, width, height, false);
 	}
 
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
@@ -120,6 +120,7 @@ final class Gpu {
 	static final class Pipeline {
 		private final boolean depthOnly;
 		private final boolean layer;
+		private final boolean replaceDepth;
 		private final String label;
 		private final RenderPipeline pipeline;
 
@@ -137,6 +138,7 @@ final class Gpu {
 			boolean replaceDepth, Map<String, Integer> defines, String[] samplers) {
 			this.depthOnly = depthOnly;
 			this.layer = layer;
+			this.replaceDepth = replaceDepth;
 			this.label = ExitMod.MOD_ID + "/" + location;
 			RenderPipeline.Builder builder = screenQuad(location, fragmentShader, samplers);
 			defines.forEach(builder::withShaderDefine);
@@ -153,8 +155,8 @@ final class Gpu {
 
 	/** Draws the pipeline over {@code output} and keeps what is already there. */
 	static void draw(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
-		if (pipeline.layer) {
-			// A layer replaces the whole target, see layerOutput.
+		if (pipeline.layer || pipeline.replaceDepth) {
+			// A layer or a depth replacement replaces the whole target, see layerOutput and depthOnly.
 			clear(output);
 		}
 		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)

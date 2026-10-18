@@ -27,7 +27,7 @@ public class LevelRendererMixin {
 	private void emergency_exit$beginLevel(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline,
 		Camera camera, Matrix4f modelViewMatrix, Matrix4f projection, Matrix4f cullingProjection, GpuBufferSlice terrainFog, Vector4f fogColor,
 		boolean shouldRenderSky, CallbackInfo ci) {
-		ExitRuntime.beginLevel(this.levelRenderState.cameraRenderState, modelViewMatrix, deltaTracker.getGameTimeDeltaPartialTick(false));
+		ExitRuntime.beginLevel(this.levelRenderState.cameraRenderState, modelViewMatrix, projection, deltaTracker.getGameTimeDeltaPartialTick(false));
 	}
 
 	@Inject(method = "renderLevel", at = @At(value = "INVOKE",

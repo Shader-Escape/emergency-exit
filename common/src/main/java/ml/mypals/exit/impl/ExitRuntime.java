@@ -40,6 +40,7 @@ public final class ExitRuntime {
 	private static boolean passesRunning;
 	private static @Nullable CameraRenderState camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
+	private static final Matrix4f PROJECTION = new Matrix4f();
 	private static @Nullable GpuBufferSlice levelProjection;
 	private static float partialTick;
 
@@ -203,6 +204,11 @@ public final class ExitRuntime {
 		return camera;
 	}
 
+	/** The level's projection. The camera state of 1.21.11 does not hold it. */
+	static Matrix4fc projectionMatrix() {
+		return PROJECTION;
+	}
+
 	static Matrix4fc viewRotation() {
 		return VIEW_ROTATION;
 	}
@@ -335,7 +341,7 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(CameraRenderState cameraState, Matrix4fc viewRotation, float levelPartialTick) {
+	public static void beginLevel(CameraRenderState cameraState, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
@@ -343,6 +349,7 @@ public final class ExitRuntime {
 		camera = cameraState;
 		partialTick = levelPartialTick;
 		VIEW_ROTATION.set(viewRotation);
+		PROJECTION.set(projection);
 		levelProjection = RenderSystem.getProjectionMatrixBuffer();
 	}
 
