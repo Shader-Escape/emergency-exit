@@ -3,7 +3,6 @@ package ml.mypals.exit.impl;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
@@ -238,7 +237,8 @@ public final class ExitRuntime {
 			modelView.last().pose().set(VIEW_ROTATION);
 			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION), RenderSystem.getVertexSorting());
+			// 1.19.3 has no vertex sorting (RenderSystem.setProjectionMatrix takes the matrix alone).
+			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION));
 		}
 		return portalRouted;
 	}
@@ -256,7 +256,7 @@ public final class ExitRuntime {
 		if (PORTALS.isEmpty()) {
 			if (portalRouted && restoreOutput != null) {
 				if (savedProjection != null) {
-					RenderSystem.setProjectionMatrix(savedProjection, RenderSystem.getVertexSorting());
+					RenderSystem.setProjectionMatrix(savedProjection);
 					savedProjection = null;
 				}
 				RenderSystem.getModelViewStack().popPose();

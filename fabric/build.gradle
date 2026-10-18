@@ -1,7 +1,30 @@
 plugins {
-    id 'multiloader-loader'
-    // Minecraft 1.20.6 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    // Minecraft 1.19.3 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${mod_id}-${project.name}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+}
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = uri('https://api.modrinth.com/maven')
+            }
+        }
+        filter {
+            includeGroup('maven.modrinth')
+        }
+    }
 }
 
 // The libraries nested in the Iris and Sodium jars (their Fabric API modules aside), for the development runtime.
@@ -48,17 +71,38 @@ sourceSets.create('audit') {
 
 // Development mod that creates a world and checks the rendering. Run it with runSmokeClient.
 sourceSets.create('smoke') {
-    java.srcDirs = [project(':common').file('src/smoke/java'), file('src/smoke/java')]
-    resources.srcDirs = [project(':common').file('src/smoke/resources'), file('src/smoke/resources')]
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
     runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
 }
 
-def smokeProps = ['mixin_java': "JAVA_${java_version}".toString()]
+def expandProps = [
+        'version'                : version,
+        'minecraft_version_range': minecraft_version_range,
+        'fabric_loader_version'  : fabric_loader_version,
+        'mod_name'               : mod_name,
+        'mod_author'             : mod_author,
+        'mod_id'                 : mod_id,
+        'license'                : license,
+        'description'            : project.findProperty('description'),
+        'java_version'           : java_version,
+        'mixin_java'             : "JAVA_${java_version}"
+]
+tasks.named('processResources', ProcessResources) {
+    inputs.properties(expandProps)
+    filesMatching(['fabric.mod.json', '*.mixins.json']) {
+        expand(expandProps)
+    }
+}
 tasks.named('processSmokeResources', ProcessResources) {
-    inputs.properties(smokeProps)
-    filesMatching('*.mixins.json') {
-        expand(smokeProps)
+    inputs.properties(expandProps)
+    filesMatching(['fabric.mod.json', '*.mixins.json']) {
+        expand(expandProps)
+    }
+}
+tasks.named('processAuditResources', ProcessResources) {
+    inputs.properties(expandProps)
+    filesMatching(['fabric.mod.json', '*.mixins.json']) {
+        expand(expandProps)
     }
 }
 
@@ -93,6 +137,9 @@ loom {
         vmArg('-Dmixin.debug.export=true')
         runDir("../run/fabric-${minecraft_version}")
     }
+    decompilerOptions.named('vineflower') {
+        options.put('mark-corresponding-synthetics', '1') // Adds names to lambdas - useful for mixins
+    }
 }
 
 // The audit reads the classes Mixin exports, so drop the ones from earlier runs.
@@ -101,20 +148,18 @@ tasks.named('runAuditClient') {
     doFirst { exported.deleteDir() }
 }
 
-def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-['apiElements', 'runtimeElements', 'sourcesElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    configurations.named(variant) {
-        attributes {
-            attribute(loaderAttribute, 'fabric')
-        }
+def licenseName = "LICENSE_${mod_name}"
+tasks.withType(Jar).configureEach {
+    from(rootProject.file('LICENSE')) {
+        rename { licenseName }
     }
 }
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
-        configurations.named(variant) {
-            attributes {
-                attribute(loaderAttribute, 'fabric')
-            }
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
         }
     }
 }

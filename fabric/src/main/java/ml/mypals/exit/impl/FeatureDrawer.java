@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -88,7 +87,8 @@ public final class FeatureDrawer {
 			modelView.last().pose().set(ExitRuntime.viewRotation());
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()), VertexSorting.DISTANCE_TO_ORIGIN);
+			// 1.19.3 has no vertex sorting: depth sorting is done by the shader pack itself.
+			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()));
 			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
 			IrisCompat.setRenderingLevel(false);
@@ -114,7 +114,7 @@ public final class FeatureDrawer {
 			} finally {
 				restore.run();
 				IrisCompat.setRenderingLevel(renderingLevel);
-				RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
+				RenderSystem.setProjectionMatrix(projection);
 				modelView.popPose();
 				RenderSystem.applyModelViewMatrix();
 				this.buffers.clear();

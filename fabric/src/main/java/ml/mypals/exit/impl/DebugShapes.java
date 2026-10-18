@@ -32,6 +32,13 @@ public final class DebugShapes {
 	public static final double DISTANCE = 5;
 	private static final ResourceLocation WHITE = ExitMod.id("textures/misc/white.png");
 	private static final int FULL_BRIGHT = 0xF000F0;
+	/**
+	 * The box that stands in for a translucent drawing. Vanilla's {@code debugQuads} render type (a translucent,
+	 * unculled quad type without a texture or lightmap) only exists from 1.20 and 1.19.3's {@code RenderType.create}
+	 * is package-private, so use the nearest public type: an unculled, depth-write-free, emissive entity quad type.
+	 * The white texture keeps its colour.
+	 */
+	private static final RenderType TRANSLUCENT_QUADS = RenderType.entityTranslucentEmissive(WHITE);
 
 	/** The centre of the middle box, or null while the shapes are off. */
 	private static @Nullable Vec3 center;
@@ -192,7 +199,7 @@ public final class DebugShapes {
 
 	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
 	private static void box(MultiBufferSource source, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
-		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads());
+		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : TRANSLUCENT_QUADS);
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
 		PoseStack.Pose pose = poseStack.last();
@@ -207,21 +214,20 @@ public final class DebugShapes {
 
 	private static void quad(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float... corners) {
 		for (int i = 0; i < 12; i += 3) {
-			vertex(buffer, pose, argb, solid, corners, i);
+			vertex(buffer, pose, argb, corners, i);
 		}
 		if (solid) {
 			// The solid render type culls back faces, so draw the other side too.
 			for (int i = 9; i >= 0; i -= 3) {
-				vertex(buffer, pose, argb, true, corners, i);
+				vertex(buffer, pose, argb, corners, i);
 			}
 		}
 	}
 
-	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
-		VertexConsumer vertex = buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb);
-		if (solid) {
-			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0);
-		}
-		vertex.endVertex();
+	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, float[] corners, int i) {
+		// Both render types are the entity format: position, colour, texture, overlay, light and normal.
+		buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb)
+			.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0)
+			.endVertex();
 	}
 }

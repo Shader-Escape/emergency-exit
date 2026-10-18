@@ -10,8 +10,8 @@ import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
-import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -124,12 +124,18 @@ public final class SmokeTest {
 			return;
 		}
 		if (mc.screen instanceof CreateWorldScreen screen) {
-			WorldCreationUiState state = screen.getUiState();
-			state.setName(WORLD);
-			state.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE);
+			// 1.19.3 is before WorldCreationUiState: the screen keeps the world name and game mode itself. Its game
+			// mode type is package-private, so press its button instead; that also turns cheats on, which the tp below
+			// needs.
+			CreateWorldScreenAccessor legacy = (CreateWorldScreenAccessor) screen;
+			legacy.emergency_exit$nameEdit().setValue(WORLD);
+			CycleButton<?> mode = legacy.emergency_exit$modeButton();
+			for (int i = 0; i < 4 && !"CREATIVE".equals(String.valueOf(mode.getValue())); i++) {
+				mode.onPress();
+			}
 			log("creating the world");
 			this.created = true;
-			((CreateWorldScreenAccessor) screen).emergency_exit$onCreate();
+			legacy.emergency_exit$onCreate();
 			return;
 		}
 		// Wait for the title screen to settle, then open the create world screen.
