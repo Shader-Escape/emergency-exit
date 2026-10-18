@@ -163,7 +163,7 @@ td.num { font-family: var(--font-mono); }
     <p class="prose">
       场景不一定画满整个缓冲，有两种情况：Kappa 这类光影自己把场景缩到左下角 75% 去画（TAAU），EXIT 先量出这个缩放，再把复制的深度放大回全分辨率；
       Super Resolution 模组让光影在更小的区域里画、最后再放大，EXIT 直接从 SR 读到场景尺寸，通道和场景一样大，最后拉伸合并。
-      下面的流程图可以在这两种情况之间切换，都是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
+      下面的流程图可以在普通光影（BSL，画满整个缓冲）和这两种情况之间切换，都是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
     </p>
     <div class="pair">
       <figure>
@@ -198,7 +198,7 @@ td.num { font-family: var(--font-mono); }
         <svg class="edges" id="edges" aria-hidden="true"></svg>
       </div>
     </div>
-    <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出，窗口 854×480：Kappa 用 <code>./gradlew :fabric:runSmokeClient</code> 和 Kappa v5.3；Super Resolution 用 <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code>、Sundial Lite 1.2 和 FSR2（放大倍数 1.21）。</p>
+    <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出，窗口 854×480：普通光影用 <code>./gradlew :fabric:runSmokeClient</code> 和 BSL v8.4；Kappa 用 <code>./gradlew :fabric:runSmokeClient</code> 和 Kappa v5.3；Super Resolution 用 <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code>、Sundial Lite 1.2 和 FSR2（放大倍数 1.21）。</p>
   </section>
 
   <section class="stack" aria-labelledby="scale-title">
@@ -277,9 +277,11 @@ td.num { font-family: var(--font-mono); }
 
   // 两套流程图：各自一个数据文件。
   const VARIANTS = [
-    { id: "kappa", file: "flow.json", label: "Kappa（降分辨率光影）" },
+    { id: "bsl", file: "flow-bsl.json", label: "普通光影（BSL）" },
+    { id: "kappa", file: "flow.json", label: "降分辨率光影（Kappa）" },
     { id: "sr", file: "flow-sr.json", label: "Super Resolution" },
   ];
+  const DEFAULT = "kappa";
   const loaded = {};     // id → 数据
   const changed = {};    // id → 有没保存的修改
   let current = VARIANTS[0];
@@ -671,7 +673,7 @@ td.num { font-family: var(--font-mono); }
         flow.appendChild(msg);
       });
   }
-  show(VARIANTS.find((v) => "#" + v.id === location.hash) || VARIANTS[0]);
+  show(VARIANTS.find((v) => "#" + v.id === location.hash) || VARIANTS.find((v) => v.id === DEFAULT));
   window.addEventListener("hashchange", () => {
     const v = VARIANTS.find((x) => "#" + x.id === location.hash);
     if (v && v !== current) show(v);
