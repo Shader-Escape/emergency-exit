@@ -10,6 +10,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 26.2 | `port/26.2` | 25 | 无混淆 | 1.11.4 |
 | 26.1.2 | `port/26.1.2` | 25 | 无混淆 | 1.11.4（26.1） |
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
+| 1.20.6 | `port/1.20.6` | 21 | 混淆，Mojang 映射 | 1.7.2 |
 
 ## 26.2（相对 26.3）
 
@@ -134,3 +135,60 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **开发运行**
 - NeoForge 开发环境默认开着 Blaze3D 校验层，Iris 1.10.8 启动时会崩（`ValidationGpuDevice` 不能转成 `GlDevice`）。
   在 `run/neoforge-1.21.11/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
+
+## 1.20.6（相对 1.21.11）
+
+这一节把 1.21.11 到 1.20.6 之间的差异一起记下（1.21.10、1.21.8、1.21.5、1.21.4、1.21.3、1.21.1 都跳过了，直接从
+`port/1.21.11` 开出并一次性改到 1.20.6）。
+
+**构建**
+- Java 21（同 1.21.11）。common 仍用 ModDevGradle NeoForm `1.20.6-20240627.102356`，Fabric 用 Loom
+  `mappings(loom.officialMojangMappings())`。
+- **只做 Fabric**：Iris 在 1.20.6 没有 NeoForge 构建，`neoforge` 子项目删除。
+- Fabric API `0.100.8+1.20.6`；Iris 1.7.2、Sodium 见 `gradle.properties`。
+- Iris/Sodium 内嵌的库（jcpp、ANTLR、glsl-transformer）用 `nestedLibraries` 任务从它们自己的 jar 里取出来放进开发运行。
+
+**包名和类**
+- `Identifier` → `ResourceLocation`；`Identifier.fromNamespaceAndPath(a, b)` → `new ResourceLocation(a, b)`。
+- 没有 JSpecify：`org.jspecify.annotations.Nullable` → `org.jetbrains.annotations.Nullable`。
+- `CameraRenderState` → `net.minecraft.client.Camera`（位置 `getPosition()`）。
+- `net.minecraft.client.renderer.rendertype.RenderTypes` → `net.minecraft.client.renderer.RenderType`。
+- `TextureTarget(w, h, useDepth, Minecraft.ON_OSX)`；`RenderTarget.resize(w, h, Minecraft.ON_OSX)`。
+- 没有 `ByteBufferBuilder`（1.21 起才有）：批次用 `new BufferBuilder(int)`，`VertexConsumer` 用 `vertex(...).endVertex()`。
+
+**渲染通道**
+- `RenderPipeline`/`RenderPass` 是 1.21.5 以后才有的。这里换回纯 OpenGL：`Gpu` 自己编译 `#version 330` 的程序、用
+  `gl_VertexID` 画全屏三角形、手动管理 FBO 与 GL 状态；`STANDARD_DEPTH` 由 EXIT 在编译前加到着色器里。
+- 没有 `GpuTextureView`，直接用 `RenderTarget` 的纹理 id。
+- 没有输出覆盖：portal 改为绑定通道的 framebuffer，并用 `MinecraftMixin` 让 `getMainRenderTarget()` 在重定向期间返回
+  通道目标（`MinecraftAccessor` 给 EXIT 自己读真字段）。
+
+**管线**
+- 全屏通道是 OpenGL 程序：`colorPipeline`/`depthPipeline`/`depthReplacePipeline`/`layerPipeline` 的语义与 26.3 一致。
+
+**特征（提交）**
+- 没有 `SubmitNodeCollector`/`SubmitNodeStorage`：批次改成 `MultiBufferSource`——`Exit.draw(MultiBufferSource, ...)`、
+  `ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`。
+- 批次按 `RenderType` 攒；帧末先画不混合的类型，再画半透明的（保证实体不盖住更近的半透明）。半透明的提交另外录进第二个
+  buffer，画的时候 colour 关、depth 开，写进通道的半透明深度目标，合并前用 `TranslucentDepth.fold` 取更近的。
+- 删掉：gizmo（1.21.6 才有，连同 `SimpleGizmoCollector`/`DrawableGizmoPrimitives`/`Gizmos`）、Super Resolution 与缩放
+  探针（`SceneScale`、`scale_probe.fsh`、`RenderTypeAccessor`）、`StrictValidationMixin`，以及新渲染 API 的 mixin
+  （`RenderPassMixin`、`PortalPassMixin`、`CompiledPipelineMixin`、`RenderPipelinesAccessor`、
+  `FeatureRenderDispatcherAccessor`、`FeatureRenderDispatcherMixin`、`RenderTypeAccessor`）。
+
+**关卡钩子**
+- `LevelRenderer.renderLevel(float, long, boolean, Camera, GameRenderer, LightTexture, Matrix4f 视图旋转, Matrix4f 投影)`。
+  视图旋转与投影直接取参数（1.21 在本方法入口模型视图还是 identity，不能从 `RenderSystem` 读）。END 时合并。
+
+**加载器事件**
+- 没有 `LevelRenderEvents`（1.21.11 的）：用 `WorldRenderEvents.BEFORE_ENTITIES`，上下文里取 `consumers()`。
+
+**Iris**
+- Iris 1.7：没有 `Iris.isPackInUseQuick` → `IrisApi.getInstance().isShaderPackInUse()`。
+- 没有 `ImmediateState.bypass`：EXIT 自己存 bypass，`IrisShaderOverrideMixin` 让 `shouldOverrideShaders` 在 bypass 时返回
+  false、`getPhase` 返回 `NONE`。
+- `sceneDepthTexture()` 返回 0（这个版本 Iris 用主深度）。
+- 没有 skipExtension；混合用 `GlStateManagerMixin`：重定向期间把 alpha 因子换成 `(ONE, ONE_MINUS_SRC_ALPHA)`。
+
+**开发运行**
+- 运行目录 `run/fabric-1.20.6`；冒烟测试无光影与 BSL 光影各跑一次都 `RESULT: OK`；`runAuditClient` 每个 mixin 都应用。
