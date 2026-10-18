@@ -14,6 +14,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20.4 | `port/1.20.4` | 17 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
 | 1.20.1 | `port/1.20.1` | 17 | 混淆，Mojang 映射 | 1.7.6 |
+| 1.20 | `port/1.20` | 17 | 混淆，Mojang 映射 | 1.6.4 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 
 ## 26.2（相对 26.3）
@@ -264,6 +265,35 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   深度混合、阴影回调里 EXIT 画了 0 次）；`runAuditClient` 每个 mixin 都应用成功。
 - 无光影时画面里只有黄色盒子（红色和绿色提交给关卡自己的 buffer source，这里没画它们），有光影的那组是四色盒子加三张
   调试视图，和 `port/1.20.2` 的对应画面一致（截图在 `smoke-shots/1.20.1/fabric-none` 和 `fabric-bsl`）。
+
+其余同 1.20.2。
+
+## 1.20（相对 1.20.2）
+
+**构建**
+- 变成**单个 Fabric Loom 工程**（同 LitematicaPass）：Minecraft 1.20.1 及更早没有 ModDevGradle 能用的 NeoForm 构建，
+  `common` 子工程根本建不起来。`common/src/main/java` 移进 `fabric/src/main/java`，`common/src/main/resources` 移进
+  `fabric/src/main/resources`，`common/src/smoke` 移进 `fabric/src/smoke`；`common` 子工程和 build-logic 的
+  multiloader 插件都删掉，`fabric/build.gradle` 直接是 fabric-loom-remap 工程：`minecraft(...)`、
+  `loom.officialMojangMappings()`、fabric-loader、fabric-api、Iris/Sodium 用 `modCompileOnly` + `modLocalRuntime`、
+  `nestedLibraries`、client/smokeClient/auditClient 三个运行配置、smoke 和 audit source set，以及展开
+  `fabric.mod.json` 和 `*.mixins.json` 的 processResources。API 包名（`ml.mypals.exit.*`）不变。
+- Fabric API `0.83.0+1.20`；Iris 1.6.4（Modrinth `YL57xq9U:URWeWMAt`）、Sodium `AANobbMI:vgceLbdH`。
+- `fabric.mod.json` 的 `minecraft` 从 `minecraft_version_range` 展开成 Fabric 自己的断言形式 `>=1.19.4 <=1.20`
+  （代码和 1.20.2 相同，LitematicaPass 在 1.19.4 上验证过这段代码）。
+
+**包名和类**
+- 一行源码都没改：Iris 1.6.4 仍在旧包名（`net.coderbot.iris.Iris`、`net.coderbot.iris.vertices.ImmediateState`、
+  `net.coderbot.iris.pipeline.WorldRenderingPhase`），管线类仍是
+  `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`（`shouldOverrideShaders` / `getPhase` 都还在），
+  冒烟测试的 Iris 阴影钩子仍是 `net.coderbot.iris.pipeline.ShadowRenderer`。
+
+**开发运行**
+- 运行目录 `run/fabric-1.20`；冒烟测试无光影和 BSL 光影各跑一次都是 `RESULT: OK`（BSL：2184 次改道绘制、1937 帧按深度
+  混合、阴影回调里 EXIT 画了 0 次）；`runAuditClient` 每个 mixin 都应用成功。
+- 无光影时画面里只有黄色盒子（红色和绿色提交给关卡自己的 buffer source，1.20 没画它们），有光影的那一组是四色盒子加
+  三张调试视图，和 `port/1.20.2` 的对应画面一样（截图在 `smoke-shots/1.20/fabric-none` 和 `fabric-bsl`；冒烟测试每次
+  随机选位置生成地形，所以是逐张目视对比，不是逐像素相同）。
 
 其余同 1.20.2。
 
