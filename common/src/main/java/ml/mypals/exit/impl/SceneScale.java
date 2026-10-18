@@ -6,16 +6,12 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.buffers.BufferType;
-import com.mojang.blaze3d.buffers.BufferUsage;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.platform.DepthTestFunction;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.platform.GlStateManager;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.system.MemoryUtil;
 import ml.mypals.exit.compat.IrisCompat;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -23,7 +19,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
-import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,9 +26,6 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
 /**
  * Where the shader pack puts the scene in its buffers. Packs that render at a lower resolution and upscale (Kappa's
@@ -80,7 +72,6 @@ final class SceneScale {
 	/** A transform read back during a frame. It is used from the next frame on, so one frame does not mix two. */
 	private static float @Nullable [] measured;
 
-	private static @Nullable RenderPipeline probePipeline;
 	private static @Nullable TextureTarget beforeProbe;
 	private static @Nullable TextureTarget afterProbe;
 	private static @Nullable TextureTarget probeMask;
@@ -148,9 +139,6 @@ final class SceneScale {
 
 		Gpu.copyDepth(beforeProbe, main);
 		boolean drawn = drawProbe(main, camera);
-		// On OpenGL the probe left the pack's other draw buffers masked, and the pack's own pipelines only set the masks
-		// of the buffers they know of. A clear makes every buffer writable again, as the rest of the game expects.
-		RenderSystem.getDevice().createCommandEncoder().clearColorTexture(probeMask.getColorTexture(), 0);
 		if (!drawn) {
 			ExitRuntime.warnOnce("scene_scale_camera", "EXIT: could not place the render scale probe; occlusion assumes full resolution");
 			state = State.KNOWN;
@@ -195,87 +183,55 @@ final class SceneScale {
 		}
 
 		RenderType type = RenderType.entitySolid(WHITE);
-		RenderPipeline pipeline = probePipeline();
-		try (ByteBufferBuilder bytes = new ByteBufferBuilder(1024)) {
-			// Built in the format Iris gives the entity pipeline while the level renders.
-			BufferBuilder builder = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, type.format());
-			for (Vector4f point : points) {
-				builder.addVertex(point.x, point.y, point.z, -1, 0, 0, OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, 0, 0, 1);
-			}
-			try (MeshData mesh = builder.build()) {
-				if (mesh == null) {
-					return false;
-				}
-				draw(main, type, pipeline, mesh, modelView);
-			}
+		// Built in the format Iris gives the entity program while the level renders, so the pack's program reads it.
+		BufferBuilder builder = new BufferBuilder(new ByteBufferBuilder(1024), VertexFormat.Mode.QUADS, type.format());
+		for (Vector4f point : points) {
+			builder.addVertex(point.x, point.y, point.z, -1, 0, 0, OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, 0, 0, 1);
 		}
+		MeshData mesh = builder.build();
+		if (mesh == null) {
+			return false;
+		}
+		draw(type, mesh, modelView);
 		return true;
 	}
 
-	private static void draw(RenderTarget main, RenderType type, RenderPipeline pipeline, MeshData mesh, Matrix4f modelView) {
-		// Before 1.21.11 a render type sets its textures as shader textures. Setting them up may load them, which cannot
-		// happen inside a pass.
-		type.setupRenderState();
-		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
-		// OpenGL masks the colour of every draw buffer at once before 26.2, so a pipeline that writes no colour masks all the
-		// buffers the pack's program writes to.
-		GpuBuffer vertices = pipeline.getVertexFormat().uploadImmediateVertexBuffer(mesh.vertexBuffer());
-		// Getting the indices may upload them, which cannot happen inside a pass.
-		GpuBuffer indexBuffer = indices.getBuffer(6);
-		// Before 1.21.6 a draw reads the model-view matrix from RenderSystem when it is drawn.
+	/**
+	 * Draws the quad with the render type, which Iris draws with the pack's program into the pack's buffers, writing
+	 * depth and no colour (GlOverrides). Before 1.21.5 there is no pipeline to copy: the render type sets its own masks.
+	 */
+	private static void draw(RenderType type, MeshData mesh, Matrix4f modelView) {
 		Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
 		modelViewStack.pushMatrix();
 		modelViewStack.set(modelView);
-		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-			main.getColorTexture(), OptionalInt.empty(), main.getDepthTexture(), OptionalDouble.empty())) {
-			pass.setPipeline(pipeline);
-			for (int i = 0; i < 12; i++) {
-				GpuTexture texture = RenderSystem.getShaderTexture(i);
-				if (texture != null) {
-					pass.bindSampler("Sampler" + i, texture);
-				}
-			}
-			pass.setVertexBuffer(0, vertices);
-			pass.setIndexBuffer(indexBuffer, indices.type());
-			pass.drawIndexed(0, 6);
+		boolean depthOnly = GlOverrides.depthOnly;
+		GlOverrides.depthOnly = true;
+		try {
+			// Uploading the mesh frees it.
+			type.draw(mesh);
 		} finally {
+			GlOverrides.depthOnly = depthOnly;
+			GlStateManager._colorMask(true, true, true, true);
 			modelViewStack.popMatrix();
-			type.clearRenderState();
 		}
 	}
 
-	/** A copy of the entity pipeline that writes depth, no colour, and draws both faces. */
-	private static RenderPipeline probePipeline() {
-		if (probePipeline == null) {
-			// The vertex format is read now, so read the plain one. Iris widens it when the quad is drawn.
-			ExitRuntime.plainFormat(() -> probePipeline = new Probe(RenderPipelines.ENTITY_SOLID));
-			IrisCompat.usePackProgramOf(RenderPipelines.ENTITY_SOLID, probePipeline);
-		}
-		return probePipeline;
-	}
-
-	private static final class Probe extends RenderPipeline {
-		Probe(RenderPipeline original) {
-			super(ExitMod.id("scale_probe"), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
-				original.getSamplers(), original.getUniforms(), Optional.empty(), DepthTestFunction.LEQUAL_DEPTH_TEST, original.getPolygonMode(),
-				false, false, false, true, original.getColorLogic(), original.getVertexFormat(), original.getVertexFormatMode(), 0, 0);
-		}
-	}
-
+	/** Reads the mask back. Before 1.21.5 there is no buffer to copy it into, so it is read at once. */
 	private static void readBack(TextureTarget mask, int expected) {
 		int width = mask.width;
 		int height = mask.height;
-		GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe readback",
-			BufferType.PIXEL_PACK, BufferUsage.STATIC_READ, width * height * 4);
-		RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(mask.getColorTexture(), buffer, 0, () -> {
-			try (GpuBuffer.ReadView view = RenderSystem.getDevice().createCommandEncoder().readBuffer(buffer)) {
-				if (expected == generation) {
-					solve(view.data(), width, height);
-				}
-			} finally {
-				buffer.close();
+		ByteBuffer data = MemoryUtil.memAlloc(width * height * 4);
+		try {
+			int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+			GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, mask.frameBufferId);
+			GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+			GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+			if (expected == generation) {
+				solve(data, width, height);
 			}
-		}, 0);
+		} finally {
+			MemoryUtil.memFree(data);
+		}
 	}
 
 	/** Finds the box the quad covers and solves the transform from it. Rows start at the bottom, like gl_FragCoord. */

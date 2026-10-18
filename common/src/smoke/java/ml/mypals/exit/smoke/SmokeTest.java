@@ -1,6 +1,5 @@
 package ml.mypals.exit.smoke;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.compat.IrisCompat;
@@ -16,7 +15,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -90,7 +88,7 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.5 has no shadow render callback). EXIT
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.4 has no shadow render callback). EXIT
 	 * must skip what is drawn there.
 	 */
 	public static void inShadowPass() {
@@ -287,17 +285,11 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * EXIT's pipelines whose shaders do not compile. A pass with such a pipeline draws nothing, which the counters do not
-	 * show: the merge would just leave the channels out.
+	 * EXIT's programs that did not compile or link. Such a pass draws nothing, which the counters do not show: the merge
+	 * would just leave the channels out. Before 1.21.5 EXIT compiles them itself, when they are first drawn.
 	 */
 	private static List<String> brokenPipelines() {
-		List<String> broken = new ArrayList<>();
-		for (RenderPipeline pipeline : RenderPipelines.getStaticPipelines()) {
-			if (pipeline.getLocation().getNamespace().equals("emergency_exit") && !RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
-				broken.add(pipeline.getLocation().toString());
-			}
-		}
-		return broken;
+		return ExitRuntime.brokenPipelines();
 	}
 
 	private static long[] counters() {

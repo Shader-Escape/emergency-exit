@@ -8,7 +8,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
+import net.neoforged.neoforge.event.GameShuttingDownEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = ExitMod.MOD_ID, dist = Dist.CLIENT)
@@ -26,7 +26,8 @@ public final class ExitNeoForge {
 	};
 
 	public ExitNeoForge() {
-		NeoForge.EVENT_BUS.addListener(ClientStoppingEvent.class, event -> ExitMod.close());
+		// NeoForge 21.4 has no ClientStoppingEvent; the game shutting down is the same moment on the client.
+		NeoForge.EVENT_BUS.addListener(GameShuttingDownEvent.class, event -> ExitMod.close());
 		NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event -> event.getDispatcher().register(ExitMod.command(OUTPUT)));
 		// The events of NeoForge for 1.21.5 have no buffer source, so the drawings are given none to pass to. There is one
 		// event class with a stage; AFTER_CUTOUT_BLOCKS comes after the opaque terrain.

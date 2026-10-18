@@ -2,28 +2,25 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.platform.DepthTestFunction;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.DestFactor;
-import com.mojang.blaze3d.platform.SourceFactor;
-import com.mojang.blaze3d.textures.GpuTexture;
-import ml.mypals.exit.mixin.RenderPipelinesAccessor;
+import com.mojang.blaze3d.platform.GlStateManager;
+import ml.mypals.exit.mixin.MinecraftAccessor;
 import net.minecraft.client.Minecraft;
-import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
 /**
- * The GPU work of the mod. It creates render targets and draws full-screen passes with {@link #draw}.
+ * The GPU work of the mod. It creates render targets and draws full-screen passes with {@link #draw}. Before 1.21.5
+ * there is no RenderPipeline or RenderPass API: EXIT compiles its programs itself and draws with OpenGL, restoring the
+ * state it touches, as LitematicaPass does.
  */
 final class Gpu {
 	/** The depth of a cleared depth buffer. Depth is standard before 26.2 (near = 0, far = 1). */
@@ -31,16 +28,14 @@ final class Gpu {
 
 	private Gpu() {}
 
+	/** The main render target itself. While EXIT routes, {@code getMainRenderTarget()} returns a channel's (MinecraftMixin). */
 	static RenderTarget mainTarget() {
-		return Minecraft.getInstance().getMainRenderTarget();
+		return ((MinecraftAccessor) Minecraft.getInstance()).emergency_exit$mainRenderTarget();
 	}
 
-	/**
-	 * Whether a render pass is open. EXIT then opens no other pass and clears no target. The open passes are counted in
-	 * PortalPassMixin and RenderPassMixin.
-	 */
+	/** Whether a render pass is open. Before 1.21.5 there are none: every draw goes to the bound framebuffer. */
 	static boolean isInRenderPass() {
-		return ExitRuntime.openPasses() > 0;
+		return false;
 	}
 
 	/** When true, passes cover the whole output instead of the scene area. */
@@ -54,9 +49,11 @@ final class Gpu {
 		return SceneSize.height();
 	}
 
-	/** A colour and depth target. */
+	/** A colour and depth target, cleared to transparent black. */
 	static TextureTarget colorDepthTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, true);
+		TextureTarget target = new TextureTarget(width, height, true);
+		target.setClearColor(0, 0, 0, 0);
+		return target;
 	}
 
 	static void resize(RenderTarget target, int width, int height) {
@@ -70,18 +67,44 @@ final class Gpu {
 
 	/** A target with only a colour texture. */
 	static TextureTarget colorTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, false);
+		TextureTarget target = new TextureTarget(width, height, false);
+		target.setClearColor(0, 0, 0, 0);
+		return target;
 	}
 
-	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
+	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}, and keeps what was bound. */
 	static void clear(RenderTarget target) {
-		RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
-			target.getColorTexture(), 0, target.getDepthTexture(), FAR_DEPTH);
+		Runnable restore = saveBinding();
+		target.clear();
+		restore.run();
 	}
 
-	/** Copies the depth of {@code source} into {@code target}. */
+	/** Copies the depth of {@code source} into {@code target}, and keeps what was bound. */
 	static void copyDepth(RenderTarget target, RenderTarget source) {
+		Runnable restore = saveBinding();
 		target.copyDepthFrom(source);
+		restore.run();
+	}
+
+	/** Binds {@code target} for drawing. The returned runnable binds what was bound before. */
+	static Runnable bindForDrawing(RenderTarget target) {
+		Runnable restore = saveBinding();
+		GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.frameBufferId);
+		GlStateManager._viewport(0, 0, target.width, target.height);
+		return restore;
+	}
+
+	/** Saves the bound framebuffers and the viewport. The returned runnable puts them back. */
+	private static Runnable saveBinding() {
+		int drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+		int[] viewport = new int[4];
+		GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
+		return () -> {
+			GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+			GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+			GlStateManager._viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+		};
 	}
 
 	/** A texture that a full-screen pass reads with {@code texelFetch}, either the colour or the depth of a target. */
@@ -95,160 +118,241 @@ final class Gpu {
 		return new Sampler(name, target, true);
 	}
 
+	private enum Output {
+		/** RGB, blended as premultiplied colour or replacing, without depth. */
+		COLOR,
+		/** Depth only, with the default depth test. */
+		DEPTH,
+		/** Depth only, replacing it. */
+		DEPTH_REPLACE,
+		/** RGBA colour and depth, replacing both. */
+		LAYER
+	}
+
 	/**
 	 * A full-screen pass that writes RGB into a target's colour, without depth. With {@code premultiplied} it blends
 	 * premultiplied colour over the target, otherwise it replaces it.
 	 */
 	static Pipeline colorPipeline(String location, String fragmentShader, boolean premultiplied, Map<String, Integer> defines,
 		String... samplers) {
-		return new Pipeline(location, fragmentShader, false, premultiplied, defines, samplers);
+		return new Pipeline(location, fragmentShader, Output.COLOR, premultiplied, defines, samplers);
 	}
 
 	/** A full-screen pass that writes only a target's depth, with the default depth test. */
 	static Pipeline depthPipeline(String location, String fragmentShader, Map<String, Integer> defines, String... samplers) {
-		return new Pipeline(location, fragmentShader, true, false, defines, samplers);
+		return new Pipeline(location, fragmentShader, Output.DEPTH, false, defines, samplers);
 	}
 
 	/** A full-screen pass that replaces a target's depth, without depth test. */
 	static Pipeline depthReplacePipeline(String location, String fragmentShader, Map<String, Integer> defines, String... samplers) {
-		return new Pipeline(location, fragmentShader, true, false, false, true, defines, samplers);
+		return new Pipeline(location, fragmentShader, Output.DEPTH_REPLACE, false, defines, samplers);
 	}
 
 	/** A full-screen pass that replaces a target's RGBA colour and its depth, without blending or depth test. */
 	static Pipeline layerPipeline(String location, String fragmentShader, Map<String, Integer> defines, String... samplers) {
-		return new Pipeline(location, fragmentShader, false, false, true, defines, samplers);
+		return new Pipeline(location, fragmentShader, Output.LAYER, false, defines, samplers);
 	}
 
+	/** The pipelines whose program did not compile or link. Used by the checks. */
+	private static final List<String> BROKEN = new ArrayList<>();
+
+	static List<String> brokenPipelines() {
+		return List.copyOf(BROKEN);
+	}
+
+	/** A program of EXIT's own: one full-screen triangle and a fragment shader from the mod's resources. */
 	static final class Pipeline {
-		private final boolean depthOnly;
-		private final boolean layer;
-		private final boolean replaceDepth;
-		private final String label;
-		private final RenderPipeline pipeline;
+		private static final String VERTEX_SHADER = """
+			#version 330
+			void main() {
+			    vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+			    gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
+			}
+			""";
 
-		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, Map<String, Integer> defines,
+		private final String location;
+		private final String fragmentShader;
+		private final Output output;
+		private final boolean premultiplied;
+		private final Map<String, Integer> defines;
+		private final String[] samplers;
+		private int program;
+		private int[] samplerLocations;
+		private boolean failed;
+
+		private Pipeline(String location, String fragmentShader, Output output, boolean premultiplied, Map<String, Integer> defines,
 			String[] samplers) {
-			this(location, fragmentShader, depthOnly, premultiplied, false, false, defines, samplers);
+			this.location = ExitMod.MOD_ID + ":" + location;
+			this.fragmentShader = fragmentShader;
+			this.output = output;
+			this.premultiplied = premultiplied;
+			this.defines = Map.copyOf(defines);
+			this.samplers = samplers;
 		}
 
-		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, boolean layer,
-			Map<String, Integer> defines, String[] samplers) {
-			this(location, fragmentShader, depthOnly, premultiplied, layer, false, defines, samplers);
-		}
-
-		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, boolean layer,
-			boolean replaceDepth, Map<String, Integer> defines, String[] samplers) {
-			this.depthOnly = depthOnly;
-			this.layer = layer;
-			this.replaceDepth = replaceDepth;
-			this.label = ExitMod.MOD_ID + "/" + location;
-			RenderPipeline.Builder builder = screenQuad(location, fragmentShader, samplers);
-			defines.forEach(builder::withShaderDefine);
-			if (layer) {
-				layerOutput(builder);
-			} else if (depthOnly) {
-				depthOnly(builder, replaceDepth);
-			} else {
-				colorOutput(builder, premultiplied ? Optional.of(PREMULTIPLIED_ALPHA) : Optional.empty());
+		private void compile() {
+			String source = readShader("/assets/" + ExitMod.MOD_ID + "/shaders/" + this.fragmentShader + ".fsh");
+			StringBuilder header = new StringBuilder();
+			this.defines.forEach((key, value) -> header.append("#define ").append(key).append(' ').append(value).append('\n'));
+			int afterVersion = source.indexOf('\n') + 1;
+			source = source.substring(0, afterVersion) + header + source.substring(afterVersion);
+			int vertex = compileShader(GL20.GL_VERTEX_SHADER, VERTEX_SHADER);
+			int fragment = compileShader(GL20.GL_FRAGMENT_SHADER, source);
+			int program = GL20.glCreateProgram();
+			GL20.glAttachShader(program, vertex);
+			GL20.glAttachShader(program, fragment);
+			GL20.glLinkProgram(program);
+			GL20.glDeleteShader(vertex);
+			GL20.glDeleteShader(fragment);
+			if (GL20.glGetProgrami(program, GL20.GL_LINK_STATUS) == GL11.GL_FALSE) {
+				throw new IllegalStateException("could not link " + this.location + ": " + GL20.glGetProgramInfoLog(program));
 			}
-			this.pipeline = RenderPipelinesAccessor.emergency_exit$register(builder.build());
+			this.samplerLocations = new int[this.samplers.length];
+			for (int i = 0; i < this.samplers.length; i++) {
+				this.samplerLocations[i] = GL20.glGetUniformLocation(program, this.samplers[i]);
+			}
+			this.program = program;
+		}
+
+		private int location(String sampler) {
+			for (int i = 0; i < this.samplers.length; i++) {
+				if (this.samplers[i].equals(sampler)) {
+					return this.samplerLocations[i];
+				}
+			}
+			return -1;
+		}
+
+		private static int compileShader(int type, String source) {
+			int shader = GL20.glCreateShader(type);
+			GL20.glShaderSource(shader, source);
+			GL20.glCompileShader(shader);
+			if (GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) == GL11.GL_FALSE) {
+				String log = GL20.glGetShaderInfoLog(shader);
+				GL20.glDeleteShader(shader);
+				throw new IllegalStateException("could not compile a shader: " + log);
+			}
+			return shader;
+		}
+
+		private static String readShader(String path) {
+			try (InputStream in = Gpu.class.getResourceAsStream(path)) {
+				if (in == null) {
+					throw new IllegalStateException(path + " not found");
+				}
+				return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			} catch (IOException e) {
+				throw new IllegalStateException("could not read " + path, e);
+			}
 		}
 	}
 
-	/** Draws the pipeline over {@code output} and keeps what is already there. */
+	private static int emptyVertexArray;
+
+	/** Draws the pipeline over {@code output} and keeps what is already there, except what it replaces. */
 	static void draw(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
-		if (pipeline.layer || pipeline.replaceDepth) {
-			// A layer or a depth replacement replaces the whole target, see layerOutput and depthOnly.
-			clear(output);
+		if (pipeline.failed) {
+			return;
 		}
-		// Getting the index buffer may upload it, which cannot happen inside a pass.
-		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
-		GpuBuffer indexBuffer = indices.getBuffer(6);
-		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)
-			: pipeline.depthOnly ? depthPass(pipeline.label, output) : colorPass(pipeline.label, output)) {
-			pass.setPipeline(pipeline.pipeline);
-			for (Sampler sampler : samplers) {
-				bind(pass, sampler.name(), sampler.depth() ? depth(sampler.target()) : color(sampler.target()));
+		if (pipeline.program == 0) {
+			try {
+				pipeline.compile();
+			} catch (RuntimeException e) {
+				// Leave the frame as it is instead of crashing the game, and report it once.
+				pipeline.failed = true;
+				BROKEN.add(pipeline.location);
+				ExitMod.LOGGER.error("EXIT: could not set up {}; it will not be drawn", pipeline.location, e);
+				return;
 			}
-			pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
-			pass.setIndexBuffer(indexBuffer, indices.type());
-			pass.drawIndexed(0, 6);
+		}
+		if (emptyVertexArray == 0) {
+			emptyVertexArray = GlStateManager._glGenVertexArrays();
+		}
+		boolean paused = GlOverrides.paused;
+		GlOverrides.paused = true;
+		try {
+			drawUnchecked(pipeline, output, samplers);
+		} finally {
+			GlOverrides.paused = paused;
 		}
 	}
 
-	/** Blending for premultiplied colour. Minecraft has it from 1.21.6; these are the same factors. */
-	private static final BlendFunction PREMULTIPLIED_ALPHA = new BlendFunction(
-		SourceFactor.ONE, DestFactor.ONE_MINUS_SRC_ALPHA, SourceFactor.ONE, DestFactor.ONE_MINUS_SRC_ALPHA);
-
-	/**
-	 * A pipeline that covers the screen and samples the given textures. Before 1.21.9 there is no {@code core/screenquad}
-	 * that draws one triangle without vertices, so it draws the shared quad with {@code core/blit_screen}.
-	 */
-	private static RenderPipeline.Builder screenQuad(String location, String fragmentShader, String... samplers) {
-		RenderPipeline.Builder builder = RenderPipeline.builder()
-			.withLocation(ExitMod.id(location))
-			.withVertexShader("core/blit_screen")
-			.withFragmentShader(ExitMod.id(fragmentShader));
-		for (String name : samplers) {
-			builder.withSampler(name);
+	private static void drawUnchecked(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
+		Runnable restoreBinding = saveBinding();
+		boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+		boolean blend = GL11.glIsEnabled(GL11.GL_BLEND);
+		int activeTexture = GlStateManager._getActiveTexture();
+		// Minecraft caches the bound program, vertex array and textures, so put back exactly what was bound, or its next
+		// draw runs without its program.
+		int program = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+		int vertexArray = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+		int[] textures = new int[samplers.length];
+		for (int i = 0; i < samplers.length; i++) {
+			GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
+			textures[i] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
 		}
-		builder.withVertexFormat(DefaultVertexFormat.POSITION, VertexFormat.Mode.QUADS);
-		return builder;
-	}
 
-	/** Makes the pipeline write RGB into the target with the given blending, without depth. */
-	private static void colorOutput(RenderPipeline.Builder builder, Optional<BlendFunction> blend) {
-		blend.ifPresentOrElse(builder::withBlend, builder::withoutBlend);
-		builder.withColorWrite(true, false).withDepthWrite(false).withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST);
-	}
-
-	/** Makes the pipeline replace the target's RGBA colour and depth, without blending or depth test. */
-	private static void layerOutput(RenderPipeline.Builder builder) {
-		// Without a depth test nothing writes depth, so the target is cleared to far first (see draw) and the test lets
-		// every fragment through.
-		builder.withoutBlend().withColorWrite(true, true).withDepthWrite(true).withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST);
-	}
-
-	/**
-	 * Makes a pipeline that only writes depth, with the default depth test. Without a depth test nothing writes depth,
-	 * so to replace the depth the target is cleared to far first (see draw).
-	 */
-	private static void depthOnly(RenderPipeline.Builder builder, boolean replace) {
-		builder.withColorWrite(false, false).withDepthWrite(true).withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST);
-	}
-
-	/** Opens a pass on the colour of {@code target} and keeps its contents. */
-	private static RenderPass colorPass(String label, RenderTarget target) {
-		return openPass(label, color(target), null, target);
-	}
-
-	/** Opens a pass on the depth of {@code target} and keeps its contents. Its colour is attached too, unwritten (see {@link #depthOnly}). */
-	private static RenderPass depthPass(String label, RenderTarget target) {
-		return openPass(label, color(target), depth(target), target);
-	}
-
-	// Before 1.21.6 passes and samplers take the textures themselves: there are no texture views.
-	private static GpuTexture color(RenderTarget target) {
-		return target.getColorTexture();
-	}
-
-	private static GpuTexture depth(RenderTarget target) {
-		return target.getDepthTexture();
-	}
-
-	/** Opens a pass. Passes have no render area before 26.2, so a scissor limits it to the scene area. */
-	private static RenderPass openPass(String label, GpuTexture color, @Nullable GpuTexture depth, RenderTarget size) {
-		// Passes have no label before 1.21.6.
-		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(color, OptionalInt.empty(), depth,
-			OptionalDouble.empty());
-		if (!wholeOutput && (sceneWidth() < size.width || sceneHeight() < size.height)) {
-			pass.enableScissor(0, 0, sceneWidth(), sceneHeight());
+		GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, output.frameBufferId);
+		// The scene area, not the whole output: with a resolution scaling mod the main target is larger than the scene.
+		GlStateManager._viewport(0, 0, wholeOutput ? output.width : Math.min(sceneWidth(), output.width),
+			wholeOutput ? output.height : Math.min(sceneHeight(), output.height));
+		switch (pipeline.output) {
+			case COLOR -> {
+				GlStateManager._colorMask(true, true, true, false);
+				GlStateManager._depthMask(false);
+				GlStateManager._disableDepthTest();
+				if (pipeline.premultiplied) {
+					GlStateManager._enableBlend();
+					GlStateManager._blendFuncSeparate(GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
+				} else {
+					GlStateManager._disableBlend();
+				}
+			}
+			case DEPTH, DEPTH_REPLACE -> {
+				GlStateManager._colorMask(false, false, false, false);
+				GlStateManager._depthMask(true);
+				GlStateManager._enableDepthTest();
+				GlStateManager._depthFunc(pipeline.output == Output.DEPTH ? GL11.GL_LEQUAL : GL11.GL_ALWAYS);
+				GlStateManager._disableBlend();
+			}
+			case LAYER -> {
+				GlStateManager._colorMask(true, true, true, true);
+				GlStateManager._depthMask(true);
+				GlStateManager._enableDepthTest();
+				GlStateManager._depthFunc(GL11.GL_ALWAYS);
+				GlStateManager._disableBlend();
+			}
 		}
-		return pass;
-	}
+		GlStateManager._glUseProgram(pipeline.program);
+		for (int i = 0; i < samplers.length; i++) {
+			GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
+			RenderTarget target = samplers[i].target();
+			GlStateManager._bindTexture(samplers[i].depth() ? target.getDepthTextureId() : target.getColorTextureId());
+			GlStateManager._glUniform1i(pipeline.location(samplers[i].name()), i);
+		}
+		GlStateManager._glBindVertexArray(emptyVertexArray);
+		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
 
-	private static void bind(RenderPass pass, String name, GpuTexture view) {
-		// Before 1.21.11 there are no sampler objects: the texture's own sampling is used, which texelFetch ignores.
-		pass.bindSampler(name, view);
+		GlStateManager._glBindVertexArray(vertexArray);
+		GlStateManager._glUseProgram(program);
+		for (int i = samplers.length - 1; i >= 0; i--) {
+			GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
+			GlStateManager._bindTexture(textures[i]);
+		}
+		GlStateManager._activeTexture(activeTexture);
+		GlStateManager._colorMask(true, true, true, true);
+		GlStateManager._depthMask(true);
+		GlStateManager._depthFunc(GL11.GL_LEQUAL);
+		if (depthTest) {
+			GlStateManager._enableDepthTest();
+		} else {
+			GlStateManager._disableDepthTest();
+		}
+		if (blend) {
+			GlStateManager._enableBlend();
+		} else {
+			GlStateManager._disableBlend();
+		}
+		restoreBinding.run();
 	}
 }

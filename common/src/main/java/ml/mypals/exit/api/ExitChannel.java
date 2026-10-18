@@ -24,8 +24,8 @@ public interface ExitChannel {
 	 * Runs {@code drawing} now with a buffer source, a camera-relative pose stack and the camera. What it draws into
 	 * the buffer source goes to the channel's {@link #batch() batch}, so all of a channel's drawings are rendered
 	 * together: the solid render types before the translucent ones, wherever they were drawn. Without a shader pack the
-	 * batch renders into the main target. Nested calls share the outer buffer source. To draw with passes of your own,
-	 * use a {@link #portal}.
+	 * batch renders into the main target. Nested calls share the outer buffer source. To draw with shaders and targets
+	 * of your own, use a {@link #portal}.
 	 */
 	default void draw(Consumer<ExitContext> drawing) {
 		this.draw(null, drawing);
@@ -49,11 +49,12 @@ public interface ExitChannel {
 	 * A portal draws at once, so the channel's batch comes after it and its solid drawings would cover translucent
 	 * ones drawn in the portal. Call {@link #flushBatch()} in the portal before you draw translucent things.
 	 * <p>
-	 * While the portal routes, render passes opened in it on the main target draw into the channel's target instead.
-	 * Use {@link #redirect} for anything else, such as other targets or a pass that was already open.
+	 * While the portal routes, the channel's target is bound and {@code Minecraft.getMainRenderTarget()} returns it, so
+	 * drawings into the main target go to the channel. Use {@link #redirect} for anything else, such as other targets or
+	 * a main target fetched before the portal began.
 	 * <ul>
 	 *     <li>It routes while the level renders with a shader pack, outside its shadow pass. Route only after the
-	 *     level's render passes have started, for example in {@code END_MAIN}, and outside an open render pass.</li>
+	 *     level's frame graph has started, for example in {@code LAST}.</li>
 	 *     <li>The switches are set whenever a shader pack is in use outside its shadow pass.</li>
 	 *     <li>In the shadow pass {@code body} does not run.</li>
 	 *     <li>Off the render thread only {@link PortalOverrides#skipExtension()} is set, for that thread.</li>
@@ -82,7 +83,7 @@ public interface ExitChannel {
 
 	/**
 	 * Renders the batch now instead of at the end of the level rendering, for drawings that must come first, such as
-	 * solid ones before the translucent ones of a {@link #portal}. Does nothing inside an open render pass.
+	 * solid ones before the translucent ones of a {@link #portal}.
 	 */
 	void flushBatch();
 }

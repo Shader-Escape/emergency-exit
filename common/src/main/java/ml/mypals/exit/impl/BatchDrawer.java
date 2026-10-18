@@ -2,14 +2,12 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexMultiConsumer;
 import ml.mypals.exit.compat.IrisCompat;
-import ml.mypals.exit.mixin.CompositeRenderTypeAccessor;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
@@ -48,15 +46,14 @@ public final class BatchDrawer {
 		modelView.pushMatrix();
 		modelView.set(ExitRuntime.viewRotation());
 		try {
-			long opened = ExitRuntime.openedPasses();
-			executeInto(target.getColorTexture(), target.getDepthTexture(), () -> {
+			executeInto(target, () -> {
 				batch.colour.draw(false);
 				batch.colour.draw(true);
 			});
-			// Inside a portal a pass on the main target was moved into the channel's target.
+			// Inside a portal the main target is the channel's, see ExitRuntime.targetFor.
 			Channel channel = ExitRuntime.routingChannel();
-			if (ExitRuntime.openedPasses() != opened && channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
-				TranslucentDepth.record(() -> batch.depth.draw(true), channel.prepareForDraw(), channel.translucentDepth());
+			if (channel != null && target == channel.drawnTarget()) {
+				TranslucentDepth.record(() -> batch.depth.draw(true), channel.translucentDepth());
 			}
 		} finally {
 			modelView.popMatrix();
@@ -65,25 +62,29 @@ public final class BatchDrawer {
 		}
 	}
 
-	/** Whether the render type blends, so it is drawn after the solid ones. */
+	/**
+	 * Whether the render type is translucent, so it is drawn after the solid ones. Before 1.21.5 a render type keeps its
+	 * blending in a state shard of a type EXIT cannot name, so it goes by whether it sorts its quads, as the translucent
+	 * ones do.
+	 */
 	static boolean translucent(RenderType type) {
-		if (type instanceof CompositeRenderTypeAccessor composite) {
-			return composite.emergency_exit$renderPipeline().getBlendFunction().isPresent();
-		}
-		// Render types of other mods, and the ones Iris wraps: the translucent ones sort their quads.
 		return type.sortOnUpload();
 	}
 
 	/**
-	 * Runs {@code execute} with passes on the main target pointed at the given colour and depth (see
-	 * {@link ExitRuntime#setOutput}), and with the level projection set, since the render types read the default
-	 * uniforms from RenderSystem when they draw.
+	 * Runs {@code execute} with {@code target} bound and handed out as the main target (see {@link ExitRuntime#setOutput}),
+	 * since render types bind the main target themselves, and with the level projection set, since they read it from
+	 * RenderSystem when they draw. Drawings into a channel blend their alpha as the merge expects (GlOverrides).
 	 */
-	static void executeInto(GpuTexture color, @Nullable GpuTexture depth, Runnable execute) {
-		GpuTexture savedColor = ExitRuntime.outputColor();
-		GpuTexture savedDepth = ExitRuntime.outputDepth();
+	static void executeInto(RenderTarget target, Runnable execute) {
+		RenderTarget saved = ExitRuntime.output();
 		Matrix4f projection = ExitRuntime.levelProjection();
-		ExitRuntime.setOutput(color, depth);
+		boolean intoChannel = target != Gpu.mainTarget();
+		ExitRuntime.setOutput(target);
+		Runnable restoreBinding = Gpu.bindForDrawing(target);
+		if (intoChannel) {
+			GlOverrides.intoChannel++;
+		}
 		if (projection != null) {
 			RenderSystem.backupProjectionMatrix();
 			RenderSystem.setProjectionMatrix(new Matrix4f(projection), RenderSystem.getProjectionType());
@@ -91,7 +92,11 @@ public final class BatchDrawer {
 		try {
 			execute.run();
 		} finally {
-			ExitRuntime.setOutput(savedColor, savedDepth);
+			if (intoChannel) {
+				GlOverrides.intoChannel--;
+			}
+			restoreBinding.run();
+			ExitRuntime.setOutput(saved);
 			if (projection != null) {
 				RenderSystem.restoreProjectionMatrix();
 			}

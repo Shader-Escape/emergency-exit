@@ -4,13 +4,10 @@
   "plugin": "ml.mypals.exit.plugin.ExitMixinPlugin",
   "compatibilityLevel": "${mixin_java}",
   "client": [
-    "CompiledPipelineMixin",
-    "CompositeRenderTypeAccessor",
+    "GlStateManagerMixin",
     "LevelRendererMixin",
-    "PortalPassMixin",
-    "RenderPassMixin",
-    "RenderPipelinesAccessor",
-    "StrictValidationMixin",
+    "MinecraftAccessor",
+    "MinecraftMixin",
     "iris.IrisRenderingPipelineMixin",
     "iris.IrisShaderOverrideMixin"
   ],

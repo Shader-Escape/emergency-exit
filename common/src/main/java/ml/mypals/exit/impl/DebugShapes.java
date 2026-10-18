@@ -7,6 +7,7 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -112,13 +113,13 @@ public final class DebugShapes {
 			if ((xray.redirect(Gpu.mainTarget()) == Gpu.mainTarget()) == routing) {
 				STATS.portalRoutingMismatches++;
 			}
-			// Rendered into the main target without redirect. The portal moves the pass into the channel.
+			// Rendered into the main target without redirect. The portal hands out the channel's target as the main one.
 			long redirectedBefore = ExitRuntime.redirectedPasses();
 			if (portalBatch == null) {
 				portalBatch = new BatchDrawer.Batch();
 			}
 			box(portalBatch, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF);
-			BatchDrawer.draw(portalBatch, Gpu.mainTarget());
+			BatchDrawer.draw(portalBatch, Minecraft.getInstance().getMainRenderTarget());
 			boolean moved = ExitRuntime.redirectedPasses() > redirectedBefore;
 			if (moved) {
 				STATS.portalRedirectedPasses++;

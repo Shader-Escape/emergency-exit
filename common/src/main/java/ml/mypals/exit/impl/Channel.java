@@ -101,7 +101,20 @@ final class Channel implements ExitChannel {
 		}
 		boolean routed = ExitRuntime.begin(this, overrides);
 		try {
-			body.run();
+			if (routed) {
+				// Before 1.21.5 everything draws into the bound framebuffer: bind the channel's for the body, which also
+				// gets the channel's target for the main one (ExitRuntime.targetFor).
+				Runnable restore = Gpu.bindForDrawing(this.prepareForDraw());
+				GlOverrides.intoChannel++;
+				try {
+					body.run();
+				} finally {
+					GlOverrides.intoChannel--;
+					restore.run();
+				}
+			} else {
+				body.run();
+			}
 		} finally {
 			ExitRuntime.end();
 		}

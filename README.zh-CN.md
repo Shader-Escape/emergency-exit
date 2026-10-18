@@ -8,13 +8,13 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
 请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-这个分支对应 Minecraft **1.21.5**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
+这个分支对应 Minecraft **1.21.4**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码；`master` 是 26.3。
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.5`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.4`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
 调用时机要在关卡渲染期间（`LevelRenderer.renderLevel` 里面）。各加载器可用的位置：
 
@@ -24,10 +24,10 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 | 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` 等 | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
 | portal | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
 
-1.21.5 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。关卡渲染期间不会一直开着
-一个渲染通道（每种渲染类型画的时候自己开 pass），所以主渲染通道里的这些事件都可以用 portal。
+1.21.4 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。1.21.5 之前没有渲染通道
+（`RenderPass`），所有绘制都画进当前绑定的帧缓冲，所以主渲染通道里的这些事件都可以用 portal。
 
-NeoForge 1.21.5 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
+NeoForge 1.21.4 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
 没有光影包时，批量在关卡渲染结束时画进主目标。
 
 Fabric 的 `WorldRenderEvents.END` 和 NeoForge 的 `RenderLevelStageEvent`（`Stage.AFTER_LEVEL`）在关卡渲染的末尾触发，EXIT 也在那里合并本帧，
@@ -90,7 +90,7 @@ WorldRenderEvents.BEFORE_ENTITIES.register(context ->
 lambda 立即执行，画进 buffer source 的内容记进通道的批量，在关卡渲染结束时和批量一起画（见"顺序"）。
 第一个参数是"直通 buffer source"（可为 `null`），不改道（比如没有加载光影包）时，绘制直接画进它。
 >`draw()` 和 `batch()` 画的时间相同，`draw()` 只是多给一个托管上下文（相机、相机相对的 `PoseStack`）。
-要自己开 `RenderPass` 画，请用 portal。
+要用自己的着色器、自己绑定目标画，请用 portal。
 
 | 方法 | 说明 |
 |---|---|
@@ -105,7 +105,7 @@ lambda 立即执行，画进 buffer source 的内容记进通道的批量，在�
 
 ```java
 channel.portal(() -> {    // 或 主通道Exit.portal(...)
-    myRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());  // 对主目标开的 pass 会自动改画进通道目标
+    myRenderer.render(Minecraft.getInstance().getMainRenderTarget());  // portal 里拿到的主目标就是通道目标
     RenderTarget target = channel.redirect(fb);  // 其它目标需要自己重定向
     ...
 });
@@ -124,18 +124,18 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 
  **注意**
 
-* **portal 输出行为：** portal 改道期间，EXIT 用一个 mixin 把**新开的**、把主目标当作颜色或深度附件的渲染通道换成通道目标。
-  所以自己对主目标开 pass 的代码不用改。（1.21.5 没有 `RenderSystem.outputColorTextureOverride`；
-  EXIT 自己画批量时也靠这个 mixin 画进通道目标。）以下情况不会自动改道，
-  需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
+* **portal 输出行为：** 1.21.4 没有渲染通道，所有绘制都画进当前绑定的帧缓冲。portal 改道期间，EXIT 绑定通道目标，
+  并用一个 mixin 让 `Minecraft.getMainRenderTarget()` 返回通道目标（原版绑定主目标都经过它，渲染类型也是）。
+  所以对主目标画的代码不用改。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha，通道里存的是预乘颜色。
+  以下情况不会自动改道，需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
-  * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 pass）——附件在开 pass 时就定了；
-  * 对主目标的清除、复制（`clear*`、`copyTextureToTexture`）。
+  * 在 portal 开始之前就取到的主目标；
+  * 对主目标的清除、复制。
 
-  这个替换是全局的：portal 期间任何 mod 新开的、画进主目标的 pass 都会被改道。
+  这个替换是全局的：portal 期间任何 mod 取主目标拿到的都是通道目标。
 * **只在区间内有效：** `redirect` 只能在 portal（或 `draw` 的 lambda）里调用。如果在区间外、非渲染线程、或在另一个通道的
   portal 里调用会抛出 `IllegalStateException`。在区间内外都可能会跑的代码，执行前务必检查`Exit.isRouting()`或 `Exit.inPortal()`。
-* **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（主目标上的新 pass 被换到通道目标，`redirect` 返回通道目标；否则都保持原样）；
+* **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（`getMainRenderTarget()` 返回通道目标，`redirect` 返回通道目标；否则都保持原样）；
   开关在有光影包且不在阴影通道时就会设置（关卡渲染之外也是）。阴影通道里 lambda 不执行。
 * **嵌套。** portal 可以嵌套，但同一时间只能在一个通道上；里面的绘制（须在同一通道）沿用 portal 设好的开关。
 * **异线程（编译 VBO 等需求）。** 在非渲染线程调用 portal 时，只设置**当前线程**的 `skipExtension`，
@@ -183,7 +183,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 累积层每个像素只记一个深度：两个通道的结果是准确的，三个以上在同一像素交错时是近似的。
   * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（绘制、批量、portal 里经由 EXIT 渲染的批量），EXIT 会把其中半透明的
     渲染类型用只写深度的管线副本再画一遍，写进该通道的一张深度目标；合并前取两者中更近的深度作为通道深度，所以半透明内容也能和别的通道正确排序。
-    你自己在 portal 里开的 RenderPass 里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
+    你自己在 portal 里直接画的半透明内容（不经过 EXIT 的批量）仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
   * 关掉 `blendWithChannels` 的通道不参与混合，在累积层之后按优先级、再按创建顺序盖在上面（比如永远显示在最前的标记）。
 * 每个通道占用一张场景大小的 RGBA8 + D32 目标，画过半透明渲染类型后再多一张 D32；有两个以上通道混合时，再多两张同样大小的累积层。
 
@@ -204,7 +204,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 * **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.renderLevel`
   开始到结束之间调用。在此之外，绘制会被丢弃（只警告一次），portal 不改道。通道目标在本帧第一次使用时用场景深度
-  初始化，所以改道的 portal（和 `redirect`）要在关卡的渲染通道开始执行之后、且不在已打开的 `RenderPass` 里使用（Litematica 就是这样），不要更早。
+  初始化，所以改道的 portal（和 `redirect`）要在关卡的帧图开始执行之后使用（Litematica 就是这样），不要更早。
 * **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：绘制里再调用绘制会共用外层的 buffer source；
   在一个通道的 portal 里打开另一个通道会抛异常。
 * **阴影通道** EXIT 不往光影包的阴影图里画任何东西，所以通过 EXIT 绘制的内容没有影子：阴影通道里 `draw` 的 lambda
@@ -213,9 +213,9 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 * **顺序** `draw` 的 lambda 立即执行，但画进 buffer source 的内容不论在哪里调用（关卡渲染通道开始之前也一样）都记进通道的批量。
   批量在关卡渲染结束时（或 `flushBatch()` 时）在一帧里画完：先画全部实体，再画全部半透明，所以实体不会盖住更近的半透明。
   portal 是当场画的，排在批量之前：在 portal 里画半透明之前先调用 `flushBatch()`，否则批量里的实体会把它盖住。
-  要自己开 RenderPass 画，请用 portal。
+  要用自己的着色器、自己绑定目标画，请用 portal。
 * **portal 和批量的区别** 批量（包括 `draw`）交给 EXIT 的是按渲染类型分开存的顶点：EXIT 一直拿着它们，到画的时候才决定顺序，
-  所以能先画全部实体、再画全部半透明，还能另记半透明的深度。portal 包住的是别人的代码，它自己开 RenderPass、
+  所以能先画全部实体、再画全部半透明，还能另记半透明的深度。portal 包住的是别人的代码，它自己绑定目标、
   自己选管线，当场画进通道目标，EXIT 只能看到画完的像素。
 * **为什么 portal 里的半透明不能和之后的批量混合** 半透明一画进目标，就已经和它后面的颜色混在一起了，
   像素里只剩混合后的结果，半透明层自己的颜色和覆盖率都没了。之后批量里有实体要放到它后面，就得把"后面的颜色"
@@ -229,7 +229,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   （手部之前、半透明之前）。没有复制时通道照样能画，只是那一帧的遮挡改用当时的主深度。
 * **API 稳定性** `ml.mypals.exit.api` 是 API；`impl`、`compat`、`mixin` 不是。API 里用到了 Minecraft 的类型
   （`MultiBufferSource`、`Camera`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
-  1.21.5 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
+  1.21.4 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
   `MultiBufferSource`（`Exit.draw(MultiBufferSource, ...)`、`ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`），
   `ExitContext.camera()` 是 `Camera`。
 
@@ -249,7 +249,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
   * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.5 没有 Gizmo，所以没有青色线框）
+  * 蓝色（左）：portal 里直接对主目标绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.4 没有 Gizmo，所以没有青色线框）
 
 ## 开发
 
@@ -261,12 +261,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa 等都放进去）。
   每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
   日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是
-  `run/fabric-1.21.5` 和 `run/neoforge-1.21.5`。
+  `run/fabric-1.21.4` 和 `run/neoforge-1.21.4`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
-  但 SR 没有 1.21.5 的版本，开发运行不加载它。
-* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.5/config/neoforge-client.toml`
-  里设 `enableB3DValidationLayer = false`。
+  但 SR 没有 1.21.4 的版本，开发运行不加载它。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 
 ## 与 LitematicaPass 的关系（计划）

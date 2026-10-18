@@ -21,11 +21,6 @@ public final class ExitMixinPlugin implements IMixinConfigPlugin {
 		if (name.startsWith("iris.")) {
 			return Platform.INSTANCE.isModLoaded("iris");
 		}
-		if (name.equals("StrictValidationMixin")) {
-			// Development only. A missing target class would make Mixin reject the whole config.
-			return Platform.INSTANCE.isDevelopmentEnvironment()
-				&& ExitMixinPlugin.class.getClassLoader().getResource(targetClassName.replace('.', '/') + ".class") != null;
-		}
 		return true;
 	}
 

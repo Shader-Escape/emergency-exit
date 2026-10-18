@@ -1,9 +1,7 @@
 package ml.mypals.exit.compat;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
-import net.irisshaders.iris.pipeline.IrisPipelines;
 import net.irisshaders.iris.vertices.ImmediateState;
 
 final class IrisHooks {
@@ -43,7 +41,4 @@ final class IrisHooks {
 		return Iris.getPipelineManager().getPipelineNullable();
 	}
 
-	static void usePackProgramOf(RenderPipeline original, RenderPipeline copy) {
-		IrisPipelines.copyPipeline(original, copy);
-	}
 }

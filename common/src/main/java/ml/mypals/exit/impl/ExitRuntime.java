@@ -2,7 +2,6 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
@@ -42,9 +41,8 @@ public final class ExitRuntime {
 	private static final Matrix4f PROJECTION = new Matrix4f();
 	/** The projection RenderSystem had when the level rendering started, or null outside it. */
 	private static @Nullable Matrix4f levelProjection;
-	/** EXIT's stand-in for the output override of 1.21.6, see {@link #setOutput}. */
-	private static @Nullable GpuTexture outputColor;
-	private static @Nullable GpuTexture outputDepth;
+	/** What {@code getMainRenderTarget()} returns while EXIT renders a batch, see {@link #targetFor}. */
+	private static @Nullable RenderTarget output;
 	private static float partialTick;
 
 	/** The portals open on the render thread, innermost last. They all belong to {@link #portalChannel}. */
@@ -147,54 +145,43 @@ public final class ExitRuntime {
 		return redirect(null, original);
 	}
 
-	/** Counts render passes that a portal moved from the main target into a channel. Used by the checks. */
+	/** Counts the times a portal handed out a channel's target for the main one. Used by the checks. */
 	private static long redirectedPasses;
-	/** The render passes open now, on any command encoder. */
-	private static int openPasses;
-	/** Counts every render pass opened. */
-	private static long openedPasses;
-
-	/** Called when a command encoder opened a render pass. */
-	public static void passOpened() {
-		openPasses++;
-		openedPasses++;
-	}
-
-	/** Called when a command encoder submits an open render pass. */
-	public static void passClosed() {
-		if (openPasses > 0) {
-			openPasses--;
-		}
-	}
-
-	static int openPasses() {
-		return openPasses;
-	}
-
-	static long openedPasses() {
-		return openedPasses;
-	}
+	/** While true, {@link #targetFor} hands out the real main target: preparing a channel runs code that asks for it. */
+	private static boolean preparing;
 
 	public static long redirectedPasses() {
 		return redirectedPasses;
 	}
 
+	/** EXIT's full-screen programs that did not compile or link. Used by the checks. */
+	public static List<String> brokenPipelines() {
+		return Gpu.brokenPipelines();
+	}
+
 	/**
-	 * Called before a render pass is opened. While a portal routes, attachments on the main target are swapped for the
-	 * channel's: the returned target is the one to draw into, or null to keep the pass as it is. Passes that are
-	 * already open, and clears and copies, are not moved.
+	 * What {@code Minecraft.getMainRenderTarget()} returns (MinecraftMixin). Before 1.21.5 everything draws into the
+	 * bound framebuffer, and vanilla binds the main target through this getter (render types' {@code MAIN_TARGET}
+	 * output, among others). While EXIT renders a batch it is the batch's target, and while a portal routes it is the
+	 * channel's target; otherwise the main target.
 	 */
-	public static @Nullable RenderTarget redirectPass(GpuTexture color, @Nullable GpuTexture depth) {
-		if (!isRouting() || Gpu.isInRenderPass()) {
-			return null;
+	public static RenderTarget targetFor(RenderTarget main) {
+		if (preparing || !RenderSystem.isOnRenderThread()) {
+			return main;
 		}
-		RenderTarget main = Gpu.mainTarget();
-		if (color != main.getColorTexture() && (depth == null || depth != main.getDepthTexture())) {
-			return null;
+		if (output != null) {
+			return output;
+		}
+		if (!isRouting()) {
+			return main;
 		}
 		redirectedPasses++;
-		// No pass is open yet, so the target may be cleared and seeded here.
-		return portalChannel.prepareForDraw();
+		preparing = true;
+		try {
+			return portalChannel.prepareForDraw();
+		} finally {
+			preparing = false;
+		}
 	}
 
 	/** The main render target. */
@@ -202,21 +189,13 @@ public final class ExitRuntime {
 		return Gpu.mainTarget();
 	}
 
-	/**
-	 * Points passes opened on the main target at {@code color} and {@code depth} instead (see PortalPassMixin), or
-	 * stops it with null. 1.21.6 has {@code RenderSystem.outputColorTextureOverride} for this.
-	 */
-	static void setOutput(@Nullable GpuTexture color, @Nullable GpuTexture depth) {
-		outputColor = color;
-		outputDepth = depth;
+	/** Makes {@code getMainRenderTarget()} return {@code target} instead, or stops it with null. */
+	static void setOutput(@Nullable RenderTarget target) {
+		output = target;
 	}
 
-	public static @Nullable GpuTexture outputColor() {
-		return outputColor;
-	}
-
-	public static @Nullable GpuTexture outputDepth() {
-		return outputDepth;
+	static @Nullable RenderTarget output() {
+		return output;
 	}
 
 	static Camera camera() {

@@ -7,13 +7,13 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-This branch is for Minecraft **1.21.5** (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft
+This branch is for Minecraft **1.21.4** (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft
 version gets its own git branch with plain code for that version; `master` is 26.3.
 
 ### Loaders
 
 Both loaders share one API, with one jar each: `emergency_exit-fabric` and `emergency_exit-neoforge` (Maven
-`ml.mypals.exit:emergency_exit-<loader>:0.1.0+1.21.5`). Iris is optional. Without a shader pack nothing is routed.
+`ml.mypals.exit:emergency_exit-<loader>:0.1.0+1.21.4`). Iris is optional. Without a shader pack nothing is routed.
 
 Call EXIT while the level renders, inside `LevelRenderer.renderLevel`.
 
@@ -23,11 +23,11 @@ Call EXIT while the level renders, inside `LevelRenderer.renderLevel`.
 | Drawings (recorded into the batch) | `WorldRenderEvents.BEFORE_ENTITIES`, `AFTER_ENTITIES`, `LAST` and others | `RenderLevelStageEvent`, `Stage.AFTER_CUTOUT_BLOCKS` and others |
 | Portals | `WorldRenderEvents.BEFORE_ENTITIES`, `AFTER_ENTITIES`, `LAST` | `RenderLevelStageEvent`, `Stage.AFTER_CUTOUT_BLOCKS` and others |
 
-1.21.5 has no `SubmitNodeCollector`: drawings and batches take a `MultiBufferSource` (see API stability below). The
-level keeps no render pass open while it renders (each render type opens its own pass when it is drawn), so portals
-work in the events inside the main pass.
+1.21.4 has no `SubmitNodeCollector`: drawings and batches take a `MultiBufferSource` (see API stability below). There
+are no render passes before 1.21.5 (everything draws into the bound framebuffer), so portals work in the events inside
+the main pass.
 
-The events of NeoForge for 1.21.5 hand out no buffer source, so there is nothing to pass through: use `Exit.batch()`
+The events of NeoForge for 1.21.4 hand out no buffer source, so there is nothing to pass through: use `Exit.batch()`
 and `Exit.draw(null, ...)`. Without a shader pack the batch then renders into the main target at the end of the level
 rendering.
 
@@ -62,7 +62,7 @@ WorldRenderEvents.BEFORE_ENTITIES.register(context ->
 // 2. A portal, for code with its own render context: the shader pack's switches are set while the lambda
 //    runs and put back after it. Render passes opened in it on the main target draw into the channel's target.
 channel.portal(() -> {                           // or Exit.portal(...) on the main channel
-    myRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());  // moved into the channel
+    myRenderer.render(Minecraft.getInstance().getMainRenderTarget());  // the channel's target in a routing portal
     RenderTarget target = channel.redirect(fb);  // other targets: redirect yourself
     ...
 });
@@ -113,13 +113,15 @@ D32 target once it draws translucent render types, and blending two or more cost
 * **Thread and time.** Render thread, between the start and the end of `LevelRenderer.renderLevel` (except `portal` off
   the render thread and `plainFormat`, below). Outside it a drawing is dropped (logged once) and a portal does not
   route. A channel's target is seeded with the scene depth when it is first used in the frame, so route (portal or `redirect`) once the
-  level's render passes run (as Litematica does), outside an open render pass, not before.
+  level's frame graph runs (as Litematica does), not before.
 * **Portals.** `portal(overrides, body)` sets Iris's `bypass` (default on), `skipExtension` (default on, per thread) and `isRenderingLevel` (default left alone), each `KEEP`/`ON`/`OFF`, while `body` runs, and restores them after. It
   routes with a shader pack in use, outside its shadow pass, while the level renders; the switches are set whenever a
-  pack is in use outside its shadow pass. While it routes, a mixin moves every render pass **opened** in the portal
-  with the main target as its colour or depth attachment into the channel's target, for any mod. (1.21.5 has no
-  `RenderSystem.outputColorTextureOverride`; EXIT's own batches use the same mixin to draw into a channel.) Not moved, so use `channel.redirect(yourTarget)` there: other targets, a pass already open when the
-  portal began (one handed to you by an event), and clears and copies of the main target. `redirect` (also
+  pack is in use outside its shadow pass. While it routes, the channel's target is bound and
+  `Minecraft.getMainRenderTarget()` returns it (a mixin), for any mod: 1.21.4 has no render passes, everything draws
+  into the bound framebuffer, and vanilla binds the main target through that getter (render types included). Drawings
+  in the portal blend their alpha as `(ONE, ONE_MINUS_SRC_ALPHA)`, so the channel holds premultiplied colour. Not moved,
+  so use `channel.redirect(yourTarget)` there: other targets, a main target fetched before the portal began, and
+  clears and copies of the main target. `redirect` (also
   the static `Exit.redirect`) throws outside a portal (or a `draw` lambda), off the render thread and inside a portal
   of another channel, instead of quietly handing your target back; code that also runs outside portals checks
   `Exit.isRouting()` first.
@@ -132,7 +134,7 @@ D32 target once it draws translucent render types, and blending two or more cost
   shadow pass a `draw` lambda and a `portal` body do not run, and a `batch` buffer source drops what it gets
   (`plainFormat` is not affected). Fabric's `WorldRenderEvents` do not fire in Iris's shadow pass anyway.
 * **Order.** A `draw` lambda runs at once, but what it draws into the buffer source joins the channel's batch,
-  wherever it is called (also before the level's render passes start). The batch keeps one buffer per render type and
+  wherever it is called (also before the level's frame graph starts). The batch keeps one buffer per render type and
   draws nothing while it is filled; do not end its batches yourself. It is rendered at the end of the level rendering,
   or earlier with `flushBatch()`, in one frame: solid render types first, then translucent ones (those whose pipeline
   blends), so a solid drawing never covers a nearer translucent one. Portals draw at once, before the batch: in a
@@ -140,7 +142,7 @@ D32 target once it draws translucent render types, and blending two or more cost
   passes of your own, use a portal.
 * **Portals and batches.** A batch (and `draw`) hands EXIT vertices, kept per render type. EXIT decides the order when
   it renders them, so it draws all solid render types before all translucent ones and records the depth of the
-  translucent ones. A portal wraps someone else's code: it opens its own passes with its own pipelines and draws into the
+  translucent ones. A portal wraps someone else's code: it binds its own targets with its own shaders and draws into the
   channel's target at once. EXIT only sees the finished pixels.
 * **Why a portal's translucent pixels cannot blend with a later batch.** Once a translucent surface is drawn into the
   target, it is already mixed with the colour behind it: the pixel holds only the result, and the surface's own colour
@@ -156,14 +158,14 @@ D32 target once it draws translucent render types, and blending two or more cost
   occlusion against the main depth at that moment for that frame.
 * **API stability.** `ml.mypals.exit.api` is the API; `impl`, `compat` and `mixin` are not. The API names Minecraft
   types (`MultiBufferSource`, `Camera`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version.
-  1.21.5 has no `SubmitNodeCollector` and no camera render state: where 26.3 takes or hands out a
+  1.21.4 has no `SubmitNodeCollector` and no camera render state: where 26.3 takes or hands out a
   `SubmitNodeCollector` this branch uses a `MultiBufferSource` (`Exit.draw(MultiBufferSource, ...)`,
   `ExitContext.bufferSource()`, `Exit.batch(MultiBufferSource)`), and `ExitContext.camera()` is the `Camera`.
 
 Debug: `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [channel]` shows a
 channel's buffers instead of the frame (with a shader pack in use). `/emergency_exit debug shapes` turns three test boxes
 on, 5 blocks in front of you, or off again: red = translucent drawing, green = batch (solid), yellow = a solid box on another channel behind the green one, blended by depth, blue = a pass on the main target in a
-portal, moved into a channel that shows through the world. 1.21.5 has no gizmos, so there is no cyan outline.
+portal, moved into a channel that shows through the world. 1.21.4 has no gizmos, so there is no cyan outline.
 
 ## Development
 
@@ -177,13 +179,11 @@ event hooks of the debug shapes. Loader-specific queries go through the `Platfor
   Iris, so put BSL, Kappa and so on there). Each phase takes screenshots
   (`screenshots/emergency_exit-smoke-<version>-<loader>-<pack>-<view>.png`) and checks what EXIT did; then the game
   quits. The log ends with `RESULT: OK`. `-Demergency_exit.smoke.packs=none,BSL.zip` picks the phases instead. They run
-  in `run/fabric-1.21.5` and `run/neoforge-1.21.5`.
+  in `run/fabric-1.21.4` and `run/neoforge-1.21.4`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * The smoke test also saves `*-presented.png`, the window's front buffer, which is what the player sees. EXIT still
-  follows the render size of the Super Resolution mod when it is present, but SR has no build for 1.21.5, so the
+  follows the render size of the Super Resolution mod when it is present, but SR has no build for 1.21.4, so the
   development runs do not load it.
-* NeoForge's development runs turn on the Blaze3D validation layer, which Iris does not start with: set
-  `enableB3DValidationLayer = false` in `run/neoforge-1.21.5/config/neoforge-client.toml`.
 * `./gradlew publishToMavenLocal` publishes both jars for other mods' development setups.
 
 ## LitematicaPass on EXIT (plan)

@@ -1,6 +1,5 @@
 package ml.mypals.exit.compat;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.exit.platform.Platform;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,10 +48,4 @@ public final class IrisCompat {
 		return LOADED ? IrisHooks.pipeline() : null;
 	}
 
-	/** Makes Iris draw {@code copy} with the shader pack's program for {@code original}. */
-	public static void usePackProgramOf(RenderPipeline original, RenderPipeline copy) {
-		if (LOADED) {
-			IrisHooks.usePackProgramOf(original, copy);
-		}
-	}
 }
