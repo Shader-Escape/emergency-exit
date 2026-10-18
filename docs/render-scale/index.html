@@ -101,7 +101,8 @@ figcaption { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
 }
 .lane-head small { font-weight: 400; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
 svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
-svg.edges text { font-family: var(--font-body); font-size: 12px; }
+svg.edge-labels { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
+svg.edges text, svg.edge-labels text { font-family: var(--font-body); font-size: 12px; }
 .node {
   position: relative; z-index: 2; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px;
   padding: 0.6rem 0.7rem 0.7rem; display: grid; gap: 0.45rem; align-content: start; align-self: start; min-width: 0;
@@ -216,6 +217,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     <div class="flow-scroll">
       <div class="flow" id="flow">
         <svg class="edges" id="edges" aria-hidden="true"></svg>
+        <svg class="edge-labels" id="edge-labels" aria-hidden="true"></svg>
       </div>
     </div>
     <p class="note" lang="en">Click a picture to enlarge it. On narrow screens the flowchart scrolls sideways. Pictures are exported from the same frame by <code>FrameDump</code> in the smoke test. Window 854×480: the normal pack uses <code>./gradlew :fabric:runSmokeClient</code> with BSL v8.4; Kappa uses <code>./gradlew :fabric:runSmokeClient</code> with Kappa v5.3; Super Resolution uses <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code> with Sundial Lite 1.2 and FSR2 (upscale factor 1.21).</p>
@@ -342,7 +344,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "frame start",
       "title": "Shadow pass",
-      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects don't cast shadows in the pack.",
+      "text": "The pack draws its shadow map. EXIT draws nothing here.",
       "imgs": []
     },
     {
@@ -362,7 +364,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "gbuffers",
       "title": "Pack draws opaque world",
-      "text": "BSL doesn't reduce the resolution. The scene fills the whole depth buffer, with only TAA jitter of under one pixel per frame.",
+      "text": "BSL doesn't reduce the resolution. The scene fills the whole depth buffer.",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -392,7 +394,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "Pack draws the hand",
-      "text": "The hand is drawn where it sits in the image.",
+      "text": "It just draws the hand.",
       "imgs": [
         {
           "src": "img/bsl/03-pack-depth-before-translucents.png",
@@ -458,7 +460,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "Pack's finished frame",
-      "text": "Lighting, fog and TAA are finished. The mod's blocks aren't in the image yet.",
+      "text": "Lighting, fog and TAA are finished. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -486,7 +488,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "Clear the channel and seed it with \"depth without translucents\". The world in front then blocks the channel. The hand's position is set to nearest. The see-through channel (blue) isn't blocked by the world, and it only holds the hand.",
       "imgs": [
@@ -582,7 +584,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -597,7 +599,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). If a channel sits behind the glass, it gets darkened to 50%.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). If a channel is behind the glass, it is darkened to 50%, which fakes the translucent blend.",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",
@@ -890,7 +892,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里不画任何东西，所以模组的东西不会在光影里投出阴影。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西。",
       "imgs": []
     },
     {
@@ -910,7 +912,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "BSL 不降分辨率：场景铺满整个深度缓冲，每帧只有不到一个像素的 TAA 抖动。",
+      "text": "BSL 不降分辨率。场景铺满整个深度缓冲。",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -940,7 +942,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "光影画手",
-      "text": "手画在它在画面里的位置。",
+      "text": "画手而已。",
       "imgs": [
         {
           "src": "img/bsl/03-pack-depth-before-translucents.png",
@@ -1006,7 +1008,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "光影的成品画面",
-      "text": "光照、雾和 TAA 都已经做完。画面里还没有模组的方块。",
+      "text": "光照、雾和 TAA 都已经做完。画面里还没有模组的绘制。",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -1034,7 +1036,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "帧末 · 通道第一次使用",
+      "when": "帧末， 通道第一次使用",
       "title": "通道打底",
       "text": "清空通道，用“没有半透明的深度”打底，前面的世界就会挡住通道。手的位置设为最近。透视通道（蓝）不会被世界挡住，只用来放手。",
       "imgs": [
@@ -1130,7 +1132,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
+      "text": "“有手”和“没手”两份深度中不同的像素就是手（橙色）。",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -1145,7 +1147,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%。",
+      "text": "最终深度比“没有半透明的深度”更近的地方就是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%伪造混合。",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",
@@ -1438,7 +1440,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "frame start",
       "title": "Shadow pass",
-      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects don't cast shadows in the pack.",
+      "text": "The pack draws its shadow map. EXIT draws nothing here.",
       "imgs": []
     },
     {
@@ -1572,7 +1574,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "Pack's finished frame",
-      "text": "Lighting, fog and the TAAU upscale are finished. The mod's blocks aren't in the image yet.",
+      "text": "Lighting, fog and the TAAU upscale are finished. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/frame/06-pack-frame.png",
@@ -1600,7 +1602,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "Clear the channel and seed it with \"depth without translucents\". The world in front then blocks the channel. The hand's position is set to nearest. The see-through channel (blue) isn't blocked by the world, and it only holds the hand.",
       "imgs": [
@@ -1696,7 +1698,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/frame/24-hand-mask.png",
@@ -1711,7 +1713,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). If a channel sits behind the glass, it gets darkened to 50%.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). If a channel is behind the glass, it is darkened to 50%, which fakes the translucent blend.",
       "imgs": [
         {
           "src": "img/frame/25-translucent-in-front.png",
@@ -2004,7 +2006,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里不画任何东西，所以模组的东西不会在光影里投出阴影。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西。",
       "imgs": []
     },
     {
@@ -2138,7 +2140,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "光影的成品画面",
-      "text": "光照、雾和 TAAU 放大都已经做完。画面里还没有模组的方块。",
+      "text": "光照、雾和 TAAU 放大都已经做完。画面里还没有模组的绘制。",
       "imgs": [
         {
           "src": "img/frame/06-pack-frame.png",
@@ -2166,7 +2168,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "帧末 · 通道第一次使用",
+      "when": "帧末， 通道第一次使用",
       "title": "通道打底",
       "text": "清空通道，用“没有半透明的深度”打底，前面的世界就会挡住通道。手的位置设为最近。透视通道（蓝）不会被世界挡住，只用来放手。",
       "imgs": [
@@ -2262,7 +2264,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
+      "text": "“有手”和“没手”两份深度中不同的像素就是手（橙色）。",
       "imgs": [
         {
           "src": "img/frame/24-hand-mask.png",
@@ -2277,7 +2279,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%。",
+      "text": "最终深度比“没有半透明的深度”更近的地方就是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%伪造混合。",
       "imgs": [
         {
           "src": "img/frame/25-translucent-in-front.png",
@@ -2713,7 +2715,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final → SR",
       "title": "Pack's finished frame",
-      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the full window. The mod's blocks aren't in the image yet.",
+      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the full window. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/sr/05-pack-frame.png",
@@ -2755,7 +2757,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "The channel is the same size as the scene, 705×396. Seed it with \"depth without translucents\" and set the hand's position to nearest. The see-through channel only holds the hand.",
       "imgs": [
@@ -2883,7 +2885,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/sr/22-hand-mask.png",
@@ -2902,7 +2904,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). Only the dashed box is checked.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). Only the dashed box is checked.",
       "imgs": [
         {
           "src": "img/sr/23-translucent-in-front.png",
@@ -3376,7 +3378,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "pack",
       "when": "deferred → composite → final → SR",
       "title": "光影的成品画面",
-      "text": "光影画完后，SR（这里用 FSR2）把 705×396 放大到整个窗口。画面里还没有模组的方块。",
+      "text": "光影画完后，SR（这里用 FSR2）把 705×396 放大到整个窗口。画面里还没有模组的绘制。",
       "imgs": [
         {
           "src": "img/sr/05-pack-frame.png",
@@ -3418,7 +3420,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "帧末 · 通道第一次使用",
+      "when": "帧末， 通道第一次使用",
       "title": "通道打底",
       "text": "通道和场景一样大，都是 705×396。用“没有半透明的深度”打底，手的位置设为最近；透视通道只放手。",
       "imgs": [
@@ -3546,7 +3548,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
+      "text": "“有手”和“没手”两份深度中不同的像素就是手（橙色）。",
       "imgs": [
         {
           "src": "img/sr/22-hand-mask.png",
@@ -3565,7 +3567,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色），只检查虚线框里的部分。",
+      "text": "最终深度比“没有半透明的深度”更近的地方就是玻璃（橙色），只检查虚线框里的部分。",
       "imgs": [
         {
           "src": "img/sr/23-translucent-in-front.png",
@@ -3873,6 +3875,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
 (function () {
   const flow = document.getElementById("flow");
   const svg = document.getElementById("edges");
+  const labelSvg = document.getElementById("edge-labels");
   const LANE_BG = ["--lane-a", "--lane-b", "--lane-c", "--lane-d"];
   const COLOR = { pack: "var(--pack)", depth: "var(--depth)", probe: "var(--probe)", merge: "var(--merge)" };
   const NS = "http://www.w3.org/2000/svg";
@@ -4001,6 +4004,8 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     const box = flow.getBoundingClientRect();
     svg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
     svg.innerHTML = "";
+    labelSvg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
+    labelSvg.innerHTML = "";
     const defs = document.createElementNS(NS, "defs");
     Object.keys(COLOR).forEach((k) => {
       const m = document.createElementNS(NS, "marker");
@@ -4061,7 +4066,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
         t.setAttribute("stroke-width", "5");
         t.setAttribute("font-weight", "500");
         t.textContent = label;
-        svg.appendChild(t);
+        labelSvg.appendChild(t);
       }
     });
   }

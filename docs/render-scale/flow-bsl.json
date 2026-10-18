@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里不画任何东西，所以模组的东西不会在光影里投出阴影。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西。",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "BSL 不降分辨率：场景铺满整个深度缓冲，每帧只有不到一个像素的 TAA 抖动。",
+      "text": "BSL 不降分辨率。场景铺满整个深度缓冲。",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -75,7 +75,7 @@
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "光影画手",
-      "text": "手画在它在画面里的位置。",
+      "text": "画手而已。",
       "imgs": [
         {
           "src": "img/bsl/03-pack-depth-before-translucents.png",
@@ -141,7 +141,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "光影的成品画面",
-      "text": "光照、雾和 TAA 都已经做完。画面里还没有模组的方块。",
+      "text": "光照、雾和 TAA 都已经做完。画面里还没有模组的绘制。",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -169,7 +169,7 @@
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "帧末 · 通道第一次使用",
+      "when": "帧末， 通道第一次使用",
       "title": "通道打底",
       "text": "清空通道，用“没有半透明的深度”打底，前面的世界就会挡住通道。手的位置设为最近。透视通道（蓝）不会被世界挡住，只用来放手。",
       "imgs": [
@@ -265,7 +265,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
+      "text": "“有手”和“没手”两份深度中不同的像素就是手（橙色）。",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -280,7 +280,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%。",
+      "text": "最终深度比“没有半透明的深度”更近的地方就是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%伪造混合。",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",

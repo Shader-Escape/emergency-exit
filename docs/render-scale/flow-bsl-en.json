@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "frame start",
       "title": "Shadow pass",
-      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects don't cast shadows in the pack.",
+      "text": "The pack draws its shadow map. EXIT draws nothing here.",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "Pack draws opaque world",
-      "text": "BSL doesn't reduce the resolution. The scene fills the whole depth buffer, with only TAA jitter of under one pixel per frame.",
+      "text": "BSL doesn't reduce the resolution. The scene fills the whole depth buffer.",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -75,7 +75,7 @@
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "Pack draws the hand",
-      "text": "The hand is drawn where it sits in the image.",
+      "text": "It just draws the hand.",
       "imgs": [
         {
           "src": "img/bsl/03-pack-depth-before-translucents.png",
@@ -141,7 +141,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "Pack's finished frame",
-      "text": "Lighting, fog and TAA are finished. The mod's blocks aren't in the image yet.",
+      "text": "Lighting, fog and TAA are finished. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -169,7 +169,7 @@
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "Clear the channel and seed it with \"depth without translucents\". The world in front then blocks the channel. The hand's position is set to nearest. The see-through channel (blue) isn't blocked by the world, and it only holds the hand.",
       "imgs": [
@@ -265,7 +265,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -280,7 +280,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). If a channel sits behind the glass, it gets darkened to 50%.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). If a channel is behind the glass, it is darkened to 50%, which fakes the translucent blend.",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",

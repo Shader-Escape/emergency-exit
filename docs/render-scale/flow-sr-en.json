@@ -168,7 +168,7 @@
       "kind": "pack",
       "when": "deferred → composite → final → SR",
       "title": "Pack's finished frame",
-      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the full window. The mod's blocks aren't in the image yet.",
+      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the full window. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/sr/05-pack-frame.png",
@@ -210,7 +210,7 @@
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "The channel is the same size as the scene, 705×396. Seed it with \"depth without translucents\" and set the hand's position to nearest. The see-through channel only holds the hand.",
       "imgs": [
@@ -338,7 +338,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/sr/22-hand-mask.png",
@@ -357,7 +357,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). Only the dashed box is checked.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). Only the dashed box is checked.",
       "imgs": [
         {
           "src": "img/sr/23-translucent-in-front.png",

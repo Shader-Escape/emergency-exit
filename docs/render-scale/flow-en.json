@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "frame start",
       "title": "Shadow pass",
-      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects don't cast shadows in the pack.",
+      "text": "The pack draws its shadow map. EXIT draws nothing here.",
       "imgs": []
     },
     {
@@ -159,7 +159,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "Pack's finished frame",
-      "text": "Lighting, fog and the TAAU upscale are finished. The mod's blocks aren't in the image yet.",
+      "text": "Lighting, fog and the TAAU upscale are finished. The mod's draw calls aren't in the image yet.",
       "imgs": [
         {
           "src": "img/frame/06-pack-frame.png",
@@ -187,7 +187,7 @@
       "lane": 3,
       "row": 7,
       "kind": "channel",
-      "when": "end of frame · first use of the channel",
+      "when": "end of frame, first use of the channel",
       "title": "Seed the channel",
       "text": "Clear the channel and seed it with \"depth without translucents\". The world in front then blocks the channel. The hand's position is set to nearest. The see-through channel (blue) isn't blocked by the world, and it only holds the hand.",
       "imgs": [
@@ -283,7 +283,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange).",
       "imgs": [
         {
           "src": "img/frame/24-hand-mask.png",
@@ -298,7 +298,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). If a channel sits behind the glass, it gets darkened to 50%.",
+      "text": "Where the final depth is nearer than \"depth without translucents\", that's the glass (orange). If a channel is behind the glass, it is darkened to 50%, which fakes the translucent blend.",
       "imgs": [
         {
           "src": "img/frame/25-translucent-in-front.png",
