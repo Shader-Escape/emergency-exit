@@ -28,14 +28,11 @@ public final class ExitFabric implements ClientModInitializer {
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ExitMod.close());
 		// Fabric API v1 client commands: before 1.19 there is no ClientCommandRegistrationCallback.
 		ClientCommandManager.DISPATCHER.register(ExitMod.command(OUTPUT));
-		// Before the entities are submitted, so what goes to the level's buffer source is still drawn this frame.
+		// A null pass-through makes EXIT record the shapes into its own batches, drawn at the end of the
+		// level rendering: the level buffer source is not flushed after this event on this version.
 		WorldRenderEvents.BEFORE_ENTITIES.register(context -> {
-			MultiBufferSource consumers = context.consumers();
-			if (consumers == null) {
-				return;
-			}
-			DebugShapes.inMainPass(consumers);
-			DebugShapes.collectSubmits(consumers, context.camera().getPosition());
+			DebugShapes.inMainPass(null);
+			DebugShapes.collectSubmits(null, context.camera().getPosition());
 		});
 	}
 }
