@@ -30,7 +30,7 @@ final class Composite {
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
 		if (opaque == null) {
-			opaque = main;
+			opaque = SceneDepth.current(main);
 		}
 		if (noHand == null) {
 			noHand = opaque;
@@ -40,7 +40,8 @@ final class Composite {
 		List<Gpu.Sampler> samplers = new ArrayList<>();
 		samplers.add(Gpu.color("ExitColor", channel));
 		if (stretched || dim) {
-			samplers.add(Gpu.depth("MainDepth", main));
+			// When stretched the shader also reads the output size from it.
+			samplers.add(Gpu.depth("MainDepth", stretched ? main : SceneDepth.current(main)));
 		}
 		if (dim) {
 			samplers.add(Gpu.depth("ExitDepth", channel));

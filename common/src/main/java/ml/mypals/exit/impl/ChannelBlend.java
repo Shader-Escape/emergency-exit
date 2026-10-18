@@ -49,7 +49,7 @@ final class ChannelBlend {
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
 		if (opaque == null) {
-			opaque = main;
+			opaque = SceneDepth.current(main);
 		}
 		if (noHand == null) {
 			noHand = opaque;
@@ -62,7 +62,7 @@ final class ChannelBlend {
 		samplers.add(Gpu.color("ExitColor", channel));
 		samplers.add(Gpu.depth("ExitDepth", channel));
 		if (dim) {
-			samplers.add(Gpu.depth("MainDepth", main));
+			samplers.add(Gpu.depth("MainDepth", SceneDepth.current(main)));
 		}
 		if (hand || dim) {
 			samplers.add(Gpu.depth("OpaqueDepth", opaque));
