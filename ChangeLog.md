@@ -13,6 +13,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.10 | `port/1.21.10` | 21 | 混淆，Mojang 映射 | 1.9.7 |
 | 1.21.8 | `port/1.21.8` | 21 | 混淆，Mojang 映射 | 1.9.6 |
 | 1.21.5 | `port/1.21.5` | 21 | 混淆，Mojang 映射 | 1.8.11 |
+| 1.21.4 | `port/1.21.4` | 21 | 混淆，Mojang 映射 | 1.8.8 |
 
 ## 26.2（相对 26.3）
 
@@ -264,3 +265,35 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **开发运行**
 - NeoForge 开发运行同样要在 `run/neoforge-1.21.5/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
 - 冒烟测试另外读呈现帧中心附近的像素，绿色方块不在就判失败（计数只说明调用过，上面的问题就是这样漏掉的）。
+
+## 1.21.4（相对 1.21.5）
+
+**构建**
+- NeoForm `1.21.4-20241203.161809`，NeoForge `21.4.161`，Fabric API `0.119.4+1.21.4`，Iris 1.8.8、Sodium 0.6.13。
+
+**纯 OpenGL**
+- 没有 `RenderPipeline`、`RenderPass`、`GpuTexture`：所有绘制都画进当前绑定的帧缓冲，混合、写入掩码由渲染类型自己设。
+  `Gpu` 照 LitematicaPass 换成纯 GL：自己编译程序（同样的片元着色器，顶点着色器用 `gl_VertexID` 画一个全屏三角形），
+  画完放回帧缓冲、视口、程序、顶点数组、纹理、掩码、深度测试和混合。四种全屏通道保留：颜色（预乘混合或替换）、深度（LEQUAL）、
+  替换深度、整层（用 `GL_ALWAYS`，不用先清成远处）。编译失败的程序只记一次日志，冒烟测试会列出来。
+- `TextureTarget(width, height, useDepth)`，清除色设成透明；`RenderTarget.clear()`、`copyDepthFrom` 会把帧缓冲绑回 0，EXIT 自己放回原来的绑定。
+- 去掉了 `PortalPassMixin`、`RenderPassMixin`、`CompiledPipelineMixin`、`RenderPipelinesAccessor`、`CompositeRenderTypeAccessor`、
+  `StrictValidationMixin` 和打开通道的计数。
+
+**改道**
+- portal 改道时绑定通道目标，`MinecraftMixin` 让 `Minecraft.getMainRenderTarget()` 返回通道目标（原版绑定主目标都经过它，
+  渲染类型的 `MAIN_TARGET` 输出也是）。批量画的时候设同样的输出。`Gpu.mainTarget()` 用 `MinecraftAccessor` 读真正的主目标。
+- `GlStateManagerMixin`（`GlOverrides`）：画进通道时 alpha 混合因子换成 `(ONE, ONE_MINUS_SRC_ALPHA)`（同 LitematicaPass）；
+  记录半透明深度和测缩放时强制不写颜色、写深度。EXIT 自己的全屏通道不受影响。这取代了只写深度的管线副本。
+- 半透明渲染类型按 `sortOnUpload()` 判断：组合状态里的透明度分片类型不可见，拿不到。
+
+**缩放探针**
+- 用 `entitySolid` 渲染类型经光影包的程序画探针四边形，颜色被强制屏蔽；遮罩用 `glReadPixels` 同步读回（每个光影包、每个尺寸一次）。
+  Kappa 照样测出 0.75。
+
+**加载器**
+- NeoForge 21.4 没有 `ClientStoppingEvent`，`ExitMod.close` 挂在 `GameShuttingDownEvent` 上；没有 Blaze3D 校验层，不用关。
+
+**开发运行**
+- Super Resolution 只有 1.21.4 的 0.8.2-alpha.1：在开发运行里它让实体模型（含第一人称手）画不出来，不开光影也一样；
+  配 Sundial Lite 1.2.0 时在它自己的配置里崩溃（`superresolution$config.sr` 为 null）。所以 1.21.4 不带 `-Pexit.superResolution`，没有测 SR。
