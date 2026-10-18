@@ -1,5 +1,7 @@
 package ml.mypals.exit.smoke;
 
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.systems.RenderSystem;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.compat.IrisCompat;
 import ml.mypals.exit.impl.DebugShapes;
@@ -14,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -268,13 +271,30 @@ public final class SmokeTest {
 		DebugShapes.Stats stats = DebugShapes.stats();
 		log("redirects outside a portal that did not throw: " + stats.unguardedRedirects + ", off-thread portal ok: " + stats.offThreadOk);
 		log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
-		boolean ok = this.failedPhases.isEmpty() && stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk) && shadowPassRuns == 0;
+		List<String> broken = brokenPipelines();
+		log("EXIT pipelines that do not compile: " + broken);
+		boolean ok = this.failedPhases.isEmpty() && stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk) && shadowPassRuns == 0
+			&& broken.isEmpty();
 		log(ok ? "RESULT: OK (phases " + this.phases + " rendered through EXIT)"
 			: "RESULT: FAILED (failed phases: " + this.failedPhases + ")");
 		if (!ok) {
 			Runtime.getRuntime().halt(3);
 		}
 		mc.stop();
+	}
+
+	/**
+	 * EXIT's pipelines whose shaders do not compile. A pass with such a pipeline draws nothing, which the counters do not
+	 * show: the merge would just leave the channels out.
+	 */
+	private static List<String> brokenPipelines() {
+		List<String> broken = new ArrayList<>();
+		for (RenderPipeline pipeline : RenderPipelines.getStaticPipelines()) {
+			if (pipeline.getLocation().getNamespace().equals("emergency_exit") && !RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
+				broken.add(pipeline.getLocation().toString());
+			}
+		}
+		return broken;
 	}
 
 	private static long[] counters() {
