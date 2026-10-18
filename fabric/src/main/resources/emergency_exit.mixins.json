@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "package": "ml.mypals.exit.mixin",
+  "plugin": "ml.mypals.exit.plugin.ExitMixinPlugin",
+  "compatibilityLevel": "${mixin_java}",
+  "client": [
+    "GlStateManagerMixin",
+    "LevelRendererMixin",
+    "MinecraftAccessor",
+    "MinecraftMixin",
+    "iris.IrisRenderingPipelineMixin",
+    "iris.IrisShaderOverrideMixin",
+    "iris.LegacyIrisPipelineAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

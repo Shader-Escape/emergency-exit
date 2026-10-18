@@ -1,4 +1,3 @@
 plugins {
     id 'net.fabricmc.fabric-loom-remap' version '1.18.1' apply false
-    id 'net.neoforged.moddev' version '2.0.147' apply false
 }

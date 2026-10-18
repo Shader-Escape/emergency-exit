@@ -1,7 +1,34 @@
 plugins {
-    id 'multiloader-loader'
-    // Minecraft 1.20.6 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${mod_id}-${project.name}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = java_version as int
+}
+
+repositories {
+    mavenCentral()
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = uri('https://api.modrinth.com/maven')
+            }
+        }
+        filter {
+            includeGroup('maven.modrinth')
+        }
+    }
 }
 
 // The libraries nested in the Iris and Sodium jars (their Fabric API modules aside), for the development runtime.
@@ -34,10 +61,12 @@ dependencies {
         modCompileOnly("maven.modrinth:${mod}")
         modLocalRuntime("maven.modrinth:${mod}")
     }
-    // Iris and Sodium nest libraries (jcpp, ANTLR, glsl-transformer, JOML before 1.19.3; versions differ per build) in
-    // their jars, but the development runtime does not load the nested jars of dependencies; without them Iris fails as
-    // soon as it reads a shader pack. Put the copies from those jars themselves on the runtime classpath.
+    // Iris and Sodium nest libraries (jcpp, ANTLR, glsl-transformer, JOML before 1.19.3) in their jars, but the
+    // development runtime does not load the nested jars of dependencies; without them Iris fails as soon as it reads a
+    // shader pack. Put the copies from those jars themselves on the runtime classpath.
     localRuntime(fileTree(nestedLibraries.map { it.destinationDir }) { include '*.jar' }.builtBy(nestedLibraries))
+    // Minecraft brings slf4j from 1.18; Iris for older versions needs it, as a plain library.
+    localRuntime("org.slf4j:slf4j-api:1.7.36")
 }
 
 // Development mod that checks every mixin applies. Run it with runAuditClient.
@@ -48,10 +77,27 @@ sourceSets.create('audit') {
 
 // Development mod that creates a world and checks the rendering. Run it with runSmokeClient.
 sourceSets.create('smoke') {
-    java.srcDirs = [project(':common').file('src/smoke/java'), file('src/smoke/java')]
-    resources.srcDirs = [project(':common').file('src/smoke/resources'), file('src/smoke/resources')]
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
     runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+}
+
+def expandProps = [
+        'version'                : version,
+        'minecraft_version_range': minecraft_version_range,
+        'fabric_loader_version'  : fabric_loader_version,
+        'mod_name'               : mod_name,
+        'mod_author'             : mod_author,
+        'mod_id'                 : mod_id,
+        'license'                : license,
+        'description'            : project.findProperty('description'),
+        'java_version'           : java_version,
+        'mixin_java'             : "JAVA_${java_version}"
+]
+tasks.named('processResources', ProcessResources) {
+    inputs.properties(expandProps)
+    filesMatching(['fabric.mod.json', '*.mixins.json']) {
+        expand(expandProps)
+    }
 }
 
 def smokeProps = ['mixin_java': "JAVA_${java_version}".toString()]
@@ -59,6 +105,13 @@ tasks.named('processSmokeResources', ProcessResources) {
     inputs.properties(smokeProps)
     filesMatching('*.mixins.json') {
         expand(smokeProps)
+    }
+}
+
+def licenseName = "LICENSE_${mod_name}"
+tasks.withType(Jar).configureEach {
+    from(rootProject.file('LICENSE')) {
+        rename { licenseName }
     }
 }
 
@@ -101,20 +154,11 @@ tasks.named('runAuditClient') {
     doFirst { exported.deleteDir() }
 }
 
-def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-['apiElements', 'runtimeElements', 'sourcesElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    configurations.named(variant) {
-        attributes {
-            attribute(loaderAttribute, 'fabric')
-        }
-    }
-}
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
-        configurations.named(variant) {
-            attributes {
-                attribute(loaderAttribute, 'fabric')
-            }
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
         }
     }
 }
