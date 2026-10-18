@@ -39,6 +39,12 @@ public final class DebugShapes {
 	 * The white texture keeps its colour.
 	 */
 	private static final RenderType TRANSLUCENT_QUADS = RenderType.entityTranslucentEmissive(WHITE);
+	/**
+	 * One builder for the immediate drawing while a portal routes. It is reused, as vanilla reuses Tesselator's
+	 * builder: this version's {@code BufferBuilder} mallocs its store (through {@code MemoryTracker}) and has no way
+	 * to free it, so a new one every frame leaks that malloc.
+	 */
+	private static final BufferBuilder IMMEDIATE = new BufferBuilder(1536);
 
 	/** The centre of the middle box, or null while the shapes are off. */
 	private static @Nullable Vec3 center;
@@ -122,11 +128,15 @@ public final class DebugShapes {
 			}
 			if (redirected) {
 				STATS.portalRedirectedPasses++;
+				// With a shader pack the portal bound the channel's framebuffer, so the main target lands there.
+				MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(IMMEDIATE);
+				box(immediate, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
+				immediate.endBatch();
+			} else {
+				// Without a shader pack the framebuffer is the main target and the model view is no longer the level's,
+				// so record into the channel's own batch, drawn with the right view and projection at the end.
+				box(xray.batch(null), new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
 			}
-			// Drawn into the main target without redirect. The portal bound the channel's framebuffer, so it lands there.
-			MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(new BufferBuilder(1536));
-			box(immediate, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
-			immediate.endBatch();
 		});
 	}
 
