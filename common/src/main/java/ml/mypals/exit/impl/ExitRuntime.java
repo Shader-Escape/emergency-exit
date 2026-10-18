@@ -50,7 +50,7 @@ public final class ExitRuntime {
 	/** Whether the outermost portal routes. Nested portals follow it. */
 	private static boolean portalRouted;
 
-	/** The immediate drawing running now, or null. */
+	/** The drawing running now, or null. */
 	static @Nullable DrawContext drawing;
 	private static @Nullable SubmitNodeStorage discard;
 	private static long compositedFrames;
