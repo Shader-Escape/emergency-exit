@@ -10,9 +10,10 @@
 /* 布局：正文一列；中间是一张四泳道的大流程图（可横向滚动），节点里嵌截图。
    这是一个纯静态页面：双击文件就能打开，不需要 http 服务器。
    编辑说明：
-   - 三张流程图的泳道、节点、连线都内联在本文件末尾的 <script type="application/json"> 里
-     （id 为 flow-bsl、flow-kappa、flow-sr），改文字、换图、调位置都只改那里。
-     同目录的 flow-bsl.json、flow.json（Kappa）、flow-sr.json 留作源文件，页面不读它们；改了一边要手动同步到另一边。
+   - 三张流程图的数据以同目录的 flow-bsl.json、flow.json（Kappa）、flow-sr.json 为准，
+     复制在本文件末尾的 <script type="application/json"> 里（id 为 flow-bsl、flow-kappa、flow-sr），页面只读这里。
+   - 改数据：改 JSON 文件，或用 edit.html 在页面上改（要 http 打开，见它的顶部注释），
+     然后运行 python docs/render-scale/inline-flow.py 把 JSON 写进本文件。不要直接改这里的 JSON 块，下次运行会被覆盖。
    - 图片在 img/ 下（img/frame/ 是 Kappa，img/sr/、img/bsl/ 是另两种），用相对路径引用，
      由冒烟测试的 FrameDump 生成（run/fabric/screenshots/exit-frame-dump）。
    - 字体从 Google Fonts 加载，离线时退回系统字体。
