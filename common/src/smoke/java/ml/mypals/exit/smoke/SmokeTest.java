@@ -47,7 +47,7 @@ import java.util.stream.Stream;
 public final class SmokeTest {
 	private static final String TAG = "[emergency_exit-smoke] ";
 	private static final String WORLD = "EXIT Smoke";
-	private static final String VERSION = SharedConstants.getCurrentVersion().name();
+	private static final String VERSION = SharedConstants.getCurrentVersion().getName();
 	private static final String NO_PACK = "none";
 	/** Client ticks of one phase, 20 per second. */
 	private static final int PHASE_TICKS = 220;
@@ -88,7 +88,7 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.8 has no shadow render callback). EXIT
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.5 has no shadow render callback). EXIT
 	 * must skip what is drawn there.
 	 */
 	public static void inShadowPass() {
@@ -327,7 +327,7 @@ public final class SmokeTest {
 
 	private void screenshot(Minecraft mc, String pack, String view) {
 		String name = this.fileName(pack, view);
-		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), 1, message -> log("screenshot " + name));
+		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), message -> log("screenshot " + name));
 	}
 
 	/**

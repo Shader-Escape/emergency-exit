@@ -8,29 +8,29 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
 请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-这个分支对应 Minecraft **1.21.8**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
+这个分支对应 Minecraft **1.21.5**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码；`master` 是 26.3。
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.8`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.5`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
 调用时机要在关卡渲染期间（`LevelRenderer.renderLevel` 里面）。各加载器可用的位置：
 
 | 用途 | Fabric | NeoForge |
 |---|---|---|
-| 画进批量 | `WorldRenderEvents.BEFORE_ENTITIES`（`context.consumers()`） | `RenderLevelStageEvent.AfterOpaqueBlocks` 等，没有可直通的 buffer source：`Exit.batch()` |
-| 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` 等 | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
-| portal | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
+| 画进批量 | `WorldRenderEvents.BEFORE_ENTITIES`（`context.consumers()`） | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等阶段，没有可直通的 buffer source：`Exit.batch()` |
+| 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` 等 | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
+| portal | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
 
-1.21.8 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。关卡渲染期间不会一直开着
+1.21.5 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。关卡渲染期间不会一直开着
 一个渲染通道（每种渲染类型画的时候自己开 pass），所以主渲染通道里的这些事件都可以用 portal。
 
-NeoForge 1.21.8 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
+NeoForge 1.21.5 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
 没有光影包时，批量在关卡渲染结束时画进主目标。
 
-Fabric 的 `WorldRenderEvents.END` 和 NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染的末尾触发，EXIT 也在那里合并本帧，
+Fabric 的 `WorldRenderEvents.END` 和 NeoForge 的 `RenderLevelStageEvent`（`Stage.AFTER_LEVEL`）在关卡渲染的末尾触发，EXIT 也在那里合并本帧，
 在里面画的东西可能排在合并之后而被丢弃。请用 `LAST`。
 
 ## 基础概念
@@ -119,14 +119,14 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 | 开关 | 默认 | 说明                                                                   |
 |---|---|----------------------------------------------------------------------|
 | `bypass` | `ON` | Iris 的 `ImmediateState.bypass`：不把原版管线替换成光影包的程序                       |
-| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽。1.21.8 上 EXIT 不动它（见 `PortalOverrides`） |
+| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽 |
 | `renderingLevel` | `KEEP` | Iris 的 `ImmediateState.isRenderingLevel`：开着时 Iris 会加宽此刻开始的缓冲的顶点格式     |
 
  **注意**
 
 * **portal 输出行为：** portal 改道期间，EXIT 用一个 mixin 把**新开的**、把主目标当作颜色或深度附件的渲染通道换成通道目标。
-  所以自己对主目标开 pass 的代码不用改。（1.21.8 也有 `RenderSystem.outputColorTextureOverride`，但它只管渲染类型；
-  这个 mixin 连直接开的 pass 也一起改道。）以下情况不会自动改道，
+  所以自己对主目标开 pass 的代码不用改。（1.21.5 没有 `RenderSystem.outputColorTextureOverride`；
+  EXIT 自己画批量时也靠这个 mixin 画进通道目标。）以下情况不会自动改道，
   需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
   * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 pass）——附件在开 pass 时就定了；
@@ -229,7 +229,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   （手部之前、半透明之前）。没有复制时通道照样能画，只是那一帧的遮挡改用当时的主深度。
 * **API 稳定性** `ml.mypals.exit.api` 是 API；`impl`、`compat`、`mixin` 不是。API 里用到了 Minecraft 的类型
   （`MultiBufferSource`、`Camera`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
-  1.21.8 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
+  1.21.5 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
   `MultiBufferSource`（`Exit.draw(MultiBufferSource, ...)`、`ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`），
   `ExitContext.camera()` 是 `Camera`。
 
@@ -246,10 +246,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * `main_depth`：最终的主深度
   * `translucent_depth`：只含半透明表面的深度
 * `/emergency_exit debug shapes`：在玩家视线前方 5 格处生成三个测试方块，再输入一次关闭：
-  * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
-  * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），不透明、写深度
+  * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
+  * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.8 没有 Gizmo，所以没有青色线框）
+  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.5 没有 Gizmo，所以没有青色线框）
 
 ## 开发
 
@@ -261,11 +261,11 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa 等都放进去）。
   每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
   日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是
-  `run/fabric-1.21.8` 和 `run/neoforge-1.21.8`。
+  `run/fabric-1.21.5` 和 `run/neoforge-1.21.5`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
-  但 SR 没有 1.21.8 的版本，开发运行不加载它。
-* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.8/config/neoforge-client.toml`
+  但 SR 没有 1.21.5 的版本，开发运行不加载它。
+* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.5/config/neoforge-client.toml`
   里设 `enableB3DValidationLayer = false`。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 

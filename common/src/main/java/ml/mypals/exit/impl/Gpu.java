@@ -10,7 +10,9 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.platform.DestFactor;
+import com.mojang.blaze3d.platform.SourceFactor;
+import com.mojang.blaze3d.textures.GpuTexture;
 import ml.mypals.exit.mixin.RenderPipelinesAccessor;
 import net.minecraft.client.Minecraft;
 import org.jetbrains.annotations.Nullable;
@@ -165,18 +167,18 @@ final class Gpu {
 		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)
 			: pipeline.depthOnly ? depthPass(pipeline.label, output) : colorPass(pipeline.label, output)) {
 			pass.setPipeline(pipeline.pipeline);
-			RenderSystem.bindDefaultUniforms(pass);
 			for (Sampler sampler : samplers) {
 				bind(pass, sampler.name(), sampler.depth() ? depth(sampler.target()) : color(sampler.target()));
 			}
 			pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
 			pass.setIndexBuffer(indexBuffer, indices.type());
-			pass.drawIndexed(0, 0, 6, 1);
+			pass.drawIndexed(0, 6);
 		}
 	}
 
-	/** Blending for premultiplied colour. */
-	private static final BlendFunction PREMULTIPLIED_ALPHA = BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA;
+	/** Blending for premultiplied colour. Minecraft has it from 1.21.6; these are the same factors. */
+	private static final BlendFunction PREMULTIPLIED_ALPHA = new BlendFunction(
+		SourceFactor.ONE, DestFactor.ONE_MINUS_SRC_ALPHA, SourceFactor.ONE, DestFactor.ONE_MINUS_SRC_ALPHA);
 
 	/**
 	 * A pipeline that covers the screen and samples the given textures. Before 1.21.9 there is no {@code core/screenquad}
@@ -225,17 +227,19 @@ final class Gpu {
 		return openPass(label, color(target), depth(target), target);
 	}
 
-	private static GpuTextureView color(RenderTarget target) {
-		return target.getColorTextureView();
+	// Before 1.21.6 passes and samplers take the textures themselves: there are no texture views.
+	private static GpuTexture color(RenderTarget target) {
+		return target.getColorTexture();
 	}
 
-	private static GpuTextureView depth(RenderTarget target) {
-		return target.getDepthTextureView();
+	private static GpuTexture depth(RenderTarget target) {
+		return target.getDepthTexture();
 	}
 
 	/** Opens a pass. Passes have no render area before 26.2, so a scissor limits it to the scene area. */
-	private static RenderPass openPass(String label, GpuTextureView color, @Nullable GpuTextureView depth, RenderTarget size) {
-		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> label, color, OptionalInt.empty(), depth,
+	private static RenderPass openPass(String label, GpuTexture color, @Nullable GpuTexture depth, RenderTarget size) {
+		// Passes have no label before 1.21.6.
+		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(color, OptionalInt.empty(), depth,
 			OptionalDouble.empty());
 		if (!wholeOutput && (sceneWidth() < size.width || sceneHeight() < size.height)) {
 			pass.enableScissor(0, 0, sceneWidth(), sceneHeight());
@@ -243,7 +247,7 @@ final class Gpu {
 		return pass;
 	}
 
-	private static void bind(RenderPass pass, String name, GpuTextureView view) {
+	private static void bind(RenderPass pass, String name, GpuTexture view) {
 		// Before 1.21.11 there are no sampler objects: the texture's own sampling is used, which texelFetch ignores.
 		pass.bindSampler(name, view);
 	}

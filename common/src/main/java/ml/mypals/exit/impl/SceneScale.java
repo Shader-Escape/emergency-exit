@@ -6,13 +6,14 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.buffers.BufferType;
+import com.mojang.blaze3d.buffers.BufferUsage;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTexture;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.RenderType;
@@ -21,6 +22,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.jetbrains.annotations.Nullable;
@@ -218,25 +220,26 @@ final class SceneScale {
 		// OpenGL masks the colour of every draw buffer at once before 26.2, so a pipeline that writes no colour masks all the
 		// buffers the pack's program writes to.
 		GpuBuffer vertices = pipeline.getVertexFormat().uploadImmediateVertexBuffer(mesh.vertexBuffer());
-		// Writing the transform maps a buffer and getting the indices may upload them, which cannot happen inside a pass.
-		GpuBufferSlice transform = RenderSystem.getDynamicUniforms()
-			.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f(), RenderSystem.getShaderLineWidth());
+		// Getting the indices may upload them, which cannot happen inside a pass.
 		GpuBuffer indexBuffer = indices.getBuffer(6);
-		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "emergency_exit scale probe",
-			main.getColorTextureView(), OptionalInt.empty(), main.getDepthTextureView(), OptionalDouble.empty())) {
+		// Before 1.21.6 a draw reads the model-view matrix from RenderSystem when it is drawn.
+		Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+		modelViewStack.pushMatrix();
+		modelViewStack.set(modelView);
+		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+			main.getColorTexture(), OptionalInt.empty(), main.getDepthTexture(), OptionalDouble.empty())) {
 			pass.setPipeline(pipeline);
-			RenderSystem.bindDefaultUniforms(pass);
-			pass.setUniform("DynamicTransforms", transform);
 			for (int i = 0; i < 12; i++) {
-				GpuTextureView texture = RenderSystem.getShaderTexture(i);
+				GpuTexture texture = RenderSystem.getShaderTexture(i);
 				if (texture != null) {
 					pass.bindSampler("Sampler" + i, texture);
 				}
 			}
 			pass.setVertexBuffer(0, vertices);
 			pass.setIndexBuffer(indexBuffer, indices.type());
-			pass.drawIndexed(0, 0, 6, 1);
+			pass.drawIndexed(0, 6);
 		} finally {
+			modelViewStack.popMatrix();
 			type.clearRenderState();
 		}
 	}
@@ -255,8 +258,7 @@ final class SceneScale {
 		Probe(RenderPipeline original) {
 			super(ExitMod.id("scale_probe"), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
 				original.getSamplers(), original.getUniforms(), Optional.empty(), DepthTestFunction.LEQUAL_DEPTH_TEST, original.getPolygonMode(),
-				false, false, false, true, original.getColorLogic(), original.getVertexFormat(), original.getVertexFormatMode(), 0, 0,
-				original.getSortKey());
+				false, false, false, true, original.getColorLogic(), original.getVertexFormat(), original.getVertexFormatMode(), 0, 0);
 		}
 	}
 
@@ -264,9 +266,9 @@ final class SceneScale {
 		int width = mask.width;
 		int height = mask.height;
 		GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe readback",
-			GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST, width * height * 4);
+			BufferType.PIXEL_PACK, BufferUsage.STATIC_READ, width * height * 4);
 		RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(mask.getColorTexture(), buffer, 0, () -> {
-			try (GpuBuffer.MappedView view = RenderSystem.getDevice().createCommandEncoder().mapBuffer(buffer, true, false)) {
+			try (GpuBuffer.ReadView view = RenderSystem.getDevice().createCommandEncoder().readBuffer(buffer)) {
 				if (expected == generation) {
 					solve(view.data(), width, height);
 				}

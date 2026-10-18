@@ -2,8 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTexture;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
@@ -41,7 +40,11 @@ public final class ExitRuntime {
 	private static @Nullable Camera camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
 	private static final Matrix4f PROJECTION = new Matrix4f();
-	private static @Nullable GpuBufferSlice levelProjection;
+	/** The projection RenderSystem had when the level rendering started, or null outside it. */
+	private static @Nullable Matrix4f levelProjection;
+	/** EXIT's stand-in for the output override of 1.21.6, see {@link #setOutput}. */
+	private static @Nullable GpuTexture outputColor;
+	private static @Nullable GpuTexture outputDepth;
 	private static float partialTick;
 
 	/** The portals open on the render thread, innermost last. They all belong to {@link #portalChannel}. */
@@ -181,12 +184,12 @@ public final class ExitRuntime {
 	 * channel's: the returned target is the one to draw into, or null to keep the pass as it is. Passes that are
 	 * already open, and clears and copies, are not moved.
 	 */
-	public static @Nullable RenderTarget redirectPass(GpuTextureView color, @Nullable GpuTextureView depth) {
+	public static @Nullable RenderTarget redirectPass(GpuTexture color, @Nullable GpuTexture depth) {
 		if (!isRouting() || Gpu.isInRenderPass()) {
 			return null;
 		}
 		RenderTarget main = Gpu.mainTarget();
-		if (color != main.getColorTextureView() && (depth == null || depth != main.getDepthTextureView())) {
+		if (color != main.getColorTexture() && (depth == null || depth != main.getDepthTexture())) {
 			return null;
 		}
 		redirectedPasses++;
@@ -197,6 +200,23 @@ public final class ExitRuntime {
 	/** The main render target. */
 	public static RenderTarget mainTarget() {
 		return Gpu.mainTarget();
+	}
+
+	/**
+	 * Points passes opened on the main target at {@code color} and {@code depth} instead (see PortalPassMixin), or
+	 * stops it with null. 1.21.6 has {@code RenderSystem.outputColorTextureOverride} for this.
+	 */
+	static void setOutput(@Nullable GpuTexture color, @Nullable GpuTexture depth) {
+		outputColor = color;
+		outputDepth = depth;
+	}
+
+	public static @Nullable GpuTexture outputColor() {
+		return outputColor;
+	}
+
+	public static @Nullable GpuTexture outputDepth() {
+		return outputDepth;
 	}
 
 	static Camera camera() {
@@ -217,7 +237,7 @@ public final class ExitRuntime {
 		return partialTick;
 	}
 
-	static @Nullable GpuBufferSlice levelProjection() {
+	static @Nullable Matrix4f levelProjection() {
 		return levelProjection;
 	}
 
@@ -339,7 +359,7 @@ public final class ExitRuntime {
 		partialTick = levelPartialTick;
 		VIEW_ROTATION.set(viewRotation);
 		PROJECTION.set(projection);
-		levelProjection = RenderSystem.getProjectionMatrixBuffer();
+		levelProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
 	}
 
 	/**

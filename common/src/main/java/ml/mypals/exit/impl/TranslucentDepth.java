@@ -7,7 +7,6 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * The depth of a channel's translucent drawings. Translucent pipelines write no depth, so without it a channel's
@@ -37,7 +36,7 @@ public final class TranslucentDepth {
 	static void record(Runnable translucent, RenderTarget colorTarget, RenderTarget depth) {
 		recording = true;
 		try {
-			BatchDrawer.executeInto(Objects.requireNonNull(colorTarget.getColorTextureView(), "target without colour"), depth.getDepthTextureView(), translucent);
+			BatchDrawer.executeInto(colorTarget.getColorTexture(), depth.getDepthTexture(), translucent);
 		} finally {
 			recording = false;
 		}
@@ -57,7 +56,7 @@ public final class TranslucentDepth {
 			super(variantId(original.getLocation()), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
 				original.getSamplers(), original.getUniforms(), original.getBlendFunction(), depthTest(original.getDepthTestFunction()),
 				original.getPolygonMode(), original.isCull(), false, false, true, original.getColorLogic(), original.getVertexFormat(),
-				original.getVertexFormatMode(), original.getDepthBiasScaleFactor(), original.getDepthBiasConstant(), original.getSortKey());
+				original.getVertexFormatMode(), original.getDepthBiasScaleFactor(), original.getDepthBiasConstant());
 		}
 
 		private static ResourceLocation variantId(ResourceLocation location) {

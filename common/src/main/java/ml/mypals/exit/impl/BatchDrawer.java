@@ -2,9 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
@@ -14,6 +12,7 @@ import ml.mypals.exit.compat.IrisCompat;
 import ml.mypals.exit.mixin.CompositeRenderTypeAccessor;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,15 +21,12 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
 /**
  * Renders batches into a target. A {@link Batch} is a buffer source that keeps one buffer per render type, so nothing
  * is drawn before the batch is. It sets this frame's camera rotation and projection itself, because the level renderer
- * may have reset them by the time EXIT renders. Each render type opens its own pass on the output target when it is
- * drawn, so the output is pointed at the target meanwhile. The solid render types are drawn first, then the translucent
+ * may have reset them by the time EXIT renders. Each render type opens its own pass on the main target when it is
+ * drawn, so those passes are pointed at the target meanwhile. The solid render types are drawn first, then the translucent
  * ones. The batch keeps a second copy of the translucent vertices, which the translucent depth draws.
  */
 public final class BatchDrawer {
@@ -44,12 +40,16 @@ public final class BatchDrawer {
 		if (batch.isEmpty()) {
 			return;
 		}
+		// Before 1.21.6 Iris widens the vertex format of the entity pipelines themselves while the level renders, and a
+		// render type uploads and binds its vertices in its pipeline's format. The batch holds vanilla vertices.
+		boolean renderingLevel = IrisCompat.isRenderingLevel();
+		IrisCompat.setRenderingLevel(false);
 		Matrix4fStack modelView = RenderSystem.getModelViewStack();
 		modelView.pushMatrix();
 		modelView.set(ExitRuntime.viewRotation());
 		try {
 			long opened = ExitRuntime.openedPasses();
-			executeInto(Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView(), () -> {
+			executeInto(target.getColorTexture(), target.getDepthTexture(), () -> {
 				batch.colour.draw(false);
 				batch.colour.draw(true);
 			});
@@ -60,6 +60,7 @@ public final class BatchDrawer {
 			}
 		} finally {
 			modelView.popMatrix();
+			IrisCompat.setRenderingLevel(renderingLevel);
 			batch.discard();
 		}
 	}
@@ -74,56 +75,27 @@ public final class BatchDrawer {
 	}
 
 	/**
-	 * Runs {@code execute} with the output of the render types pointed at the given colour and depth, and with the level
-	 * projection set, since each render type binds the default uniforms itself.
+	 * Runs {@code execute} with passes on the main target pointed at the given colour and depth (see
+	 * {@link ExitRuntime#setOutput}), and with the level projection set, since the render types read the default
+	 * uniforms from RenderSystem when they draw.
 	 */
-	static void executeInto(GpuTextureView color, @Nullable GpuTextureView depth, Runnable execute) {
-		GpuTextureView savedColor = RenderSystem.outputColorTextureOverride;
-		GpuTextureView savedDepth = RenderSystem.outputDepthTextureOverride;
-		GpuBufferSlice projection = ExitRuntime.levelProjection();
-		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
-		var type = RenderSystem.getProjectionType();
-		RenderSystem.outputColorTextureOverride = color;
-		RenderSystem.outputDepthTextureOverride = depth;
-		if (projection != null && projection != current) {
-			RenderSystem.setProjectionMatrix(projection, type);
+	static void executeInto(GpuTexture color, @Nullable GpuTexture depth, Runnable execute) {
+		GpuTexture savedColor = ExitRuntime.outputColor();
+		GpuTexture savedDepth = ExitRuntime.outputDepth();
+		Matrix4f projection = ExitRuntime.levelProjection();
+		ExitRuntime.setOutput(color, depth);
+		if (projection != null) {
+			RenderSystem.backupProjectionMatrix();
+			RenderSystem.setProjectionMatrix(new Matrix4f(projection), RenderSystem.getProjectionType());
 		}
 		try {
 			execute.run();
 		} finally {
-			RenderSystem.outputColorTextureOverride = savedColor;
-			RenderSystem.outputDepthTextureOverride = savedDepth;
-			if (projection != null && projection != current && current != null) {
-				RenderSystem.setProjectionMatrix(current, type);
+			ExitRuntime.setOutput(savedColor, savedDepth);
+			if (projection != null) {
+				RenderSystem.restoreProjectionMatrix();
 			}
 		}
-	}
-
-	/** Opens a pass on {@code target} with the default uniforms and the level projection bound. */
-	static RenderPass openPass(String label, RenderTarget target) {
-		return openPass(label, Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView());
-	}
-
-	/** Opens a pass on the given colour and depth with the default uniforms and the level projection bound. */
-	static RenderPass openPass(String label, GpuTextureView color, @Nullable GpuTextureView depth) {
-		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-			() -> label, color, OptionalInt.empty(), depth, OptionalDouble.empty());
-		GpuBufferSlice projection = ExitRuntime.levelProjection();
-		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
-		if (projection != null && projection != current) {
-			var type = RenderSystem.getProjectionType();
-			RenderSystem.setProjectionMatrix(projection, type);
-			try {
-				RenderSystem.bindDefaultUniforms(pass);
-			} finally {
-				if (current != null) {
-					RenderSystem.setProjectionMatrix(current, type);
-				}
-			}
-		} else {
-			RenderSystem.bindDefaultUniforms(pass);
-		}
-		return pass;
 	}
 
 	/**
@@ -178,13 +150,16 @@ public final class BatchDrawer {
 				}
 			}
 			ByteBufferBuilder bytes = this.memory.computeIfAbsent(type, t -> new ByteBufferBuilder(t.bufferSize()));
-			// Iris widens the format of a buffer started while the level renders, but the vanilla pipelines expect the
-			// vanilla format.
+			// The batch holds vanilla vertices. Iris 1.8 widens the format of every buffer started while a pack is in use
+			// unless skipExtension is set, and while the level renders the render type's format is already the widened one.
+			boolean skipExtension = IrisCompat.skipExtension();
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
+			IrisCompat.setSkipExtension(true);
 			IrisCompat.setRenderingLevel(false);
 			try {
 				builder = new BufferBuilder(bytes, type.mode(), type.format());
 			} finally {
+				IrisCompat.setSkipExtension(skipExtension);
 				IrisCompat.setRenderingLevel(renderingLevel);
 			}
 			this.started.put(type, builder);

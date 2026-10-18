@@ -28,10 +28,13 @@ public final class ExitNeoForge {
 	public ExitNeoForge() {
 		NeoForge.EVENT_BUS.addListener(ClientStoppingEvent.class, event -> ExitMod.close());
 		NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event -> event.getDispatcher().register(ExitMod.command(OUTPUT)));
-		// The events of NeoForge for 1.21.8 have no buffer source, so the drawings are given none to pass to.
-		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueBlocks.class, event -> {
-			DebugShapes.inMainPass(null);
-			DebugShapes.addToBatch(null, event.getCamera().getPosition());
+		// The events of NeoForge for 1.21.5 have no buffer source, so the drawings are given none to pass to. There is one
+		// event class with a stage; AFTER_CUTOUT_BLOCKS comes after the opaque terrain.
+		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class, event -> {
+			if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS) {
+				DebugShapes.inMainPass(null);
+				DebugShapes.addToBatch(null, event.getCamera().getPosition());
+			}
 		});
 	}
 }
