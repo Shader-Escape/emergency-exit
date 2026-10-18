@@ -158,6 +158,7 @@ public final class SmokeTest {
 			}
 			this.placedAt = this.ticksInWorld;
 			log("placed the test shapes at " + DebugShapes.center());
+			placeBlocks(mc);
 		}
 		if (this.placedAt < 0) {
 			return;
@@ -182,6 +183,27 @@ public final class SmokeTest {
 			default -> {
 			}
 		}
+	}
+
+	/**
+	 * Places blocks between the player and the boxes: light blue glass in front of the green and yellow boxes, which
+	 * shows them dimmed behind a translucent surface, and stone in front of the red box, which hides it, and of the blue
+	 * one, which shows through the world.
+	 */
+	private void placeBlocks(Minecraft mc) {
+		Vec3 look = mc.player.getLookAngle();
+		Vec3 forward = new Vec3(look.x, 0, look.z).normalize();
+		Vec3 right = new Vec3(-forward.z, 0, forward.x);
+		Vec3 center = DebugShapes.center() != null ? DebugShapes.center() : mc.player.getEyePosition().add(forward.scale(DebugShapes.DISTANCE));
+		Vec3 front = center.subtract(forward.scale(2));
+		setBlock(mc, front, "light_blue_stained_glass");
+		setBlock(mc, front.add(right.scale(2)), "stone");
+		setBlock(mc, front.subtract(right.scale(2)), "stone");
+	}
+
+	private static void setBlock(Minecraft mc, Vec3 at, String block) {
+		mc.player.connection.sendCommand(String.format(Locale.ROOT, "setblock %d %d %d minecraft:%s",
+			(int) Math.floor(at.x), (int) Math.floor(at.y), (int) Math.floor(at.z), block));
 	}
 
 	/**
