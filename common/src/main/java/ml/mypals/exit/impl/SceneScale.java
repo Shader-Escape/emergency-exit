@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -217,12 +218,14 @@ final class SceneScale {
 		// OpenGL masks the colour of every draw buffer at once before 26.2, so a pipeline that writes no colour masks all the
 		// buffers the pack's program writes to.
 		GpuBuffer vertices = pipeline.getVertexFormat().uploadImmediateVertexBuffer(mesh.vertexBuffer());
+		// Writing the transform maps a buffer, which cannot happen inside a pass.
+		GpuBufferSlice transform = RenderSystem.getDynamicUniforms()
+			.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f(), RenderSystem.getShaderLineWidth());
 		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "emergency_exit scale probe",
 			main.getColorTextureView(), OptionalInt.empty(), main.getDepthTextureView(), OptionalDouble.empty())) {
 			pass.setPipeline(pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
-			pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms()
-				.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f(), RenderSystem.getShaderLineWidth()));
+			pass.setUniform("DynamicTransforms", transform);
 			for (int i = 0; i < 12; i++) {
 				GpuTextureView texture = RenderSystem.getShaderTexture(i);
 				if (texture != null) {
