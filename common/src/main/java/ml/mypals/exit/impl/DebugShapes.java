@@ -22,8 +22,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * Test boxes for {@code /emergency_exit debug shapes}, placed 5 blocks in front of the player.
  * <ul>
- *     <li>Red, on the right, is an immediate drawing on the main channel. It runs inside the main pass, so it is
- *     deferred to the batch.</li>
+ *     <li>Red, on the right, is a translucent drawing on the main channel. It is recorded into the batch, so the
+ *     green box does not cover it although it is drawn with the batch.</li>
  *     <li>Green, in the middle, is drawn with the main channel's batch.</li>
  *     <li>Yellow sits behind the green box on another channel. The channels blend by depth, so green covers it where
  *     they overlap.</li>
@@ -48,8 +48,7 @@ public final class DebugShapes {
 
 	/** Counters for the checks. */
 	public static final class Stats {
-		public int immediateDraws;
-		public int deferredDraws;
+		public int draws;
 		public int routedDraws;
 		public int batchDraws;
 		public int portalDraws;
@@ -65,8 +64,7 @@ public final class DebugShapes {
 	private DebugShapes() {}
 
 	/**
-	 * Called inside the main render pass, after the solid features. {@code passThrough} is the level's collector,
-	 * used when nothing is routed. The drawing is deferred to the batch, since no pass can be opened here.
+	 * Called after the solid features. {@code passThrough} is the level's collector, used when nothing is routed.
 	 */
 	public static void inMainPass(SubmitNodeCollector passThrough) {
 		Vec3 at = center;
@@ -74,10 +72,7 @@ public final class DebugShapes {
 			return;
 		}
 		Exit.draw(passThrough, exit -> {
-			STATS.immediateDraws++;
-			if (exit.deferred()) {
-				STATS.deferredDraws++;
-			}
+			STATS.draws++;
 			if (exit.routed()) {
 				STATS.routedDraws++;
 			}
