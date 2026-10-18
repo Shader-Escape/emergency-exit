@@ -4,13 +4,13 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 
@@ -83,9 +83,9 @@ public final class FeatureDrawer {
 				}
 			}
 
-			Matrix4fStack modelView = RenderSystem.getModelViewStack();
-			modelView.pushMatrix();
-			modelView.set(ExitRuntime.viewRotation());
+			PoseStack modelView = RenderSystem.getModelViewStack();
+			modelView.pushPose();
+			modelView.last().pose().set(ExitRuntime.viewRotation());
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
 			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()), VertexSorting.DISTANCE_TO_ORIGIN);
@@ -115,7 +115,7 @@ public final class FeatureDrawer {
 				restore.run();
 				IrisCompat.setRenderingLevel(renderingLevel);
 				RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
-				modelView.popMatrix();
+				modelView.popPose();
 				RenderSystem.applyModelViewMatrix();
 				this.buffers.clear();
 			}

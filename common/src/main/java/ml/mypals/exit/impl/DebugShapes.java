@@ -218,9 +218,9 @@ public final class DebugShapes {
 	}
 
 	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
-		VertexConsumer vertex = buffer.vertex(pose, corners[i], corners[i + 1], corners[i + 2]).color(argb);
+		VertexConsumer vertex = buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb);
 		if (solid) {
-			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose, 0, 1, 0);
+			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0);
 		}
 		vertex.endVertex();
 	}

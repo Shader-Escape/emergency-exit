@@ -2,6 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
@@ -13,7 +14,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
-import org.joml.Matrix4fStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -233,9 +233,9 @@ public final class ExitRuntime {
 			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal. The
 			// level's view rotation and projection are not set this late in the frame, so set them too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
-			Matrix4fStack modelView = RenderSystem.getModelViewStack();
-			modelView.pushMatrix();
-			modelView.set(VIEW_ROTATION);
+			PoseStack modelView = RenderSystem.getModelViewStack();
+			modelView.pushPose();
+			modelView.last().pose().set(VIEW_ROTATION);
 			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
 			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION), RenderSystem.getVertexSorting());
@@ -259,7 +259,7 @@ public final class ExitRuntime {
 					RenderSystem.setProjectionMatrix(savedProjection, RenderSystem.getVertexSorting());
 					savedProjection = null;
 				}
-				RenderSystem.getModelViewStack().popMatrix();
+				RenderSystem.getModelViewStack().popPose();
 				RenderSystem.applyModelViewMatrix();
 				restoreOutput.run();
 			}
