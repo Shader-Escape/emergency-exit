@@ -163,13 +163,16 @@ The project has three subprojects, laid out like MultiLoader-Template. `common` 
 event hooks of the debug shapes. Loader-specific queries go through the `Platform` service.
 
 * `./gradlew build` builds both jars (`fabric/build/libs`, `neoforge/build/libs`).
-* `./gradlew :fabric:runSmokeClient` and `./gradlew :neoforge:runSmokeClient` create a world, turn on the test shapes,
-  take screenshots and quit. The log ends with `RESULT: OK`. They run in `run/fabric` and `run/neoforge`. To test
-  routing, put a shader pack into its `shaderpacks` folder and enable it in `config/iris.properties`.
+* `./gradlew :fabric:runSmokeClient` and `./gradlew :neoforge:runSmokeClient` create a world, turn on the test shapes
+  and run one phase without shaders, then one with each shader pack in the run's `shaderpacks` folder (switched through
+  Iris, so put BSL, Kappa and so on there). Each phase takes screenshots
+  (`screenshots/emergency_exit-smoke-<version>-<loader>-<pack>-<view>.png`) and checks what EXIT did; then the game
+  quits. The log ends with `RESULT: OK`. `-Demergency_exit.smoke.packs=none,BSL.zip` picks the phases instead. They run
+  in `run/fabric-1.21.11` and `run/neoforge-1.21.11`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * `./gradlew :fabric:runSmokeClient -Pexit.superResolution` does the same with the Super Resolution mod loaded (in the
-  development runs only), to check the stretched merge. It needs a shader pack SR supports (for example Sundial Lite,
-  SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/fabric/config/super_resolution/config.toml`. The smoke test
+  development runs only), to check the stretched merge in the phases of the packs SR supports (for example Sundial
+  Lite; SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/fabric-1.21.11/config/super_resolution/config.toml`. The smoke test
   also saves `*-presented.png`, the window's front buffer, which is what the player sees.
 * `./gradlew publishToMavenLocal` publishes both jars for other mods' development setups.
 
