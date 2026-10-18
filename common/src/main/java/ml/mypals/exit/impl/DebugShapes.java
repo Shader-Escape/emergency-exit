@@ -32,6 +32,11 @@ public final class DebugShapes {
 	public static final double DISTANCE = 5;
 	private static final ResourceLocation WHITE = ExitMod.id("textures/misc/white.png");
 	private static final int FULL_BRIGHT = 0xF000F0;
+	/**
+	 * One builder for the immediate drawing while a portal routes. It is reused, as vanilla reuses Tesselator's
+	 * builder: {@code BufferBuilder} mallocs its store and nothing frees it, so a new one every frame leaks.
+	 */
+	private static final BufferBuilder IMMEDIATE = new BufferBuilder(1536);
 
 	/** The centre of the middle box, or null while the shapes are off. */
 	private static @Nullable Vec3 center;
@@ -116,7 +121,7 @@ public final class DebugShapes {
 			if (redirected) {
 				STATS.portalRedirectedPasses++;
 				// The portal bound the channel's framebuffer, so the drawing lands in the channel when flushed here.
-				MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(new BufferBuilder(1536));
+				MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(IMMEDIATE);
 				box(immediate, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
 				immediate.endBatch();
 			} else {

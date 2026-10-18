@@ -98,9 +98,6 @@ public final class SmokeTest {
 		if (this.ticks == 1) {
 			// The check runs unattended, and a pause menu would cover the screenshots.
 			mc.options.pauseOnLostFocus = false;
-			// The window is hidden, so nothing needs the frames to be fast, and each frame that is drawn costs the
-			// development client a little native memory. 30 frames per second leaves room for the whole run.
-			mc.options.framerateLimit().set(30);
 		}
 		if (mc.level != null && mc.player != null) {
 			this.ticksInWorld++;
@@ -206,15 +203,10 @@ public final class SmokeTest {
 			}
 			case 220 -> screenshot(mc, "main_depth");
 			case 221 -> {
-				DebugView.set(DebugView.Mode.TRANSLUCENT_DEPTH, Exit.MAIN);
-				log("scene translucent_depth: debug view " + DebugView.Mode.TRANSLUCENT_DEPTH.id());
-			}
-			case 236 -> screenshot(mc, "translucent_depth");
-			case 237 -> {
 				DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
 				log("scene debug_off: debug view " + DebugView.Mode.OFF.id());
 			}
-			case 252 -> screenshot(mc, "debug_off");
+			case 236 -> screenshot(mc, "debug_off");
 			case 253 -> log("scene shapes_off: shapes " + (DebugShapes.toggle(mc.player) ? "on" : "off"));
 			case 268 -> screenshot(mc, "shapes_off");
 			case 269 -> {
@@ -226,6 +218,17 @@ public final class SmokeTest {
 			// Water flows, so it is placed only a few ticks before the screenshot; placed earlier it has spread over
 			// the whole view and the boxes it is meant to cover cannot be told apart from the rest.
 			case 293 -> this.waterWall = fillBetween(mc, 1, -2.5, 0.5, 1, "minecraft:water", "water");
+			// The translucent-only depth is only worth a screenshot where there are translucent surfaces, so it is
+			// taken here, with the water up, instead of earlier from the side view, which holds none and came out blank.
+			case 294 -> {
+				DebugView.set(DebugView.Mode.TRANSLUCENT_DEPTH, Exit.MAIN);
+				log("scene translucent_depth: the water is up, debug view " + DebugView.Mode.TRANSLUCENT_DEPTH.id());
+			}
+			case 298 -> screenshot(mc, "translucent_depth");
+			case 299 -> {
+				DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
+				log("scene water: debug view back to " + DebugView.Mode.OFF.id());
+			}
 			case 300 -> screenshot(mc, "water");
 			case 301 -> clearBetween(mc, this.waterWall, "water");
 			case 302 -> {
