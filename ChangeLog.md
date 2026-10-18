@@ -13,6 +13,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20.6 | `port/1.20.6` | 21 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.4 | `port/1.20.4` | 17 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
+| 1.20.1 | `port/1.20.1` | 17 | 混淆，Mojang 映射 | 1.7.6 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 
 ## 26.2（相对 26.3）
@@ -233,6 +234,38 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `renderShadows`）。
 
 其余同 1.20.4。
+
+## 1.20.1（相对 1.20.2）
+
+**构建**
+- 变成**单个 Fabric Loom 工程**（同 LitematicaPass）：1.20.1 没有 ModDevGradle 能用的 NeoForm 构建，`common` 子工程根本
+  建不起来。`common/src/main/java` 移进 `fabric/src/main/java`，`common/src/main/resources` 移进
+  `fabric/src/main/resources`，`common/src/smoke` 移进 `fabric/src/smoke`；`common` 子工程和 build-logic 的 multiloader
+  插件都删掉，`fabric/build.gradle` 直接是 fabric-loom-remap 工程（`minecraft(...)`、`loom.officialMojangMappings()`、
+  fabric-loader、fabric-api、Iris/Sodium 用 `modCompileOnly` + `modLocalRuntime`、`nestedLibraries`、client /
+  smokeClient / auditClient 三个运行配置、smoke 和 audit source set，以及展开 `fabric.mod.json` 和 `*.mixins.json` 的
+  processResources），`neoforge` 插件也删掉。API 包名（`ml.mypals.exit.*`）不变。
+- Fabric API `0.92.12+1.20.1`；Iris 1.7.6（Modrinth `YL57xq9U:s5eFLITc`）、Sodium `AANobbMI:OihdIimA`
+  （`mc1.20.1-0.5.13`）。
+- Sodium 0.5.13 拒绝开发运行里 LWJGL 的 snapshot 版本（它只认 3.3.1），开发运行要加
+  `-Dsodium.checks.issue2561=false`。
+
+**包名和类（Iris 又搬回 net.irisshaders）**
+- Iris 1.7.6 用新包名：`net.irisshaders.iris.Iris`、`net.irisshaders.iris.vertices.ImmediateState`、
+  `net.irisshaders.iris.pipeline.WorldRenderingPhase`。
+- 管线类 `NewWorldRenderingPipeline` → `net.irisshaders.iris.pipeline.IrisRenderingPipeline`
+  （`shouldOverrideShaders` / `getPhase` 仍在）。
+- 冒烟测试的 Iris 阴影钩子目标改成 `net.irisshaders.iris.shadows.ShadowRenderer`（字段 `ACTIVE`、方法
+  `renderShadows`）。
+- 除这三个文件外一行源码都没改。
+
+**开发运行**
+- 运行目录 `run/fabric-1.20.1`；冒烟测试无光影和 BSL 光影各跑一次都是 `RESULT: OK`（BSL：2184 次改道绘制、1934 帧按
+  深度混合、阴影回调里 EXIT 画了 0 次）；`runAuditClient` 每个 mixin 都应用成功。
+- 无光影时画面里只有黄色盒子（红色和绿色提交给关卡自己的 buffer source，这里没画它们），有光影的那组是四色盒子加三张
+  调试视图，和 `port/1.20.2` 的对应画面一致（截图在 `smoke-shots/1.20.1/fabric-none` 和 `fabric-bsl`）。
+
+其余同 1.20.2。
 
 ## 1.18.2（相对 1.20.2）
 
