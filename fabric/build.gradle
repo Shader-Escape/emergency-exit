@@ -1,7 +1,28 @@
 plugins {
-    id 'multiloader-loader'
-    // Minecraft 1.20.6 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    id 'java-library'
+    id 'maven-publish'
+    // Minecraft 1.20 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
+}
+
+base {
+    archivesName = "${mod_id}-fabric"
+}
+
+// Minecraft 1.20.1 and older have no NeoForm build for ModDevGradle, so there is no `common` subproject: everything,
+// including the loader-independent code, lives here.
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = uri('https://api.modrinth.com/maven')
+            }
+        }
+        filter {
+            includeGroup('maven.modrinth')
+        }
+    }
 }
 
 // The libraries nested in the Iris and Sodium jars (their Fabric API modules aside), for the development runtime.
@@ -40,6 +61,11 @@ dependencies {
     localRuntime(fileTree(nestedLibraries.map { it.destinationDir }) { include '*.jar' }.builtBy(nestedLibraries))
 }
 
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+}
+
 // Development mod that checks every mixin applies. Run it with runAuditClient.
 sourceSets.create('audit') {
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
@@ -48,10 +74,28 @@ sourceSets.create('audit') {
 
 // Development mod that creates a world and checks the rendering. Run it with runSmokeClient.
 sourceSets.create('smoke') {
-    java.srcDirs = [project(':common').file('src/smoke/java'), file('src/smoke/java')]
-    resources.srcDirs = [project(':common').file('src/smoke/resources'), file('src/smoke/resources')]
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
     runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+}
+
+def expandProps = [
+        'version'                 : version,
+        'minecraft_version_range' : minecraft_version_range,
+        'fabric_loader_version'   : fabric_loader_version,
+        'mod_name'                : mod_name,
+        'mod_author'              : mod_author,
+        'mod_id'                  : mod_id,
+        'license'                 : license,
+        'description'             : project.findProperty('description'),
+        'java_version'            : java_version,
+        'mixin_java'              : "JAVA_${java_version}"
+]
+
+processResources {
+    inputs.properties(expandProps)
+    filesMatching(['fabric.mod.json', '*.mixins.json']) {
+        expand(expandProps)
+    }
 }
 
 def smokeProps = ['mixin_java': "JAVA_${java_version}".toString()]
@@ -59,6 +103,13 @@ tasks.named('processSmokeResources', ProcessResources) {
     inputs.properties(smokeProps)
     filesMatching('*.mixins.json') {
         expand(smokeProps)
+    }
+}
+
+def licenseName = "LICENSE_${mod_name}"
+tasks.withType(Jar).configureEach {
+    from(rootProject.file('LICENSE')) {
+        rename { licenseName }
     }
 }
 
@@ -101,20 +152,11 @@ tasks.named('runAuditClient') {
     doFirst { exported.deleteDir() }
 }
 
-def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-['apiElements', 'runtimeElements', 'sourcesElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    configurations.named(variant) {
-        attributes {
-            attribute(loaderAttribute, 'fabric')
-        }
-    }
-}
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
-        configurations.named(variant) {
-            attributes {
-                attribute(loaderAttribute, 'fabric')
-            }
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
         }
     }
 }

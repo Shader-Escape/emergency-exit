@@ -21,6 +21,6 @@ plugins {
 }
 
 rootProject.name = 'emergency-exit'
-includeBuild('build-logic')
-include('common')
+// Minecraft 1.20.1 and older have no NeoForm build for ModDevGradle, so there is no `common` subproject: the whole mod
+// lives in `fabric`, which Loom remaps from Mojang names, like LitematicaPass.
 include('fabric')
