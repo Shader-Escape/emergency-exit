@@ -6,8 +6,10 @@
 <style>
 /* 布局：正文一列；中间是一张四泳道的大流程图（可横向滚动），节点里嵌截图。
    编辑说明：
-   - 流程图的节点和连线都在页面底部 <script> 的 NODES、EDGES 两个数组里，改文字、换图、调位置都只改数据。
-   - 图片在 img/frame/，由冒烟测试的 FrameDump 生成（run/fabric/screenshots/exit-frame-dump）。 */
+   - 流程图的泳道、节点、连线都在同目录的 flow.json 里，改文字、换图、调位置都只改它。
+     也可以在页面上点“编辑文字”直接改，再点“保存”。
+   - 图片在 img/frame/，由冒烟测试的 FrameDump 生成（run/fabric/screenshots/exit-frame-dump）。
+   - 本地查看要用 http 打开（python -m http.server --directory docs/render-scale），直接双击文件读不到 flow.json。 */
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -119,6 +121,20 @@ dialog.zoom figcaption { color: var(--fg); font-size: 0.95rem; }
 dialog.zoom button { justify-self: end; font: inherit; font-size: 0.85rem; background: var(--code-bg); color: var(--fg);
   border: 1px solid var(--line); border-radius: 6px; padding: 0.2rem 0.8rem; cursor: pointer; }
 
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.toolbar button {
+  font: inherit; font-size: 0.88rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0.3rem 0.9rem; cursor: pointer;
+}
+.toolbar button:hover { border-color: var(--depth); }
+.toolbar button[aria-pressed="true"] { background: var(--depth); border-color: var(--depth); color: var(--surface); }
+.toolbar button#btn-save { border-color: var(--merge); color: var(--merge); font-weight: 500; }
+.toolbar button:disabled { opacity: 0.5; cursor: default; }
+.toolbar .status { font-size: 0.85rem; color: var(--muted); }
+.flow.editing [data-field] { outline: 1px dashed var(--probe); outline-offset: 2px; border-radius: 2px; cursor: text; }
+.flow.editing [data-field]:focus { outline-style: solid; background: var(--code-bg); }
+.flow.editing .imgs img { cursor: default; }
+.flow-empty { grid-column: 1 / -1; grid-row: 2; z-index: 2; padding: 1.5rem; color: var(--muted); }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; min-width: 32rem; }
 th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; border-bottom: 1px solid var(--line); }
@@ -163,12 +179,18 @@ td.num { font-family: var(--font-mono); }
       <span><i class="swatch" style="border-color: var(--merge)"></i>合并</span>
       <span>深度图：越近越白，远处是深蓝；<span style="color: var(--probe)">橙色</span>是标出的区域；棋盘格是透明</span>
     </div>
+    <div class="toolbar" role="toolbar" aria-label="流程图操作">
+      <button type="button" id="btn-edit" aria-pressed="false">编辑文字</button>
+      <button type="button" id="btn-save" hidden>保存</button>
+      <button type="button" id="btn-export">导出图片</button>
+      <span class="status" id="status" role="status"></span>
+    </div>
     <div class="flow-scroll">
       <div class="flow" id="flow">
         <svg class="edges" id="edges" aria-hidden="true"></svg>
       </div>
     </div>
-    <p class="note">点图片可以放大。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出：<code>./gradlew :fabric:runSmokeClient</code>，854×480，光影 Kappa v5.3。</p>
+    <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出：<code>./gradlew :fabric:runSmokeClient</code>，854×480，光影 Kappa v5.3。</p>
   </section>
 
   <section class="stack" aria-labelledby="scale-title">
@@ -213,172 +235,133 @@ td.num { font-family: var(--font-mono); }
 </main>
 
 <script>
-/* ===================== 流程图数据：改这里 =====================
-   lane：1 光影（Iris）  2 场景深度  3 EXIT 通道  4 合并
-   row：从 2 开始往下（第 1 行是泳道标题），同一行同一泳道只能放一个节点
-   kind：pack / depth / probe / channel / merge（决定边框颜色）
-   imgs：[["图片路径", "小标题", 裁剪], ...]，一个节点可以放一到两张。
-         裁剪可省略；写成 [x, y, 宽, 高]，单位是截图像素（854×480，原点左上角），只影响节点里的小图，点开仍是整张。 */
-const BOXES = [210, 140, 420, 140];   // 四个彩色方块所在的区域
-const LANES = [
-  ["光影（Iris）", "光影用自己的着色器画世界"],
-  ["场景深度", "EXIT 在光影画到一半时复制的深度"],
-  ["EXIT 通道", "模组的东西，用原版着色器画"],
-  ["合并", "帧末按深度叠回光影画面"],
-];
-
-const F = "img/frame/";
-const NODES = [
-  { id: "shadow", lane: 1, row: 2, kind: "pack", when: "帧开始",
-    title: "阴影 pass", text: "光影画阴影贴图。EXIT 在这里什么都不画，模组的东西不会投出光影的阴影。" },
-  { id: "collect", lane: 3, row: 2, kind: "channel", when: "整个关卡渲染期间",
-    title: "模组提交绘制", text: "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先把要画的东西收集起来，等光影画完再画进 EXIT 的通道。" },
-
-  { id: "gbuf", lane: 1, row: 3, kind: "pack", when: "gbuffers",
-    title: "光影画不透明世界", text: "天空、地形、石头这些不透明的东西。顶点着色器把 xy × 0.75，所以深度缓冲里的东西缩在左下角。",
-    imgs: [[F + "01-pack-depth-before-hand.png", "光影的深度（缩放空间）"]] },
-  { id: "noHand", lane: 2, row: 3, kind: "depth", when: "Iris beginHand",
-    title: "复制：没有手的深度", text: "手还没画。复制时按 a、b 重采样，石头回到画面里的位置。",
-    imgs: [[F + "02-no-hand-aligned.png", "对齐后"]] },
-
-  { id: "hand", lane: 1, row: 4, kind: "pack", when: "gbuffers_hand",
-    title: "光影画手", text: "手也被缩放，出现在缓冲右下偏左的位置。",
-    imgs: [[F + "03-pack-depth-before-translucents.png", "加上手的深度（缩放空间）"]] },
-  { id: "probe", lane: 2, row: 4, kind: "probe", when: "第一次 beginHand",
-    title: "量缩放：探针", text: "用光影的程序画一个覆盖中间 90% 的四边形（不写颜色，画完复原深度），看深度哪里变了。测得 x 0.75、y 0.75，偏移约 0。",
-    imgs: [[F + "05-probe-mask.png", "探针落点（红）"]] },
-
-  { id: "transl", lane: 1, row: 5, kind: "pack", when: "gbuffers_water 等",
-    title: "光影画半透明", text: "浅蓝玻璃写进深度，但不在之前的两份复制里。",
-    imgs: [[F + "07-main-depth-end.png", "带玻璃的深度（缩放空间）"]] },
-  { id: "opaque", lane: 2, row: 5, kind: "depth", when: "Iris beginTranslucents",
-    title: "复制：没有半透明的深度", text: "有手、没有玻璃。同样重采样对齐。",
-    imgs: [[F + "04-opaque-aligned.png", "对齐后"]] },
-
-  { id: "packframe", lane: 1, row: 6, kind: "pack", when: "deferred → composite → final",
-    title: "光影的成品画面", text: "光照、雾、TAAU 放大都做完了。这时画面里还没有模组的方块。",
-    imgs: [[F + "06-pack-frame.png", "光影成品"]] },
-  { id: "mainAligned", lane: 2, row: 6, kind: "depth", when: "帧末",
-    title: "最终深度也对齐", text: "合并时要用最终深度找玻璃，同样先重采样。",
-    imgs: [[F + "08-main-depth-end-aligned.png", "对齐后（有玻璃）"]] },
-
-  { id: "seed", lane: 3, row: 7, kind: "channel", when: "帧末 · 通道第一次使用",
-    title: "通道打底", text: "清空通道，用“没有半透明的深度”打底，世界在前面就挡住通道；手的位置设成最近。透视通道（蓝）不让世界遮挡，只放手。",
-    imgs: [[F + "11-main-seeded.png", "主通道"], [F + "10-debug_xray-seeded.png", "透视通道"]] },
-  { id: "draw", lane: 3, row: 8, kind: "channel", when: "原版着色器",
-    title: "画进通道", text: "绿色写颜色和深度；红色是半透明，被石头挡掉右下角，不写深度。",
-    imgs: [[F + "12-main-color.png", "主通道颜色", BOXES], [F + "13-main-depth.png", "主通道深度"]] },
-  { id: "fold", lane: 3, row: 9, kind: "channel", when: "合并前",
-    title: "补上半透明的深度", text: "半透明的东西再画一遍，只写深度到单独的缓冲，再取较近的折进通道深度，这样多个通道才能按前后排序。",
-    imgs: [[F + "14-main-translucent-depth.png", "半透明的深度"], [F + "15-main-depth-folded.png", "折叠后"]] },
-  { id: "others", lane: 3, row: 10, kind: "channel", when: "每个通道",
-    title: "其他通道同样处理", text: "黄色方块在 mix 通道；蓝色方块和青色线框在透视通道。",
-    imgs: [[F + "16-debug_mix-color.png", "mix 通道", BOXES], [F + "20-debug_xray-color.png", "透视通道", BOXES]] },
-
-  { id: "handMask", lane: 2, row: 9, kind: "depth", when: "合并时",
-    title: "找手", text: "“有手”和“没手”两份深度不一样的像素就是手（橙色）。通道在这里不画，手永远在最前。",
-    imgs: [[F + "24-hand-mask.png", "手的位置"]] },
-  { id: "transMask", lane: 2, row: 10, kind: "depth", when: "合并时",
-    title: "找半透明", text: "最终深度比“没有半透明的深度”更近的地方有玻璃（橙色）。通道如果在玻璃后面，就变暗到 50%。",
-    imgs: [[F + "25-translucent-in-front.png", "玻璃的位置"]] },
-
-  { id: "layer1", lane: 4, row: 11, kind: "merge", when: "ChannelBlend",
-    title: "叠第一个通道", text: "主通道去掉手的像素，玻璃后面的绿色下半部变暗。",
-    imgs: [[F + "26-layer-after-main.png", "混合层", BOXES], [F + "27-layer-depth-after-main.png", "混合层深度", BOXES]] },
-  { id: "layer2", lane: 4, row: 12, kind: "merge", when: "ChannelBlend",
-    title: "按深度叠 mix 通道", text: "每个像素比较深度，近的在前：绿色挡住黄色重叠的部分。",
-    imgs: [[F + "28-layer-after-debug_mix.png", "混合层", BOXES], [F + "29-layer-depth-after-debug_mix.png", "混合层深度", BOXES]] },
-  { id: "layer3", lane: 4, row: 13, kind: "merge", when: "ChannelBlend",
-    title: "叠透视通道", text: "蓝色方块和线框加入混合层。",
-    imgs: [[F + "30-layer-after-debug_xray.png", "混合层", BOXES], [F + "31-layer-depth-after-debug_xray.png", "混合层深度", BOXES]] },
-  { id: "final", lane: 4, row: 14, kind: "merge", when: "Composite",
-    title: "叠回光影画面", text: "混合层按透明度盖到光影成品上，得到最终画面。",
-    imgs: [[F + "32-final.png", "最终画面"]] },
-];
-
-/* 连线：[起点 id, 终点 id, 文字, 样式]；样式：pack / depth / probe / merge，probe 是虚线 */
-const EDGES = [
-  ["shadow", "gbuf", "", "pack"],
-  ["gbuf", "noHand", "复制 + 重采样", "depth"],
-  ["gbuf", "hand", "", "pack"],
-  ["noHand", "probe", "第一次：量缩放", "probe"],
-  ["hand", "transl", "", "pack"],
-  ["hand", "opaque", "复制 + 重采样", "depth"],
-  ["transl", "packframe", "", "pack"],
-  ["transl", "mainAligned", "帧末复制 + 重采样", "depth"],
-  ["collect", "seed", "等光影画完", "depth"],
-  ["opaque", "seed", "世界挡通道", "depth"],
-  ["noHand", "handMask", "", "depth"],
-  ["opaque", "handMask", "", "depth"],
-  ["mainAligned", "transMask", "", "depth"],
-  ["seed", "draw", "", "depth"],
-  ["draw", "fold", "", "depth"],
-  ["fold", "others", "", "depth"],
-  ["fold", "layer1", "", "merge"],
-  ["handMask", "layer1", "手的像素不画", "merge"],
-  ["transMask", "layer1", "玻璃后变暗", "merge"],
-  ["others", "layer2", "", "merge"],
-  ["layer1", "layer2", "", "merge"],
-  ["layer2", "layer3", "", "merge"],
-  ["layer3", "final", "", "merge"],
-  ["packframe", "final", "叠在光影成品上", "merge"],
-];
-/* ===================== 数据结束 ===================== */
-
+/* 流程图的数据在 flow.json：lanes（泳道）、nodes（节点）、edges（连线）。
+   节点：lane 1–4，row 从 2 开始往下，kind 决定边框颜色（pack / depth / probe / channel / merge），
+   imgs 里每张图可带 crop: [x, y, 宽, 高]（截图像素，854×480，原点左上角），只影响节点里的小图。
+   text 里可以用 <code>…</code>，其他标签会被去掉。 */
 (function () {
   const flow = document.getElementById("flow");
   const svg = document.getElementById("edges");
-  const laneBgs = ["--lane-a", "--lane-b", "--lane-c", "--lane-d"];
-  LANES.forEach(([name, sub], i) => {
-    const bg = document.createElement("div");
-    bg.className = "lane-bg";
-    bg.style.gridColumn = String(i + 1);
-    bg.style.gridRow = "1 / " + (Math.max(...NODES.map((n) => n.row)) + 1);
-    bg.style.background = "var(" + laneBgs[i] + ")";
-    flow.appendChild(bg);
-    const head = document.createElement("div");
-    head.className = "lane-head";
-    head.style.gridColumn = String(i + 1);
-    head.innerHTML = name + "<small>" + sub + "</small>";
-    flow.appendChild(head);
-  });
-
-  const byId = {};
-  NODES.forEach((n) => {
-    const el = document.createElement("article");
-    el.className = "node";
-    el.dataset.kind = n.kind;
-    el.style.gridColumn = String(n.lane);
-    el.style.gridRow = String(n.row);
-    let html = '<div class="when">' + n.when + "</div><h3>" + n.title + "</h3><p>" + n.text + "</p>";
-    if (n.imgs && n.imgs.length) {
-      html += '<div class="imgs" style="--n:' + n.imgs.length + '">';
-      n.imgs.forEach(([src, cap, crop]) => {
-        const img = '<img src="' + src + '" alt="' + n.title + "：" + cap + '" tabindex="0" data-cap="' + n.title + " · " + cap + '"';
-        if (crop) {
-          const [x, y, w, h] = crop;
-          const style = "width:" + (854 / w * 100) + "%;left:" + (-x / w * 100) + "%;top:" + (-y / h * 100) + "%";
-          html += '<figure><div class="crop" style="aspect-ratio:' + w + " / " + h + '">' + img + ' style="' + style + '"></div><figcaption>' + cap + "（局部）</figcaption></figure>";
-        } else {
-          html += "<figure>" + img + "><figcaption>" + cap + "</figcaption></figure>";
-        }
-      });
-      html += "</div>";
-    }
-    el.innerHTML = html;
-    flow.appendChild(el);
-    byId[n.id] = el;
-  });
-
-  const color = { pack: "var(--pack)", depth: "var(--depth)", probe: "var(--probe)", merge: "var(--merge)" };
+  const statusEl = document.getElementById("status");
+  const btnEdit = document.getElementById("btn-edit");
+  const btnSave = document.getElementById("btn-save");
+  const btnExport = document.getElementById("btn-export");
+  const LANE_BG = ["--lane-a", "--lane-b", "--lane-c", "--lane-d"];
+  const COLOR = { pack: "var(--pack)", depth: "var(--depth)", probe: "var(--probe)", merge: "var(--merge)" };
   const NS = "http://www.w3.org/2000/svg";
+  // 页面外壳提供的能力；本地打开时没有，按 null 处理。
+  const use = (name) => (window.claude && window.claude.use ? window.claude.use(name) : Promise.resolve(null));
+  const artifactP = use("artifact");
+  const downloadsP = use("downloads");
 
-  function draw() {
+  let data = null;
+  let editing = false;
+  let dirty = false;
+  let readOnly = false;
+  const byId = {};
+
+  function setStatus(text) { statusEl.textContent = text; }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // 只保留文字和 <code>，其他标签只留文字。
+  function cleanRich(source) {
+    let out = "";
+    source.childNodes.forEach((n) => {
+      if (n.nodeType === Node.TEXT_NODE) out += escapeHtml(n.textContent);
+      else if (n.nodeName === "CODE") out += "<code>" + escapeHtml(n.textContent) + "</code>";
+      else if (n.nodeName === "BR") out += " ";
+      else if (n.nodeType === Node.ELEMENT_NODE) out += cleanRich(n);
+    });
+    return out;
+  }
+  function richFromString(s) {
+    const t = document.createElement("template");
+    t.innerHTML = s;
+    return cleanRich(t.content);
+  }
+
+  function el(tag, cls, field, text, rich) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (field) e.dataset.field = field;
+    if (rich) e.innerHTML = richFromString(text);
+    else e.textContent = text;
+    return e;
+  }
+
+  function render() {
+    flow.querySelectorAll(".lane-bg, .lane-head, .node, .flow-empty").forEach((e) => e.remove());
+    Object.keys(byId).forEach((k) => delete byId[k]);
+    const lastRow = Math.max(2, ...data.nodes.map((n) => n.row));
+    data.lanes.forEach((lane, i) => {
+      const bg = document.createElement("div");
+      bg.className = "lane-bg";
+      bg.style.gridColumn = String(i + 1);
+      bg.style.gridRow = "1 / " + (lastRow + 1);
+      bg.style.background = "var(" + LANE_BG[i % LANE_BG.length] + ")";
+      flow.appendChild(bg);
+      const head = document.createElement("div");
+      head.className = "lane-head";
+      head.style.gridColumn = String(i + 1);
+      head.append(el("span", "", "lanes." + i + ".name", lane.name), el("small", "", "lanes." + i + ".sub", lane.sub));
+      flow.appendChild(head);
+    });
+    data.nodes.forEach((n, i) => {
+      const node = document.createElement("article");
+      node.className = "node";
+      node.dataset.kind = n.kind;
+      node.style.gridColumn = String(n.lane);
+      node.style.gridRow = String(n.row);
+      const base = "nodes." + i + ".";
+      node.append(el("div", "when", base + "when", n.when), el("h3", "", base + "title", n.title), el("p", "", base + "text", n.text, true));
+      if (n.imgs && n.imgs.length) {
+        const imgs = document.createElement("div");
+        imgs.className = "imgs";
+        imgs.style.setProperty("--n", n.imgs.length);
+        n.imgs.forEach((im, k) => {
+          const fig = document.createElement("figure");
+          const img = document.createElement("img");
+          img.src = im.src;
+          img.alt = n.title + "：" + im.caption;
+          img.tabIndex = 0;
+          img.dataset.cap = n.title + " · " + im.caption;
+          let holder = img;
+          if (im.crop) {
+            const [x, y, w, h] = im.crop;
+            holder = document.createElement("div");
+            holder.className = "crop";
+            holder.style.aspectRatio = w + " / " + h;
+            img.style.width = (854 / w * 100) + "%";
+            img.style.left = (-x / w * 100) + "%";
+            img.style.top = (-y / h * 100) + "%";
+            holder.appendChild(img);
+          }
+          const cap = document.createElement("figcaption");
+          cap.appendChild(el("span", "", base + "imgs." + k + ".caption", im.caption));
+          if (im.crop) cap.append("（局部）");
+          img.addEventListener("load", schedule);
+          fig.append(holder, cap);
+          imgs.appendChild(fig);
+        });
+        node.appendChild(imgs);
+      }
+      flow.appendChild(node);
+      byId[n.id] = node;
+    });
+    if (editing) setEditable(true);
+    schedule();
+  }
+
+  function drawEdges() {
+    if (!data) return;
     const box = flow.getBoundingClientRect();
     svg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
     svg.innerHTML = "";
     const defs = document.createElementNS(NS, "defs");
-    Object.keys(color).forEach((k) => {
+    Object.keys(COLOR).forEach((k) => {
       const m = document.createElementNS(NS, "marker");
       m.setAttribute("id", "arrow-" + k);
       m.setAttribute("viewBox", "0 0 10 10");
@@ -387,21 +370,20 @@ const EDGES = [
       m.setAttribute("orient", "auto-start-reverse");
       const p = document.createElementNS(NS, "path");
       p.setAttribute("d", "M0,0 L10,5 L0,10 z");
-      p.setAttribute("fill", color[k]);
+      p.setAttribute("fill", COLOR[k]);
       m.appendChild(p);
       defs.appendChild(m);
     });
     svg.appendChild(defs);
-
-    EDGES.forEach(([from, to, label, style]) => {
+    data.edges.forEach(({ from, to, label, style }) => {
       const a = byId[from], b = byId[to];
       if (!a || !b) return;
+      const kind = COLOR[style] ? style : "depth";
       const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
       const A = { l: ra.left - box.left, r: ra.right - box.left, t: ra.top - box.top, b: ra.bottom - box.top };
       const B = { l: rb.left - box.left, r: rb.right - box.left, t: rb.top - box.top, b: rb.bottom - box.top };
       let x1, y1, x2, y2, d;
-      const sameRow = Math.abs(A.t - B.t) < 4;
-      if (sameRow || (A.b > B.t && B.b > A.t)) {
+      if (A.b > B.t && B.b > A.t) {
         // 同一行：从侧面连到侧面
         const right = B.l >= A.r;
         x1 = right ? A.r : A.l; y1 = Math.min(A.t + 40, A.b - 10);
@@ -409,13 +391,10 @@ const EDGES = [
         const k = (x2 - x1) / 2;
         d = "M" + x1 + "," + y1 + " C" + (x1 + k) + "," + y1 + " " + (x2 - k) + "," + y2 + " " + x2 + "," + y2;
       } else if (B.t >= A.b) {
-        // 往下：从底边连到顶边
-        x1 = (A.l + A.r) / 2; y1 = A.b;
-        x2 = (B.l + B.r) / 2; y2 = B.t;
-        if (Math.abs(x1 - x2) > 20) {
-          // 跨泳道：从靠近目标的一侧出发
-          x1 = x2 > x1 ? A.r - 24 : A.l + 24;
-        }
+        // 往下：从底边连到顶边，跨泳道时从靠近目标的一侧出发
+        x2 = (B.l + B.r) / 2; y2 = B.t; y1 = A.b;
+        x1 = (A.l + A.r) / 2;
+        if (Math.abs(x1 - x2) > 20) x1 = x2 > x1 ? A.r - 24 : A.l + 24;
         const k = Math.max(30, (y2 - y1) / 2);
         d = "M" + x1 + "," + y1 + " C" + x1 + "," + (y1 + k) + " " + x2 + "," + (y2 - k) + " " + x2 + "," + y2;
       } else {
@@ -425,17 +404,17 @@ const EDGES = [
       const path = document.createElementNS(NS, "path");
       path.setAttribute("d", d);
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke", color[style]);
+      path.setAttribute("stroke", COLOR[kind]);
       path.setAttribute("stroke-width", "2");
-      if (style === "probe") path.setAttribute("stroke-dasharray", "6 4");
-      path.setAttribute("marker-end", "url(#arrow-" + style + ")");
+      if (kind === "probe") path.setAttribute("stroke-dasharray", "6 4");
+      path.setAttribute("marker-end", "url(#arrow-" + kind + ")");
       svg.appendChild(path);
       if (label) {
         const mid = path.getPointAtLength(path.getTotalLength() / 2);
         const t = document.createElementNS(NS, "text");
         t.setAttribute("x", mid.x); t.setAttribute("y", mid.y + 4);
         t.setAttribute("text-anchor", "middle");
-        t.setAttribute("fill", color[style]);
+        t.setAttribute("fill", COLOR[kind]);
         t.setAttribute("paint-order", "stroke");
         t.setAttribute("stroke", "var(--surface)");
         t.setAttribute("stroke-width", "5");
@@ -445,15 +424,159 @@ const EDGES = [
       }
     });
   }
-
   let pending = 0;
-  function schedule() { cancelAnimationFrame(pending); pending = requestAnimationFrame(draw); }
+  function schedule() { cancelAnimationFrame(pending); pending = requestAnimationFrame(drawEdges); }
   window.addEventListener("resize", schedule);
-  flow.querySelectorAll("img").forEach((img) => img.addEventListener("load", schedule));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
-  schedule();
 
-  // 点图放大
+  // ---------- 编辑和保存 ----------
+  function setEditable(on) {
+    flow.classList.toggle("editing", on);
+    flow.querySelectorAll("[data-field]").forEach((e) => {
+      if (on) e.setAttribute("contenteditable", "true");
+      else e.removeAttribute("contenteditable");
+    });
+  }
+
+  // 把页面上改过的文字写回 data。
+  function collect() {
+    flow.querySelectorAll("[data-field]").forEach((e) => {
+      const path = e.dataset.field.split(".");
+      let target = data;
+      for (let i = 0; i < path.length - 1; i++) target = target[path[i]];
+      const key = path[path.length - 1];
+      target[key] = key === "text" ? cleanRich(e).trim() : e.textContent.replace(/\s+/g, " ").trim();
+    });
+  }
+
+  flow.addEventListener("input", () => {
+    dirty = true;
+    btnSave.hidden = false;
+    btnSave.disabled = false;
+    setStatus("有没保存的修改");
+    schedule();
+  });
+  // 粘贴时只要纯文字。
+  flow.addEventListener("paste", (e) => {
+    if (!editing) return;
+    e.preventDefault();
+    const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+    document.execCommand("insertText", false, text);
+  });
+  flow.addEventListener("keydown", (e) => {
+    if (editing && e.key === "Enter" && e.target.dataset && e.target.dataset.field) e.preventDefault();
+  });
+
+  btnEdit.addEventListener("click", () => {
+    editing = !editing;
+    btnEdit.setAttribute("aria-pressed", String(editing));
+    btnEdit.textContent = editing ? "完成编辑" : "编辑文字";
+    btnSave.hidden = !editing && !dirty;
+    btnSave.disabled = !dirty;
+    setEditable(editing);
+    if (editing) setStatus(readOnly ? "这个页面你只能看，改了也存不了" : "点虚线框里的文字直接改，改完点“保存”");
+    else if (!dirty) setStatus("");
+  });
+
+  function downloadLocally(name, blob) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  btnSave.addEventListener("click", async () => {
+    collect();
+    const json = JSON.stringify(data, null, 2) + "\n";
+    btnSave.disabled = true;
+    const artifact = await artifactP;
+    if (!artifact) {
+      // 本地打开：下载改好的 flow.json，替换同目录的文件即可。
+      downloadLocally("flow.json", new Blob([json], { type: "application/json" }));
+      dirty = false;
+      setStatus("已下载 flow.json，用它替换 docs/render-scale/flow.json");
+      return;
+    }
+    setStatus("正在保存…");
+    try {
+      await artifact.publish({ "flow.json": { content: json, contentType: "application/json" } });
+      dirty = false;
+      setStatus("已保存为新版本");
+    } catch (e) {
+      const code = e && e.code;
+      if (code === "conflict") {
+        setStatus("有人先保存了新版本，页面正在刷新到那个版本，这次的修改没有保存");
+      } else if (code === "not_writer" || code === "not_granted" || code === "consent_required") {
+        readOnly = true;
+        setStatus("这个页面你只能看，不能保存");
+      } else if (code === "capability_disabled" || code === "capability_removed" || code === "not_declared") {
+        setStatus("这里不能保存，修改还留在页面上");
+      } else if (code === "rate_limited") {
+        btnSave.disabled = false;
+        setStatus("保存得太频繁了，稍等一会儿再点保存");
+      } else {
+        btnSave.disabled = false;
+        setStatus("保存没成功（" + (code || "未知错误") + "），可以再点一次");
+      }
+    }
+  });
+
+  // ---------- 导出图片 ----------
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (window.htmlToImage) return resolve();
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("load"));
+      document.head.appendChild(s);
+    });
+  }
+
+  btnExport.addEventListener("click", async () => {
+    btnExport.disabled = true;
+    setStatus("正在生成图片…");
+    const wasEditing = editing;
+    if (wasEditing) setEditable(false);
+    try {
+      await loadScript("https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js");
+      drawEdges();
+      const background = getComputedStyle(document.querySelector(".flow-scroll")).backgroundColor;
+      const blob = await window.htmlToImage.toBlob(flow, {
+        pixelRatio: 1.5,
+        backgroundColor: background,
+        skipFonts: true,
+        width: flow.scrollWidth,
+        height: flow.scrollHeight,
+      });
+      if (!blob) throw new Error("empty");
+      const downloads = await downloadsP;
+      if (!downloads) {
+        downloadLocally("exit-frame-flow.png", blob);
+        setStatus("图片已下载");
+        return;
+      }
+      try {
+        await downloads.save({ filename: "exit-frame-flow.png", data: blob });
+        setStatus("图片已导出");
+      } catch (e) {
+        const code = e && e.code;
+        if (code === "declined") setStatus("已取消导出");
+        else if (code === "rate_limited") setStatus("已经有一个保存窗口开着，先处理它");
+        else setStatus("这里不能下载图片（" + (code || "未知错误") + "）");
+      }
+    } catch (e) {
+      setStatus("图片没生成出来：导出工具没加载上，或浏览器不支持");
+    } finally {
+      if (wasEditing) setEditable(true);
+      btnExport.disabled = false;
+    }
+  });
+
+  // ---------- 点图放大 ----------
   const dialog = document.getElementById("zoom");
   const zImg = document.getElementById("zoom-img");
   const zCap = document.getElementById("zoom-cap");
@@ -461,9 +584,22 @@ const EDGES = [
     zImg.src = img.src; zImg.alt = img.alt; zCap.textContent = img.dataset.cap || img.alt;
     if (dialog.showModal) dialog.showModal();
   }
-  flow.addEventListener("click", (e) => { if (e.target.matches(".imgs img")) open(e.target); });
-  flow.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".imgs img")) open(e.target); });
+  flow.addEventListener("click", (e) => { if (!editing && e.target.matches(".imgs img")) open(e.target); });
+  flow.addEventListener("keydown", (e) => { if (!editing && e.key === "Enter" && e.target.matches(".imgs img")) open(e.target); });
   document.getElementById("zoom-close").addEventListener("click", () => dialog.close());
   dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
+
+  // ---------- 读数据 ----------
+  fetch("flow.json", { cache: "no-store" })
+    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then((json) => { data = json; render(); })
+    .catch(() => {
+      const msg = document.createElement("p");
+      msg.className = "flow-empty";
+      msg.textContent = "读不到 flow.json。本地查看请用 http 打开这个目录：python -m http.server --directory docs/render-scale，再访问 http://localhost:8000。";
+      flow.appendChild(msg);
+      btnEdit.disabled = true;
+      btnExport.disabled = true;
+    });
 })();
 </script>
