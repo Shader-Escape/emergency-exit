@@ -314,4 +314,4 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `shouldOverrideShaders` 返回 false（同 LitematicaPass）。
 - 核实过：Iris 1.8.8 只在 `MixinShaderManager_Overrides` 里、和 `shouldOverrideShaders` 一起读 bypass（给原版着色器挑程序时）；
   1.8.1 里没有混入调用 `getPhase`。所以移植说明里提到的 `getPhase` 返回 `NONE` 不需要。
-- 加宽规则同 1.8.8/1.8.11：`skipExtension` 管缓冲，`isRenderingLevel` 管格式。
+- `BufferBuilder` 的格式加宽和 1.8.8、1.8.11 一样只看 `skipExtension` 和光影包是否在用；批量照旧开缓冲时设 `skipExtension`、关 `isRenderingLevel`。
