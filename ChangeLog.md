@@ -17,6 +17,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20 | `port/1.20` | 17 | 混淆，Mojang 映射 | 1.6.4 |
 | 1.19.3 | `port/1.19.3` | 17 | 混淆，Mojang 映射 | 1.5.2 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
+| 1.16.5 | `port/1.16.5` | 16 | 混淆，Mojang 映射 | 1.4.5 |
 
 ## 26.2（相对 26.3）
 
@@ -372,3 +373,61 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   先删掉旧世界目录。
 
 其余同 1.20.2。
+
+
+## 1.16.5（相对 1.17.1）
+
+**构建**
+- 单个 Fabric Loom 工程（形状同 1.17.1）：`common` 的内容在 `fabric` 里，`build-logic` 和多加载器插件都已经删掉。
+- Fabric API `0.42.0+1.16`；Iris 1.4.5（Modrinth `YL57xq9U:1turazSM`）、Sodium `AANobbMI:YAGZ1cCS`；Java 16。
+- **Fabric API 在这个版本上的 mod id 还是 `fabric`**：`fabric-api` 这个 id（和 `provides: fabric`）是后来的事。
+  `fabric.mod.json` 里写 `fabric-api` 会让 Fabric Loader 直接拒绝启动：
+  `HARD_DEP_NO_CANDIDATE emergency_exit ... {depends fabric-api @ [*]}`。要依赖 `fabric`。
+- 这一代的 Fabric API 在 Maven 上是个空壳 jar（只有 `fabric.mod.json` 和图标），真正的模块（`fabric-command-api-v1`、
+  `fabric-lifecycle-events-v1`、`fabric-rendering-v1` 等）由它的 POM 作为依赖拉进来，启动日志里是 56 个模组。
+- 客户端命令仍是 Fabric API v1 的 `ClientCommandManager`（没有 `ClientCommandRegistrationCallback`）。
+
+**渲染（没有核心着色器，固定功能管线）**
+- **没有 `TextureTarget`：`RenderTarget` 自己就是带纹理的目标**，`new RenderTarget(w, h, true, Minecraft.ON_OSX)`。
+- `RenderSystem` 还没有 `getModelViewStack` / `applyModelViewMatrix` / `getProjectionMatrix` / `setProjectionMatrix`：
+  关卡的视旋转和投影就在 GL 矩阵栈上。EXIT 自己画通道时（portal 和批次）用
+  `RenderSystem.matrixMode(GL_PROJECTION) → pushMatrix() → loadIdentity() → multMatrix(投影)`，MODELVIEW 同理，
+  画完 pop 回去（`GameRenderer.resetProjectionMatrix` 就是这个写法）。`ExitRuntime` 的两个矩阵字段因此不再是
+  `final`，`savedProjection` 也不需要了。
+- `com.mojang.math.Matrix4f` 没有 `load(Matrix4f)`，只有拷贝构造（`new Matrix4f(other)`）。
+- `GlStateManager` 没有 `_glGenVertexArrays` / `_glBindVertexArray` / `_getActiveTexture`：用
+  `GL30.glGenVertexArrays()`、`GL30.glBindVertexArray(...)`、`GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE)`。
+- `RenderType.format()` / `mode()` 还在，`BufferBuilder.begin(int mode, VertexFormat)` 收 int，批次那段基本不动；
+  但 `VertexConsumer` 还没有 `defaultColor` / `unsetDefaultColor`，`DualConsumer` 不再实现这两个。
+- 消息是 `new TextComponent(...)`，日志走 Log4j（`LogManager.getLogger`）；`Entity.getEyePosition()` 要传 partial tick。
+
+**Iris 1.4.5（固定功能时代的 Iris）**
+- 包名 `net.coderbot.iris`（`Iris`、`net.coderbot.iris.vertices.ImmediateState`），`IrisApi` 仍在
+  `net.irisshaders.iris.api.v0`。
+- 管线是 `net.coderbot.iris.pipeline.DeferredWorldRenderingPipeline`（没有 `NewWorldRenderingPipeline`）：
+  `IrisRenderingPipelineMixin`（`beginHand` / `beginTranslucents`）、`LegacyIrisPipelineAccessor`
+  （`@Mixin(targets = ...DeferredWorldRenderingPipeline)` + `@Accessor("renderTargets")`）、以及
+  `IrisHooks.sceneDepthTexture()` 都指向它；`RenderTargets.getDepthTexture()` 直接返回纹理 id，不是 `DepthTexture`。
+- **旁路开关换成 `setIsMainBound`**：把 `PipelineManager.getPipelineNullable()` 变成 null 对固定功能没用，
+  Iris 只在它认为"主目标被绑定"时才绑自己的程序。所以 `IrisShaderOverrideMixin` 改成在
+  `DeferredWorldRenderingPipeline.setIsMainBound` 的参数上做 `@ModifyVariable`，`IrisHooks.setBypass` 另外直接调
+  `getRenderTargetStateListener().setIsMainBound(!bypass)`。
+- `ImmediateState.isRenderingLevel` 这一代就有，所以 `isRenderingLevel` / `setRenderingLevel` 是真的起作用
+  （1.17.1 那种空实现是特例）。
+- 冒烟测试的阴影钩子仍是 `net.coderbot.iris.pipeline.ShadowRenderer`（字段 `ACTIVE`、方法 `renderShadows`）。
+
+**开发运行**
+- 运行目录 `run/fabric-1.16.5`；无光影和 BSL 各跑一次都是 `RESULT: OK`（无光影：2222 次绘制、0 次改道；
+  BSL：2101 次绘制全部改道、2101 个 portal 把通过移进通道、0 次不匹配、1864 帧按深度混合、阴影回调里 EXIT 画了 0 次）。
+  `runAuditClient` 每个 mixin 都应用（`GlStateManagerMixin` 三个、`LevelRendererMixin` 两个、`MinecraftMixin`、
+  `IrisRenderingPipelineMixin` 两个、`IrisShaderOverrideMixin`）。
+- **模组自己的资源在开发运行里看不见**（1.16.5 如此，1.17.1 也一样）：Fabric Loader 会警告
+  `getRootPath access for emergency_exit ... with multiple paths, returning only one`，因为这一代 Fabric API 的
+  fabric-resource-loader 还调旧的 `getRootPath()`（只拿到 classes 目录），`assets/emergency_exit/**` 就取不到。
+  于是 `DebugShapes` 的 `white.png` 加载失败（`Failed to load texture: emergency_exit:textures/misc/white.png`），
+  测试盒子画成黑色而不是四色；功能检查不受影响（打包成 jar、或 1.18.2 及以后，都没有这个问题）。
+- 冒烟测试要按 1.16.5 的建世界界面改：没有 `WorldCreationUiState`，也没有 `CycleButton`（游戏模式是一个普通
+  `Button`，按一下 生存→极限→创造，按钮标题就是当前模式）；飞行用 `player.abilities.flying`；截图用带
+  width/height 的 `Screenshot.grab(...)`。
+
+其余同 1.17.1。
