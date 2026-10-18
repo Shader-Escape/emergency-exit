@@ -249,8 +249,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 * `./gradlew build`：构建两个加载器的 jar（`fabric/build/libs`、`neoforge/build/libs`）。
 * `./gradlew :fabric:runSmokeClient`、`./gradlew :neoforge:runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes`
-  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric-1.21.10` 和 `run/neoforge-1.21.10`，要测试改道，需要在
-  其中的 `shaderpacks` 放入光影包并在 `config/iris.properties` 里启用。
+  的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa 等都放进去）。
+  每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
+  日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是
+  `run/fabric-1.21.10` 和 `run/neoforge-1.21.10`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
   但 SR 没有 1.21.10 的版本，开发运行不加载它。
