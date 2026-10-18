@@ -11,6 +11,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 26.1.2 | `port/26.1.2` | 25 | 无混淆 | 1.11.4（26.1） |
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
 | 1.20.6 | `port/1.20.6` | 21 | 混淆，Mojang 映射 | 1.7.2 |
+| 1.20.4 | `port/1.20.4` | 17 | 混淆，Mojang 映射 | 1.7.2 |
 
 ## 26.2（相对 26.3）
 
@@ -192,3 +193,23 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 **开发运行**
 - 运行目录 `run/fabric-1.20.6`；冒烟测试无光影与 BSL 光影各跑一次都 `RESULT: OK`；`runAuditClient` 每个 mixin 都应用。
+
+## 1.20.4（相对 1.20.6）
+
+**构建**
+- Java 17（1.20.5 起才是 21）。
+- common 的 NeoForm 用 `1.20.4-20240627.114801`：`1.20.4-20231207.154220` 没有 ModDevGradle 需要的
+  `neoform-dependencies` 能力变体，依赖解析会失败。
+- Fabric API `0.97.3+1.20.4`；Iris 1.7.2、Sodium 见 `gradle.properties`。
+
+**包名和类**
+- `RenderSystem.getModelViewStack()` 是 `PoseStack`（1.20.5 起才是 `Matrix4fStack`）：用 `pushPose`/`popPose` 与
+  `last().pose().set(...)`。
+- `VertexConsumer.vertex`/`normal` 只收 `Matrix4f`/`Matrix3f`，没有 `PoseStack.Pose` 重载：写顶点时用
+  `pose.pose()` / `pose.normal()`。
+
+**关卡钩子**
+- `LevelRenderer.renderLevel(PoseStack 视图旋转, float, long, boolean, Camera, GameRenderer, LightTexture, Matrix4f 投影)`：
+  视图旋转是第一个 `PoseStack` 参数，投影是最后一个 `Matrix4f`。
+
+其余同 1.20.6。
