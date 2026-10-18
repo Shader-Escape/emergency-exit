@@ -21,8 +21,8 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 | 用途 | Fabric | NeoForge |
 |---|---|---|
 | 提交到批量 | `LevelRenderEvents.COLLECT_SUBMITS` | `SubmitCustomGeometryEvent` |
-| 在主渲染通道内（即时绘制会被推迟到批量） | `LevelRenderEvents.AFTER_SOLID_FEATURES` 等 | `RenderLevelStageEvent.AfterOpaqueFeatures` 等 |
-| 主渲染通道之后、不在任何通道内（即时绘制、portal） | `LevelRenderEvents.END_MAIN` | 没有对应的事件 |
+| 绘制（记进批量） | `LevelRenderEvents.AFTER_SOLID_FEATURES`、`END_MAIN` 等 | `RenderLevelStageEvent.AfterOpaqueFeatures` 等 |
+| 主渲染通道之后、不在任何通道内（portal） | `LevelRenderEvents.END_MAIN` | 没有对应的事件 |
 
 NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才触发，那时 EXIT 已经合并完本帧，在里面调用会被丢弃。
 
@@ -37,10 +37,9 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 | **场景深度** | EXIT 在光影包画手部之前，画半透明表面之前各复制一次的主深度。用来初始化通道目标的深度（世界遮挡），以及合并时找出手部和半透明表面。                                                     |
 | **合并**（`composite`） | 关卡渲染结束时，把各通道目标按深度画回主目标。手部所在像素丢弃，半透明表面之后的部分变暗。 |
 | **通道混合**（`blendWithChannels`） | 合并前，参与混合的通道先依次并入一张累积层：逐像素比较深度，近的盖在远的上面（按两边的 alpha 混合），然后累积层作为一层合并到画面上。 |
-| **即时绘制**（`draw`） | 给一个托管上下文（`SubmitNodeCollector`、相机相对的 `PoseStack`、相机），lambda 返回后立即渲染进通道目标。                                                |
+| **绘制**（`draw`） | 给一个托管上下文（`SubmitNodeCollector`、相机相对的 `PoseStack`、相机），lambda 立即执行，提交的内容记进通道的批量。 |
 | **`RenderPass`**（渲染通道） | Minecraft 的一次绘制批次，同一时刻只能开一个，和 EXIT 的通道无关。 |
-| **推迟**（`deferred`） | 在已打开的 `RenderPass` 里，或关卡渲染通道**开始之前**调用即时绘制时，lambda 照常执行，但提交的内容并入批量稍后再画。                                                  |
-| **批量**（`batch`） | 本帧随时往里提交的收集器，关卡渲染结束时一次性画进通道目标。可用 `flushBatch()` 提前。                                                                      |
+| **批量**（`batch`） | 本帧随时往里提交的收集器，关卡渲染结束时和 `draw` 记下的内容一起，在一帧里画进通道目标：先实体，后半透明。可用 `flushBatch()` 提前。 |
 | **直通收集器** | 传给绘制方法的原版收集器（可为 `null`），不改道时绘制直接交给它。                                                                                     |
 | **bypass** | Iris 的开关 `ImmediateState.bypass`：打开时光影包不再把原版管线换成自己的程序。改道的绘制都在它打开时进行。                                                     |
 | **portal**| 一个明确的区间，执行期间按 `PortalOverrides` 设置 Iris 的开关（bypass、顶点格式加宽、`isRenderingLevel`），结束后恢复。给已有渲染上下文的代码用。改道时，区间内新开的、画进主目标的渲染通道会自动改画进通道目标。 |
@@ -69,7 +68,7 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 
 所有调用都要在渲染线程上、关卡渲染进行期间进行，比如 Fabric 的 `LevelRenderEvents` 或 NeoForge 的渲染事件（见上文"加载器"）。
 
-### 1. 即时绘制（托管上下文）
+### 1. 绘制（托管上下文）
 
 ```java
 LevelRenderEvents.END_MAIN.register(context ->
@@ -81,12 +80,10 @@ LevelRenderEvents.END_MAIN.register(context ->
     }));
 ```
 
-lambda 立即执行。返回后把提交的内容渲染进通道目标。
+lambda 立即执行，提交的内容记进通道的批量，在关卡渲染结束时和批量一起画（见"顺序"）。
 第一个参数是"直通收集器"（可为 `null`），不改道（比如没有加载光影包）时，绘制直接交给它。
->高版本已经有`SubmitNodeCollector`，同一次提交里的内容会按渲染类型合批，所以`draw()`和`batch()`的差别主要在什么时候画：
-在渲染通道之外调用的`draw()`会在`lambda`返回时立刻画进通道目标，`batch()` 则到关卡渲染结束才画。`draw()` 另外提供改道用的收集器
-`（ExitContext.collector()）`和绘制需要的上下文（相机、`PoseStack`、`target()`、`openPass`）。
-在没有 `SubmitNodeCollector` 的旧版本分支（1.21.9 之前），这个托管上下文的作用会更大。
+>`draw()` 和 `batch()` 画的时间相同，`draw()` 只是多给一个托管上下文（相机、相机相对的 `PoseStack`）。
+要自己开 `RenderPass` 画，请用 portal。
 
 | 方法 | 说明 |
 |---|---|
@@ -94,10 +91,7 @@ lambda 立即执行。返回后把提交的内容渲染进通道目标。
 | `poseStack()` | 位于相机位置的 `PoseStack`（相机相对坐标，不含旋转） |
 | `cameraPos()` / `camera()` | 相机位置 / 本帧的 `CameraRenderState` |
 | `partialTick()` | 相机实体本帧的 partial tick |
-| `modelView()` | 视图旋转矩阵，自己开 RenderPass 时用作 model-view |
-| `target()` | 绘制去向：改道时是通道目标，否则是主目标 |
-| `openPass(label)` | 打开一个画进 `target()` 的 `RenderPass`，已绑定默认 uniform 和关卡投影；返回前自行关闭 |
-| `deferred()` | 提交的内容是否被推迟到批量里绘制（见下文"已打开的渲染通道"） |
+| `modelView()` | 视图旋转矩阵，EXIT 画提交内容时用的 model-view |
 | `routed()` | 这次绘制是否绕过了光影包 |
 
 ### 2. portal 区间（已有渲染上下文的代码）
@@ -138,7 +132,7 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
   portal 里调用会抛出 `IllegalStateException`。在区间内外都可能会跑的代码，执行前务必检查`Exit.isRouting()`或 `Exit.inPortal()`。
 * **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（主目标上的新 RenderPass 被换到通道目标，`redirect` 返回通道目标；否则都保持原样）；
   开关在有光影包且不在阴影通道时就会设置（关卡渲染之外也是）。阴影通道里 lambda 不执行。
-* **嵌套。** portal 可以嵌套，但同一时间只能在一个通道上；里面的即时绘制（须在同一通道）沿用 portal 设好的开关。
+* **嵌套。** portal 可以嵌套，但同一时间只能在一个通道上；里面的绘制（须在同一通道）沿用 portal 设好的开关。
 * **异线程（编译 VBO 等需求）。** 在非渲染线程调用 portal 时，只设置**当前线程**的 `skipExtension`，
   `bypass` 和 `renderingLevel` 是全局渲染状态，不会被设置。`redirect` 同样不可用。只想关掉格式加宽时，用更直接的
   `Exit.plainFormat(Runnable)`或许是更好的选择。
@@ -155,8 +149,8 @@ LevelRenderEvents.COLLECT_SUBMITS.register(context ->
     myRenderer.submit(Exit.batch(context.submitNodeCollector())));
 ```
 
-`batch()` 返回一个 `SubmitNodeCollector`。本帧提交给它的内容，在关卡渲染结束时一次性绘制进通道目标（在所有即时绘制之后）。
-需要提前画（比如必须在通道里的其它东西之前），调用 `flushBatch()`（确保你知道你在做什么）。这玩意不能复用，每帧都要重新获取。
+`batch()` 返回一个 `SubmitNodeCollector`。本帧提交给它的内容，在关卡渲染结束时和 `draw` 记下的内容一起，一次性绘制进通道目标：先画全部实体，再画全部半透明。
+需要提前画（比如 portal 里画半透明之前），调用 `flushBatch()`（确保你知道你在做什么）。这玩意不能复用，每帧都要重新获取。
 
 ## 通道
 
@@ -181,9 +175,9 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   逐像素比较深度：通道更近就盖在累积内容上面，更远就垫在下面（都按预乘 alpha 混合）；手部丢弃、半透明之后变暗在并入时处理。
   最后累积层作为一层合并到画面上。优先级只在深度相同时决定先后。
   * 累积层每个像素只记一个深度：两个通道的结果是准确的，三个以上在同一像素交错时是近似的。
-  * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（即时绘制、批量、portal 里经由 EXIT 渲染的 submit），EXIT 会把其中的半透明
+  * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（绘制、批量、portal 里经由 EXIT 渲染的 submit），EXIT 会把其中的半透明
     submit 用只写深度的管线副本再画一遍，写进该通道的一张深度目标；合并前取两者中更近的深度作为通道深度，所以半透明内容也能和别的通道正确排序。
-    你自己开的 RenderPass（portal 里，或 `ExitContext.openPass`）里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
+    你自己在 portal 里开的 RenderPass 里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
   * 关掉 `blendWithChannels` 的通道不参与混合，在累积层之后按优先级、再按创建顺序盖在上面（比如永远显示在最前的标记）。
 * 每个通道占用一张场景大小的 RGBA8 + D32 目标，画过半透明 submit 后再多一张 D32；有两个以上通道混合时，再多两张同样大小的累积层。
 
@@ -203,21 +197,25 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 ## 规则与限制
 
 * **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.render`
-  开始到结束之间调用。在此之外，即时绘制会被丢弃（只警告一次），portal 不改道。通道目标在本帧第一次使用时用场景深度
+  开始到结束之间调用。在此之外，绘制会被丢弃（只警告一次），portal 不改道。通道目标在本帧第一次使用时用场景深度
   初始化，所以改道的 portal（和 `redirect`）要在关卡的渲染通道开始执行之后、且不在已打开的 `RenderPass` 里使用（Litematica 就是这样），不要更早。
-* **已打开的渲染通道。** 26.3 不允许在一个 `RenderPass` 打开时再开一个（会抛
-  `Close the existing render pass before creating a new one!`），而有些地方本身就在主渲染通道内部执行
-  （Fabric 的地形和 feature 事件，比如 `AFTER_SOLID_FEATURES`）。在这些地方，即时绘制的 lambda 仍然立即执行，
-  但提交的内容进入通道的批量，稍后绘制，此时 `ExitContext.target()`/`openPass` 不可用，`deferred()` 为 true。
-  关卡渲染通道开始之前（`COLLECT_SUBMITS`、`BEFORE_GIZMOS`）也一样处理，因为那时场景深度还是上一帧的。
-  `END_MAIN` 在主通道之外，即时绘制会立刻渲染。
-* **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：即时绘制里再调用即时绘制会共用外层的收集器；
+* **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：绘制里再调用绘制会共用外层的收集器；
   在一个通道的 portal 里打开另一个通道会抛异常。
 * **阴影通道** EXIT 不往光影包的阴影图里画任何东西，所以通过 EXIT 绘制的内容没有影子：阴影通道里 `draw` 的 lambda
   和 `portal` 的区间都不执行，`batch` 返回的收集器会丢弃提交的内容（`plainFormat` 不受影响）。另外，Fabric 的
   `LevelRenderEvents` 本来就不会在 Iris 的阴影通道里触发。
-* **顺序** 不在渲染通道内的即时绘制在 lambda 返回时渲染；批量在关卡渲染结束时渲染，排在即时绘制之后，或者用
-  `flushBatch()` 提前。用 `ExitContext.openPass` 自己开的 RenderPass 排在该次绘制的提交内容之前。
+* **顺序** `draw` 的 lambda 立即执行，但提交的内容不论在哪里调用（主渲染通道里、关卡渲染通道开始之前也一样）都记进通道的批量。
+  批量在关卡渲染结束时（或 `flushBatch()` 时）在一帧里画完：先画全部实体，再画全部半透明，所以实体不会盖住更近的半透明。
+  portal 是当场画的，排在批量之前：在 portal 里画半透明之前先调用 `flushBatch()`，否则批量里的实体会把它盖住。
+  要自己开 RenderPass 画，请用 portal。
+* **portal 和批量的区别** 批量（包括 `draw`）交给 EXIT 的是提交内容：EXIT 一直拿着它们，到画的时候才决定顺序，
+  所以能先画全部实体、再画全部半透明，还能另记半透明的深度。portal 包住的是别人的代码，它自己开 RenderPass、
+  自己选管线，当场画进通道目标，EXIT 只能看到画完的像素。
+* **为什么 portal 里的半透明不能和之后的批量混合** 半透明一画进目标，就已经和它后面的颜色混在一起了，
+  像素里只剩混合后的结果，半透明层自己的颜色和覆盖率都没了。之后批量里有实体要放到它后面，就得把"后面的颜色"
+  换掉，这已经做不到；知道深度也没用（半透明本来就不写深度，即使写了，每个像素也只有一个颜色）。
+  所以批量的实体只能盖住它，或者在它之前画：在 portal 里画半透明之前调用 `flushBatch()`
+  （比如 Litematica 的不透明地形画完、半透明地形之前）。
 * **混合** 合并时把通道颜色视为预乘 alpha（原版半透明管线没问题）。
 * **自建顶点缓冲** Iris 在构建顶点缓冲时会加宽顶点格式；如果要用原版管线在改道状态下绘制自建的缓冲，
   请在 `Exit.plainFormat(...)` 里构建（编译多在工作线程上，`plainFormat` 在任何线程都可用）。
@@ -241,9 +239,9 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * `main_depth`：最终的主深度
   * `translucent_depth`：只含半透明表面的深度
 * `/emergency_exit debug shapes`：在玩家视线前方 5 格处生成三个测试方块，再输入一次关闭：
-  * 红色（右）：主通道上的即时绘制（Fabric 的 `AFTER_SOLID_FEATURES`、NeoForge 的 `AfterOpaqueFeatures`，在主渲染通道内，因此被推迟到批量）
+  * 红色（右）：主通道上的半透明绘制（Fabric 的 `AFTER_SOLID_FEATURES`、NeoForge 的 `AfterOpaqueFeatures`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
   * 绿色（中）：主通道的批量（Fabric 的 `COLLECT_SUBMITS`、NeoForge 的 `SubmitCustomGeometryEvent`），不透明、写深度
-  * 黄色（中，绿色后方偏右上）：另一个通道上的即时绘制（关卡渲染结束时，在任何渲染通道之外），不透明、写深度；与主通道按深度混合，重叠处绿色在前
+  * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
   * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
 
 ## 开发

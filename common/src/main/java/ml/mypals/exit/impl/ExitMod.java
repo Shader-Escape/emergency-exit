@@ -65,7 +65,7 @@ public final class ExitMod {
 		debug.then(LiteralArgumentBuilder.<S>literal("shapes").executes(context -> {
 			boolean on = DebugShapes.toggle(Minecraft.getInstance().player);
 			output.feedback(context.getSource(), Component.literal(on
-				? "EXIT test shapes on, " + (int) DebugShapes.DISTANCE + " blocks ahead: red = immediate drawing, green = batch, yellow = another channel blended by depth (behind green), blue = portal on a see-through channel, cyan outline = gizmo in that portal"
+				? "EXIT test shapes on, " + (int) DebugShapes.DISTANCE + " blocks ahead: red = translucent drawing, green = batch, yellow = another channel blended by depth (behind green), blue = portal on a see-through channel, cyan outline = gizmo in that portal"
 				: "EXIT test shapes off"));
 			if (on && !IrisCompat.isPackInUse()) {
 				output.feedback(context.getSource(), Component.literal("No shader pack is in use, so the shapes are drawn as usual, without EXIT."));

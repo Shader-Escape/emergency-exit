@@ -77,20 +77,9 @@ final class Channel implements ExitChannel {
 
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
-			if (!routed && passThrough != null) {
-				this.run(new DrawContext(this, passThrough, Gpu.mainTarget(), false, ExitRuntime.camera()), drawing);
-				return;
-			}
-			if (Gpu.isInRenderPass() || !ExitRuntime.passesRunning()) {
-				// No pass can be opened inside another one, and the scene depth is not ready yet. Collect now and render
-				// with the batch later.
-				this.run(new DrawContext(this, this.batchStorage(), null, routed, ExitRuntime.camera()), drawing);
-				return;
-			}
-			RenderTarget output = routed ? this.prepareForDraw() : Gpu.mainTarget();
-			SubmitNodeStorage storage = FeatureDrawer.newStorage();
-			this.run(new DrawContext(this, storage, output, routed, ExitRuntime.camera()), drawing);
-			FeatureDrawer.draw(storage, output);
+			// Recorded into the batch, so the whole channel is drawn in one frame: solid before translucent.
+			SubmitNodeCollector collector = !routed && passThrough != null ? passThrough : this.batchStorage();
+			this.run(new DrawContext(this, collector, routed, ExitRuntime.camera()), drawing);
 		} finally {
 			ExitRuntime.end();
 		}
