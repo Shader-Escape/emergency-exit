@@ -38,8 +38,8 @@ public final class BatchDrawer {
 		if (batch.isEmpty()) {
 			return;
 		}
-		// Before 1.21.6 Iris widens the vertex format of the entity pipelines themselves while the level renders, and a
-		// render type uploads and binds its vertices in its pipeline's format. The batch holds vanilla vertices.
+		// The batch holds vanilla vertices. Before 1.21.5 Iris widens no render type's format, but with isRenderingLevel on
+		// it treats what is drawn as level geometry (its buffer source and entity render context), so keep it off.
 		boolean renderingLevel = IrisCompat.isRenderingLevel();
 		IrisCompat.setRenderingLevel(false);
 		Matrix4fStack modelView = RenderSystem.getModelViewStack();
@@ -156,7 +156,8 @@ public final class BatchDrawer {
 			}
 			ByteBufferBuilder bytes = this.memory.computeIfAbsent(type, t -> new ByteBufferBuilder(t.bufferSize()));
 			// The batch holds vanilla vertices. Iris 1.8 widens the format of every buffer started while a pack is in use
-			// unless skipExtension is set, and while the level renders the render type's format is already the widened one.
+			// unless skipExtension is set. (On 1.21.5 the render type's format is also widened while isRenderingLevel is on;
+			// Iris 1.8.1 and 1.8.8 only use it for normals and their entity render context.)
 			boolean skipExtension = IrisCompat.skipExtension();
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
 			IrisCompat.setSkipExtension(true);
