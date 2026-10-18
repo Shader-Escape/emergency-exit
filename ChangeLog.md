@@ -10,6 +10,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 26.2 | `port/26.2` | 25 | 无混淆 | 1.11.4 |
 | 26.1.2 | `port/26.1.2` | 25 | 无混淆 | 1.11.4（26.1） |
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
+| 1.21.10 | `port/1.21.10` | 21 | 混淆，Mojang 映射 | 1.9.7 |
 
 ## 26.2（相对 26.3）
 
@@ -134,3 +135,42 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **开发运行**
 - NeoForge 开发环境默认开着 Blaze3D 校验层，Iris 1.10.8 启动时会崩（`ValidationGpuDevice` 不能转成 `GlDevice`）。
   在 `run/neoforge-1.21.11/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
+
+## 1.21.10（相对 1.21.11）
+
+**构建**
+- NeoForm `1.21.10-20251010.172816`，NeoForge `21.10.64`，Fabric API `0.138.4+1.21.10`，Iris 1.9.7、Sodium 0.7.3。
+- NeoForm 1.21.10 把 ASM 钉死在 9.6（`strictly`），和 sponge-mixin 要的 9.8 冲突。common 里 sponge-mixin 不带传递依赖，另加 `asm-tree:9.6`。
+- Super Resolution 没有 1.21.10 的版本，去掉了 `-Pexit.superResolution`（`SceneSize` 仍会跟随装上的 SR）。
+
+**包名和类**
+- `ResourceLocation` 代替 `Identifier`，API 里也一样（`Exit.MAIN`、`Exit.channel`、`ExitChannel.id()`）。
+- 没有 JSpecify，用 `org.jetbrains.annotations.Nullable`。
+- 渲染类型是 `net.minecraft.client.renderer.RenderType`，工厂方法在它自己身上（`RenderType.entitySolid`、`debugQuads`），
+  没有 `RenderTypes`、`RenderSetup`。
+
+**渲染通道**
+- 没有采样器对象：绑定纹理用 `RenderPass.bindSampler(name, view)`，没有 `bindTexture(name, view, sampler)`、`getSamplerCache()`。
+- `DynamicUniforms.writeTransform` 多一个线宽参数；`GpuDevice.createBuffer` 的大小是 `int`。
+- 渲染类型的纹理由 `setupRenderState()` 设成着色器纹理，画的时候绑定为 `Sampler0`…`Sampler11`。缩放探针照这样做，
+  去掉了 `RenderTypeAccessor`。
+- `writeTransform` 会映射缓冲区，不能在打开的渲染通道里调用。缩放探针原来在通道里写，1.21.11 上同样失败
+  （`Close the existing render pass`，Kappa 不再被测出缩放），1.21.10 改成开通道之前写。
+
+**特征和 gizmo**
+- 没有 gizmo（`net.minecraft.gizmos` 是 1.21.11 才有的）。去掉了 gizmo 进通道的规则、调试方块的青色线框和冒烟测试里的这项检查。
+- 特征分发器、关卡钩子 `renderLevel(...)`、`GlCommandEncoder`/`GlRenderPass` 的混入点和 1.21.11 相同。
+
+**加载器事件**
+- Fabric API 的 `WorldRenderEvents` 和 1.21.11 相同（`BEFORE_ENTITIES`、`END_MAIN` 等，`commandQueue()`）。
+- NeoForge 21.10 和 21.11 一样没有 `SubmitCustomGeometryEvent`，调试方块的批量不给 collector。
+
+**Iris**
+- Iris 1.9.7 有 `ImmediateState.skipExtension`，但和 1.10.8 一样把加宽后的格式当原版格式交出。EXIT 照 LitematicaPass 不动它
+  （`IrisCompat.hasSkipExtension()` 为 false）。
+- 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
+
+**开发运行**
+- NeoForge 开发运行同样要在 `run/neoforge-1.21.10/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
+- 冒烟测试一次跑完：先不开光影，再对 `shaderpacks` 里每个光影包各跑一轮（通过 Iris 的配置和 `Iris.reload()` 切换），
+  截图名里带上光影包名。
