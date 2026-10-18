@@ -15,6 +15,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
 | 1.20.1 | `port/1.20.1` | 17 | 混淆，Mojang 映射 | 1.7.6 |
 | 1.20 | `port/1.20` | 17 | 混淆，Mojang 映射 | 1.6.4 |
+| 1.19.3 | `port/1.19.3` | 17 | 混淆，Mojang 映射 | 1.5.2 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 
 ## 26.2（相对 26.3）
@@ -296,6 +297,48 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   随机选位置生成地形，所以是逐张目视对比，不是逐像素相同）。
 
 其余同 1.20.2。
+
+## 1.19.3（相对 1.20.2）
+
+**构建**
+- 变成**单个 Fabric Loom 工程**：只留 Fabric 后 `common` 子工程没有意义。`common/src/main/java` 移进
+  `fabric/src/main/java`，`common/src/main/resources` 移进 `fabric/src/main/resources`，`common/src/smoke` 移进
+  `fabric/src/smoke`；`common` 子工程和 build-logic 的 multiloader 插件都删掉，`fabric/build.gradle` 直接就是
+  fabric-loom-remap 工程（`minecraft(...)`、`loom.officialMojangMappings()`、fabric-loader、fabric-api、Iris/Sodium 用
+  `modCompileOnly` + `modLocalRuntime`、`nestedLibraries`、client / smokeClient / auditClient 三个运行配置、smoke 和
+  audit source set，以及展开 `fabric.mod.json` 和 `*.mixins.json` 的 processResources），`neoforge` 插件也删掉（Iris 1.5.2
+  没有 NeoForge 构建）。API 包名（`ml.mypals.exit.*`）不变。
+- Fabric API `0.76.1+1.19.3`；Iris 1.5.2（Modrinth `YL57xq9U:ExtC2pRY`）、Sodium `0.4.9+build.23`
+  （`AANobbMI:idtcaIVT`）。
+
+**顶点排序**
+- 没有 `com.mojang.blaze3d.vertex.VertexSorting`，`RenderSystem.setProjectionMatrix` 只收矩阵：`ExitRuntime` 里
+  portal 的投影保存/恢复和 `FeatureDrawer` 里的投影设置都不再传 `DISTANCE_TO_ORIGIN`（这个版本的深度排序由光影包
+  自己做）。
+
+**调试形状（冒烟测试）**
+- 没有 `RenderType.debugQuads()`，而 `RenderType.create` 是包私有：半透明的测试方块改用
+  `RenderType.entityTranslucentEmissive(白色纹理)`（无剔除、不写深度、自发光）。两种渲染类型都是实体顶点格式，
+  顶点写法合并成一套（位置、颜色、纹理、overlay、光照、法线）。
+
+**建世界界面（冒烟测试）**
+- 没有 `WorldCreationUiState`，`CreateWorldScreen` 自己保存世界名和游戏模式。`CreateWorldScreenAccessor` 增加
+  `nameEdit`（EditBox）和 `modeButton`（`CycleButton<?>`，值的类型是包私有的）两个 accessor：测试用 `setValue` 设
+  世界名，循环按 `onPress()` 直到读到 `CREATIVE`（顺带打开作弊，后面的 `tp` 才有效，不用再设 op）。
+
+**Iris**
+- Iris 1.5.2 的包名、管线类和阴影钩子和 1.20.2 一样：`net.coderbot.iris.*`、
+  `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`、`net.coderbot.iris.pipeline.ShadowRenderer`；
+  `IrisCompat` 和两个 Iris mixin 一行没改。
+
+**开发运行**
+- 运行目录 `run/fabric-1.19.3`；冒烟测试无光影和 BSL 光影各跑一次都是 `RESULT: OK`（BSL：2201 次改道绘制、1947 帧
+  按深度混合、2201 次阴影回调里 EXIT 画了 0 次）；`runAuditClient` 每个 mixin 都应用成功。
+- 画面和 `port/1.20.2` 一致：无光影时只有黄色盒子（红色和绿色是提交给关卡自己 buffer source 的，这里不画它们），
+  有光影时是蓝、绿、黄、红四个盒子加三张调试视图（截图在 `smoke-shots/1.19.3/fabric-none` 和 `fabric-bsl`）。
+
+其余同 1.20.2。
+
 
 ## 1.18.2（相对 1.20.2）
 
