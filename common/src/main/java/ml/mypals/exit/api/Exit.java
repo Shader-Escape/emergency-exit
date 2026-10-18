@@ -2,7 +2,7 @@ package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import ml.mypals.exit.impl.ExitRuntime;
-import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,8 +43,8 @@ public final class Exit {
 		main().draw(drawing);
 	}
 
-	/** {@link ExitChannel#draw(SubmitNodeCollector, Consumer)} on the main channel. */
-	public static void draw(@Nullable SubmitNodeCollector passThrough, Consumer<ExitContext> drawing) {
+	/** {@link ExitChannel#draw(MultiBufferSource, Consumer)} on the main channel. */
+	public static void draw(@Nullable MultiBufferSource passThrough, Consumer<ExitContext> drawing) {
 		main().draw(passThrough, drawing);
 	}
 
@@ -59,12 +59,12 @@ public final class Exit {
 	}
 
 	/** {@link ExitChannel#batch()} on the main channel. */
-	public static SubmitNodeCollector batch() {
+	public static MultiBufferSource batch() {
 		return main().batch();
 	}
 
-	/** {@link ExitChannel#batch(SubmitNodeCollector)} on the main channel. */
-	public static SubmitNodeCollector batch(@Nullable SubmitNodeCollector passThrough) {
+	/** {@link ExitChannel#batch(MultiBufferSource)} on the main channel. */
+	public static MultiBufferSource batch(@Nullable MultiBufferSource passThrough) {
 		return main().batch(passThrough);
 	}
 

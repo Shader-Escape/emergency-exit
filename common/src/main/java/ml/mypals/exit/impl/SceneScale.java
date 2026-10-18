@@ -16,7 +16,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.LightTexture;
@@ -106,7 +106,7 @@ final class SceneScale {
 		if (state != State.UNKNOWN || pipeline == null || SceneSize.mergeStretched()) {
 			return;
 		}
-		CameraRenderState camera = ExitRuntime.camera();
+		Camera camera = ExitRuntime.camera();
 		if (camera == null) {
 			return;
 		}
@@ -139,7 +139,7 @@ final class SceneScale {
 	}
 
 	/** Draws the probe quad through the pack, finds the pixels it changed and reads them back. */
-	private static void probe(RenderTarget main, CameraRenderState camera) {
+	private static void probe(RenderTarget main, Camera camera) {
 		beforeProbe = ensure(beforeProbe, "emergency_exit_scale_before", main.width, main.height, false);
 		afterProbe = ensure(afterProbe, "emergency_exit_scale_after", main.width, main.height, false);
 		probeMask = ensure(probeMask, "emergency_exit_scale_mask", main.width, main.height, true);
@@ -174,7 +174,7 @@ final class SceneScale {
 	}
 
 	/** Draws the quad at {@link #PROBE_HALF} of clip space with the pack's entity program. False if it cannot. */
-	private static boolean drawProbe(RenderTarget main, CameraRenderState camera) {
+	private static boolean drawProbe(RenderTarget main, Camera camera) {
 		Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix());
 		Matrix4f toModel = new Matrix4f(modelView).invert();
 		Matrix4f fromClip = new Matrix4f(ExitRuntime.projectionMatrix()).invert();

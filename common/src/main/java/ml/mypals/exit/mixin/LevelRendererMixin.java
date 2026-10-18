@@ -6,28 +6,20 @@ import ml.mypals.exit.impl.ExitRuntime;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.state.LevelRenderState;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = LevelRenderer.class, priority = 2000)
 public class LevelRendererMixin {
-	/** One camera state, filled in during the level rendering. */
-	@Shadow
-	@Final
-	private LevelRenderState levelRenderState;
-
 	@Inject(method = "renderLevel", at = @At("HEAD"))
 	private void emergency_exit$beginLevel(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline,
-		Camera camera, Matrix4f modelViewMatrix, Matrix4f projection, Matrix4f cullingProjection, GpuBufferSlice terrainFog, Vector4f fogColor,
+		Camera camera, Matrix4f modelViewMatrix, Matrix4f projection, GpuBufferSlice terrainFog, Vector4f fogColor,
 		boolean shouldRenderSky, CallbackInfo ci) {
-		ExitRuntime.beginLevel(this.levelRenderState.cameraRenderState, modelViewMatrix, projection, deltaTracker.getGameTimeDeltaPartialTick(false));
+		ExitRuntime.beginLevel(camera, modelViewMatrix, projection, deltaTracker.getGameTimeDeltaPartialTick(false));
 	}
 
 	@Inject(method = "renderLevel", at = @At(value = "INVOKE",

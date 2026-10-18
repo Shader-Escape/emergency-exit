@@ -28,10 +28,10 @@ public final class ExitNeoForge {
 	public ExitNeoForge() {
 		NeoForge.EVENT_BUS.addListener(ClientStoppingEvent.class, event -> ExitMod.close());
 		NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event -> event.getDispatcher().register(ExitMod.command(OUTPUT)));
-		// NeoForge for 1.21.10 has no event with the level's collector, so the batch is given no collector to pass to.
+		// The events of NeoForge for 1.21.8 have no buffer source, so the drawings are given none to pass to.
 		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueBlocks.class, event -> {
 			DebugShapes.inMainPass(null);
-			DebugShapes.collectSubmits(null, event.getLevelRenderState().cameraRenderState.pos);
+			DebugShapes.addToBatch(null, event.getCamera().getPosition());
 		});
 	}
 }

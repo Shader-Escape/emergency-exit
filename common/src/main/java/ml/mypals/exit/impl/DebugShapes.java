@@ -8,8 +8,7 @@ import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
@@ -41,6 +40,8 @@ public final class DebugShapes {
 	private static Vec3 forward = new Vec3(0, 0, 1);
 	private static @Nullable ExitChannel xray;
 	private static @Nullable ExitChannel mix;
+	/** The buffer source of the box in the portal, which renders it itself. */
+	private static BatchDrawer.@Nullable Batch portalBatch;
 	private static final Stats STATS = new Stats();
 
 	/** Counters for the checks. */
@@ -61,9 +62,9 @@ public final class DebugShapes {
 	private DebugShapes() {}
 
 	/**
-	 * Called after the solid features. {@code passThrough} is the level's collector, used when nothing is routed.
+	 * Called after the opaque terrain. {@code passThrough} is the level's buffer source, used when nothing is routed.
 	 */
-	public static void inMainPass(SubmitNodeCollector passThrough) {
+	public static void inMainPass(@Nullable MultiBufferSource passThrough) {
 		Vec3 at = center;
 		if (at == null) {
 			return;
@@ -73,18 +74,18 @@ public final class DebugShapes {
 			if (exit.routed()) {
 				STATS.routedDraws++;
 			}
-			box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(right.scale(2)), 0xC0FF3030);
+			box(exit.bufferSource(), exit.poseStack(), exit.cameraPos(), at.add(right.scale(2)), 0xC0FF3030);
 		});
 	}
 
-	/** Called while the level collects its submits. The green box goes to the main channel's batch. */
-	public static void collectSubmits(@Nullable SubmitNodeCollector collector, Vec3 camera) {
+	/** Called while the level renders. The green box goes to the main channel's batch. */
+	public static void addToBatch(@Nullable MultiBufferSource passThrough, Vec3 camera) {
 		Vec3 at = center;
 		if (at == null) {
 			return;
 		}
 		STATS.batchDraws++;
-		box(Exit.batch(collector), new PoseStack(), camera, at, 0xFF30FF30, true);
+		box(Exit.batch(passThrough), new PoseStack(), camera, at, 0xFF30FF30, true);
 	}
 
 	/** Called at the end of the level rendering, outside any pass, before the batches are drawn. */
@@ -97,7 +98,7 @@ public final class DebugShapes {
 		if (mix == null) {
 			mix = Exit.channel(ExitMod.id("debug_mix"), ExitOptions.DEFAULT);
 		}
-		mix.draw(exit -> box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(forward.scale(0.5)).add(right.scale(0.5)).add(0, 0.3, 0), 0xFFFFE030, true));
+		mix.draw(exit -> box(exit.bufferSource(), exit.poseStack(), exit.cameraPos(), at.add(forward.scale(0.5)).add(right.scale(0.5)).add(0, 0.3, 0), 0xFFFFE030, true));
 
 		// A portal around code with its own render context.
 		if (xray == null) {
@@ -113,9 +114,11 @@ public final class DebugShapes {
 			}
 			// Rendered into the main target without redirect. The portal moves the pass into the channel.
 			long redirectedBefore = ExitRuntime.redirectedPasses();
-			SubmitNodeStorage storage = FeatureDrawer.newStorage();
-			box(storage, new PoseStack(), ExitRuntime.camera().pos, at.subtract(right.scale(2)), 0xC03030FF);
-			FeatureDrawer.draw(storage, Gpu.mainTarget());
+			if (portalBatch == null) {
+				portalBatch = new BatchDrawer.Batch();
+			}
+			box(portalBatch, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF);
+			BatchDrawer.draw(portalBatch, Gpu.mainTarget());
 			boolean moved = ExitRuntime.redirectedPasses() > redirectedBefore;
 			if (moved) {
 				STATS.portalRedirectedPasses++;
@@ -189,22 +192,22 @@ public final class DebugShapes {
 	}
 
 	/** A translucent box of one block centred at {@code at}. It writes no depth. */
-	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb) {
-		box(collector, poseStack, camera, at, argb, false);
+	private static void box(MultiBufferSource buffers, PoseStack poseStack, Vec3 camera, Vec3 at, int argb) {
+		box(buffers, poseStack, camera, at, argb, false);
 	}
 
 	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
-	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
+	private static void box(MultiBufferSource buffers, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
-		collector.submitCustomGeometry(poseStack, solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads(), (pose, buffer) -> {
-			quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
-			quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1);
-			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);
-			quad(buffer, pose, argb, solid, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1);
-			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0);
-			quad(buffer, pose, argb, solid, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
-		});
+		VertexConsumer buffer = buffers.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads());
+		PoseStack.Pose pose = poseStack.last();
+		quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
+		quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1);
+		quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);
+		quad(buffer, pose, argb, solid, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1);
+		quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0);
+		quad(buffer, pose, argb, solid, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
 		poseStack.popPose();
 	}
 

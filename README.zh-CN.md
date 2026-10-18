@@ -8,26 +8,30 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
 请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-这个分支对应 Minecraft **1.21.10**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
+这个分支对应 Minecraft **1.21.8**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码；`master` 是 26.3。
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.10`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.8`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
 调用时机要在关卡渲染期间（`LevelRenderer.renderLevel` 里面）。各加载器可用的位置：
 
 | 用途 | Fabric | NeoForge |
 |---|---|---|
-| 提交到批量 | `WorldRenderEvents.BEFORE_ENTITIES`（`context.commandQueue()`） | `RenderLevelStageEvent.AfterOpaqueBlocks` 等，没有可直通的收集器：`Exit.batch()` |
-| 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`END_MAIN` 等 | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
-| 主渲染通道之后、不在任何通道内（portal） | `WorldRenderEvents.END_MAIN` | 没有对应的事件 |
+| 画进批量 | `WorldRenderEvents.BEFORE_ENTITIES`（`context.consumers()`） | `RenderLevelStageEvent.AfterOpaqueBlocks` 等，没有可直通的 buffer source：`Exit.batch()` |
+| 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` 等 | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
+| portal | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
 
-NeoForge 1.21.10 没有交出关卡 `SubmitNodeCollector` 的事件，没有可直通的收集器：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
+1.21.8 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。关卡渲染期间不会一直开着
+一个渲染通道（每种渲染类型画的时候自己开 pass），所以主渲染通道里的这些事件都可以用 portal。
+
+NeoForge 1.21.8 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
 没有光影包时，批量在关卡渲染结束时画进主目标。
 
-NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才触发，那时 EXIT 已经合并完本帧，在里面调用会被丢弃。
+Fabric 的 `WorldRenderEvents.END` 和 NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染的末尾触发，EXIT 也在那里合并本帧，
+在里面画的东西可能排在合并之后而被丢弃。请用 `LAST`。
 
 ## 基础概念
 
@@ -40,9 +44,9 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 | **场景深度** | EXIT 在光影包画手部之前，画半透明表面之前各复制一次的主深度。用来初始化通道目标的深度（世界遮挡），以及合并时找出手部和半透明表面。                                                     |
 | **合并**（`composite`） | 关卡渲染结束时，把各通道目标按深度画回主目标。手部所在像素丢弃，半透明表面之后的部分变暗。 |
 | **通道混合**（`blendWithChannels`） | 合并前，参与混合的通道先依次并入一张累积层：逐像素比较深度，近的盖在远的上面（按两边的 alpha 混合），然后累积层作为一层合并到画面上。 |
-| **绘制**（`draw`） | 给一个托管上下文（`SubmitNodeCollector`、相机相对的 `PoseStack`、相机），lambda 立即执行，提交的内容记进通道的批量。 |
-| **批量**（`batch`） | 本帧随时往里提交的收集器，关卡渲染结束时和 `draw` 记下的内容一起，在一帧里画进通道目标：先实体，后半透明。可用 `flushBatch()` 提前。 |
-| **直通收集器** | 传给绘制方法的原版收集器（可为 `null`），不改道时绘制直接交给它。                                                                                     |
+| **绘制**（`draw`） | 给一个托管上下文（`MultiBufferSource`、相机相对的 `PoseStack`、相机），lambda 立即执行，画进 buffer source 的内容记进通道的批量。 |
+| **批量**（`batch`） | 本帧随时往里画的 buffer source（每种渲染类型一块缓冲），关卡渲染结束时和 `draw` 记下的内容一起，在一帧里画进通道目标：先实体，后半透明。可用 `flushBatch()` 提前。 |
+| **直通 buffer source** | 传给绘制方法的原版 buffer source（可为 `null`），不改道时绘制直接画进它。                                                                                     |
 | **bypass** | Iris 的开关 `ImmediateState.bypass`：打开时光影包不再把原版管线换成自己的程序。改道的绘制都在它打开时进行。                                                     |
 | **portal**| 一个明确的区间，执行期间按 `PortalOverrides` 设置 Iris 的开关（bypass、顶点格式加宽、`isRenderingLevel`），结束后恢复。给已有渲染上下文的代码用。改道时，区间内新开的、画进主目标的渲染通道会自动改画进通道目标。 |
 | **重定向**（`redirect`） | portal 区间内把"你本来要画进的目标"换成通道目标（不改道时原样返回）。只在 portal 自动改道管不到的地方需要：画进主目标以外的目标，或画进区间开始前就已打开的渲染通道。区间外调用会抛异常。 |
@@ -74,26 +78,27 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 
 ```java
 WorldRenderEvents.BEFORE_ENTITIES.register(context ->
-    Exit.draw(context.commandQueue(), exit -> {
+    Exit.draw(context.consumers(), exit -> {
         PoseStack pose = exit.poseStack();  
         Vec3 cam = exit.cameraPos();
         pose.translate(x - cam.x, y - cam.y, z - cam.z);
-        exit.collector().submitCustomGeometry(pose, RenderType.debugQuads(), (p, buffer) -> { ... });
+        VertexConsumer buffer = exit.bufferSource().getBuffer(RenderType.debugQuads());
+        buffer.addVertex(pose.last(), 0, 0, 0).setColor(0xC0FF3030); ...
     }));
 ```
 
-lambda 立即执行，提交的内容记进通道的批量，在关卡渲染结束时和批量一起画（见"顺序"）。
-第一个参数是"直通收集器"（可为 `null`），不改道（比如没有加载光影包）时，绘制直接交给它。
+lambda 立即执行，画进 buffer source 的内容记进通道的批量，在关卡渲染结束时和批量一起画（见"顺序"）。
+第一个参数是"直通 buffer source"（可为 `null`），不改道（比如没有加载光影包）时，绘制直接画进它。
 >`draw()` 和 `batch()` 画的时间相同，`draw()` 只是多给一个托管上下文（相机、相机相对的 `PoseStack`）。
 要自己开 `RenderPass` 画，请用 portal。
 
 | 方法 | 说明 |
 |---|---|
-| `collector()` | 提交绘制的 `SubmitNodeCollector` |
+| `bufferSource()` | 画进去的 `MultiBufferSource`，内容记进通道的批量 |
 | `poseStack()` | 位于相机位置的 `PoseStack`（相机相对坐标，不含旋转） |
-| `cameraPos()` / `camera()` | 相机位置 / 本帧的 `CameraRenderState` |
+| `cameraPos()` / `camera()` | 相机位置 / 本帧的 `Camera` |
 | `partialTick()` | 相机实体本帧的 partial tick |
-| `modelView()` | 视图旋转矩阵，EXIT 画提交内容时用的 model-view |
+| `modelView()` | 视图旋转矩阵，EXIT 画批量时用的 model-view |
 | `routed()` | 这次绘制是否绕过了光影包 |
 
 ### 2. portal 区间（已有渲染上下文的代码）
@@ -114,13 +119,13 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 | 开关 | 默认 | 说明                                                                   |
 |---|---|----------------------------------------------------------------------|
 | `bypass` | `ON` | Iris 的 `ImmediateState.bypass`：不把原版管线替换成光影包的程序                       |
-| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽。1.21.10 上 EXIT 不动它（见 `PortalOverrides`） |
-| `renderingLevel` | `KEEP` | Iris 的 `ImmediateState.isRenderingLevel`：开着时 Iris 会加宽提交管线写出的顶点格式     |
+| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽。1.21.8 上 EXIT 不动它（见 `PortalOverrides`） |
+| `renderingLevel` | `KEEP` | Iris 的 `ImmediateState.isRenderingLevel`：开着时 Iris 会加宽此刻开始的缓冲的顶点格式     |
 
  **注意**
 
 * **portal 输出行为：** portal 改道期间，EXIT 用一个 mixin 把**新开的**、把主目标当作颜色或深度附件的渲染通道换成通道目标。
-  所以自己对主目标开 pass 的代码不用改。（1.21.10 也有 `RenderSystem.outputColorTextureOverride`，但它只管渲染类型；
+  所以自己对主目标开 pass 的代码不用改。（1.21.8 也有 `RenderSystem.outputColorTextureOverride`，但它只管渲染类型；
   这个 mixin 连直接开的 pass 也一起改道。）以下情况不会自动改道，
   需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
@@ -146,10 +151,11 @@ Exit.plainFormat(() -> buildMyVbo());
 
 ```java
 WorldRenderEvents.BEFORE_ENTITIES.register(context ->
-    myRenderer.submit(Exit.batch(context.commandQueue())));
+    myRenderer.render(Exit.batch(context.consumers())));
 ```
 
-`batch()` 返回一个 `SubmitNodeCollector`。本帧提交给它的内容，在关卡渲染结束时和 `draw` 记下的内容一起，一次性绘制进通道目标：先画全部实体，再画全部半透明。
+`batch()` 返回一个 `MultiBufferSource`，每种渲染类型一块缓冲，往里画的时候什么都不会画出来（不要自己 `endBatch`）。本帧画进它的内容，
+在关卡渲染结束时和 `draw` 记下的内容一起，一次性绘制进通道目标：先画全部不混合的渲染类型（实体），再画全部半透明（管线带混合的）。
 需要提前画（比如 portal 里画半透明之前），调用 `flushBatch()`（确保你知道你在做什么）。这玩意不能复用，每帧都要重新获取。
 
 ## 通道
@@ -175,11 +181,11 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   逐像素比较深度：通道更近就盖在累积内容上面，更远就垫在下面（都按预乘 alpha 混合）；手部丢弃、半透明之后变暗在并入时处理。
   最后累积层作为一层合并到画面上。优先级只在深度相同时决定先后。
   * 累积层每个像素只记一个深度：两个通道的结果是准确的，三个以上在同一像素交错时是近似的。
-  * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（绘制、批量、portal 里经由 EXIT 渲染的 submit），EXIT 会把其中的半透明
-    submit 用只写深度的管线副本再画一遍，写进该通道的一张深度目标；合并前取两者中更近的深度作为通道深度，所以半透明内容也能和别的通道正确排序。
+  * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（绘制、批量、portal 里经由 EXIT 渲染的批量），EXIT 会把其中半透明的
+    渲染类型用只写深度的管线副本再画一遍，写进该通道的一张深度目标；合并前取两者中更近的深度作为通道深度，所以半透明内容也能和别的通道正确排序。
     你自己在 portal 里开的 RenderPass 里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
   * 关掉 `blendWithChannels` 的通道不参与混合，在累积层之后按优先级、再按创建顺序盖在上面（比如永远显示在最前的标记）。
-* 每个通道占用一张场景大小的 RGBA8 + D32 目标，画过半透明 submit 后再多一张 D32；有两个以上通道混合时，再多两张同样大小的累积层。
+* 每个通道占用一张场景大小的 RGBA8 + D32 目标，画过半透明渲染类型后再多一张 D32；有两个以上通道混合时，再多两张同样大小的累积层。
 
 | 选项 | 默认 | 说明 |
 |---|---|---|
@@ -199,16 +205,16 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 * **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.renderLevel`
   开始到结束之间调用。在此之外，绘制会被丢弃（只警告一次），portal 不改道。通道目标在本帧第一次使用时用场景深度
   初始化，所以改道的 portal（和 `redirect`）要在关卡的渲染通道开始执行之后、且不在已打开的 `RenderPass` 里使用（Litematica 就是这样），不要更早。
-* **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：绘制里再调用绘制会共用外层的收集器；
+* **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：绘制里再调用绘制会共用外层的 buffer source；
   在一个通道的 portal 里打开另一个通道会抛异常。
 * **阴影通道** EXIT 不往光影包的阴影图里画任何东西，所以通过 EXIT 绘制的内容没有影子：阴影通道里 `draw` 的 lambda
-  和 `portal` 的区间都不执行，`batch` 返回的收集器会丢弃提交的内容（`plainFormat` 不受影响）。另外，Fabric 的
+  和 `portal` 的区间都不执行，`batch` 返回的 buffer source 会丢弃画进去的内容（`plainFormat` 不受影响）。另外，Fabric 的
   `WorldRenderEvents` 本来就不会在 Iris 的阴影通道里触发。
-* **顺序** `draw` 的 lambda 立即执行，但提交的内容不论在哪里调用（主渲染通道里、关卡渲染通道开始之前也一样）都记进通道的批量。
+* **顺序** `draw` 的 lambda 立即执行，但画进 buffer source 的内容不论在哪里调用（关卡渲染通道开始之前也一样）都记进通道的批量。
   批量在关卡渲染结束时（或 `flushBatch()` 时）在一帧里画完：先画全部实体，再画全部半透明，所以实体不会盖住更近的半透明。
   portal 是当场画的，排在批量之前：在 portal 里画半透明之前先调用 `flushBatch()`，否则批量里的实体会把它盖住。
   要自己开 RenderPass 画，请用 portal。
-* **portal 和批量的区别** 批量（包括 `draw`）交给 EXIT 的是提交内容：EXIT 一直拿着它们，到画的时候才决定顺序，
+* **portal 和批量的区别** 批量（包括 `draw`）交给 EXIT 的是按渲染类型分开存的顶点：EXIT 一直拿着它们，到画的时候才决定顺序，
   所以能先画全部实体、再画全部半透明，还能另记半透明的深度。portal 包住的是别人的代码，它自己开 RenderPass、
   自己选管线，当场画进通道目标，EXIT 只能看到画完的像素。
 * **为什么 portal 里的半透明不能和之后的批量混合** 半透明一画进目标，就已经和它后面的颜色混在一起了，
@@ -222,7 +228,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 * **场景深度复制** 有通道本帧要绘制时（它的 `wantsFrame`，或默认"上一帧画过"），每帧复制两次场景深度
   （手部之前、半透明之前）。没有复制时通道照样能画，只是那一帧的遮挡改用当时的主深度。
 * **API 稳定性** `ml.mypals.exit.api` 是 API；`impl`、`compat`、`mixin` 不是。API 里用到了 Minecraft 的类型
-  （`SubmitNodeCollector`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
+  （`MultiBufferSource`、`Camera`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
+  1.21.8 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
+  `MultiBufferSource`（`Exit.draw(MultiBufferSource, ...)`、`ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`），
+  `ExitContext.camera()` 是 `Camera`。
 
 其它工具方法：`Exit.isActive()`（此刻是否会改道：有光影包、不在阴影通道、关卡渲染中）、`Exit.isRouting()`
 （此刻是否有改道中的 portal）、`Exit.inPortal()`（此刻是否在 portal 里）、`Exit.plainFormat(Runnable)`。
@@ -240,7 +249,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
   * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.10 没有 Gizmo，所以没有青色线框）
+  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.8 没有 Gizmo，所以没有青色线框）
 
 ## 开发
 
@@ -252,11 +261,11 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa 等都放进去）。
   每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
   日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是
-  `run/fabric-1.21.10` 和 `run/neoforge-1.21.10`。
+  `run/fabric-1.21.8` 和 `run/neoforge-1.21.8`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
-  但 SR 没有 1.21.10 的版本，开发运行不加载它。
-* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.10/config/neoforge-client.toml`
+  但 SR 没有 1.21.8 的版本，开发运行不加载它。
+* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.8/config/neoforge-client.toml`
   里设 `enableB3DValidationLayer = false`。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 

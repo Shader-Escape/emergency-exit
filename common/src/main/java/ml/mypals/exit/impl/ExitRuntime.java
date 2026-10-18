@@ -9,8 +9,8 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
-import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -38,7 +38,7 @@ public final class ExitRuntime {
 	private static boolean inLevel;
 	/** Set once the level's frame graph runs. From then on the main target holds this frame's depth. */
 	private static boolean passesRunning;
-	private static @Nullable CameraRenderState camera;
+	private static @Nullable Camera camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
 	private static final Matrix4f PROJECTION = new Matrix4f();
 	private static @Nullable GpuBufferSlice levelProjection;
@@ -52,7 +52,6 @@ public final class ExitRuntime {
 
 	/** The drawing running now, or null. */
 	static @Nullable DrawContext drawing;
-	private static @Nullable SubmitNodeStorage discard;
 	private static long compositedFrames;
 	private static final Set<String> WARNED = new HashSet<>();
 
@@ -200,11 +199,11 @@ public final class ExitRuntime {
 		return Gpu.mainTarget();
 	}
 
-	static CameraRenderState camera() {
+	static Camera camera() {
 		return camera;
 	}
 
-	/** The level's projection. The camera state before 26.1 does not hold it. */
+	/** The level's projection. The camera does not hold it before 26.1. */
 	static Matrix4fc projectionMatrix() {
 		return PROJECTION;
 	}
@@ -213,7 +212,7 @@ public final class ExitRuntime {
 		return VIEW_ROTATION;
 	}
 
-	/** The partial tick the level renders with. The camera state of 26.2 does not hold it. */
+	/** The partial tick the level renders with. */
 	static float partialTick() {
 		return partialTick;
 	}
@@ -309,12 +308,9 @@ public final class ExitRuntime {
 		return false;
 	}
 
-	/** A collector whose content is thrown away at the end of the frame. */
-	static SubmitNodeStorage discard() {
-		if (discard == null) {
-			discard = new SubmitNodeStorage();
-		}
-		return discard;
+	/** A buffer source that throws away what is drawn into it. */
+	static MultiBufferSource discard() {
+		return BatchDrawer.DISCARD;
 	}
 
 	public static void plainFormat(Runnable build) {
@@ -334,12 +330,12 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(CameraRenderState cameraState, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
+	public static void beginLevel(Camera levelCamera, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
 		inLevel = true;
-		camera = cameraState;
+		camera = levelCamera;
 		partialTick = levelPartialTick;
 		VIEW_ROTATION.set(viewRotation);
 		PROJECTION.set(projection);
@@ -413,7 +409,6 @@ public final class ExitRuntime {
 			passesRunning = false;
 			camera = null;
 			levelProjection = null;
-			discard = null;
 			SceneDepth.endFrame();
 		}
 	}
@@ -424,7 +419,5 @@ public final class ExitRuntime {
 		}
 		SceneDepth.close();
 		ChannelBlend.close();
-		FeatureDrawer.close();
-		discard = null;
 	}
 }

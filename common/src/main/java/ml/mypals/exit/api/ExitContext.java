@@ -1,8 +1,8 @@
 package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4fc;
 
@@ -11,20 +11,20 @@ import org.joml.Matrix4fc;
  * {@code worldPos - cameraPos()}. EXIT applies the camera rotation and projection itself.
  */
 public interface ExitContext {
-	/** Where to submit. It is rendered with the channel's batch. */
-	SubmitNodeCollector collector();
+	/** Where to draw. What is drawn into it is rendered with the channel's batch. */
+	MultiBufferSource bufferSource();
 
 	/** An identity pose stack at the camera position, without the camera rotation. */
 	PoseStack poseStack();
 
 	Vec3 cameraPos();
 
-	CameraRenderState camera();
+	Camera camera();
 
 	/** The partial tick of the camera entity this frame. */
 	float partialTick();
 
-	/** The view rotation, the model-view matrix EXIT renders the submits with. */
+	/** The view rotation, the model-view matrix EXIT renders the batch with. */
 	Matrix4fc modelView();
 
 	/** Whether this drawing is routed past the shader pack. */

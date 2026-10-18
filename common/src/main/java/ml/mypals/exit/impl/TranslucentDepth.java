@@ -31,13 +31,13 @@ public final class TranslucentDepth {
 	}
 
 	/**
-	 * Draws the translucent features again ({@code translucent}) into {@code depth}. The colour of {@code colorTarget} is
+	 * Draws the translucent render types again ({@code translucent}) into {@code depth}. The colour of {@code colorTarget} is
 	 * attached, since the pipelines expect one, but nothing is written to it.
 	 */
 	static void record(Runnable translucent, RenderTarget colorTarget, RenderTarget depth) {
 		recording = true;
 		try {
-			FeatureDrawer.executeInto(Objects.requireNonNull(colorTarget.getColorTextureView(), "target without colour"), depth.getDepthTextureView(), translucent);
+			BatchDrawer.executeInto(Objects.requireNonNull(colorTarget.getColorTextureView(), "target without colour"), depth.getDepthTextureView(), translucent);
 		} finally {
 			recording = false;
 		}

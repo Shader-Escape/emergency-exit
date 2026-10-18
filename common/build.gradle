@@ -9,7 +9,7 @@ neoForge {
 
 dependencies {
     // Both loaders ship Mixin and MixinExtras, so common code can use them.
-    // Not transitive: NeoForm 1.21.10 pins ASM to 9.6, older than the one Mixin asks for.
+    // Not transitive: NeoForm pins ASM to 9.6, older than the one Mixin asks for.
     compileOnly('net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7') { transitive = false }
     compileOnly('org.ow2.asm:asm-tree:9.6')
     compileOnly(annotationProcessor('io.github.llamalad7:mixinextras-common:0.5.3'))

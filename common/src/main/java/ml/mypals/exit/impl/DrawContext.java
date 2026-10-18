@@ -2,29 +2,29 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import ml.mypals.exit.api.ExitContext;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4fc;
 
 /** The context of one drawing. Nested drawings on the same channel share it. */
 final class DrawContext implements ExitContext {
 	final Channel channel;
-	private final SubmitNodeCollector collector;
+	private final MultiBufferSource bufferSource;
 	private final boolean routed;
-	private final CameraRenderState camera;
+	private final Camera camera;
 	private final PoseStack poseStack = new PoseStack();
 
-	DrawContext(Channel channel, SubmitNodeCollector collector, boolean routed, CameraRenderState camera) {
+	DrawContext(Channel channel, MultiBufferSource bufferSource, boolean routed, Camera camera) {
 		this.channel = channel;
-		this.collector = collector;
+		this.bufferSource = bufferSource;
 		this.routed = routed;
 		this.camera = camera;
 	}
 
 	@Override
-	public SubmitNodeCollector collector() {
-		return this.collector;
+	public MultiBufferSource bufferSource() {
+		return this.bufferSource;
 	}
 
 	@Override
@@ -34,11 +34,11 @@ final class DrawContext implements ExitContext {
 
 	@Override
 	public Vec3 cameraPos() {
-		return this.camera.pos;
+		return this.camera.getPosition();
 	}
 
 	@Override
-	public CameraRenderState camera() {
+	public Camera camera() {
 		return this.camera;
 	}
 

@@ -6,6 +6,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.platform.DepthTestFunction;
+import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -158,6 +159,9 @@ final class Gpu {
 			// A layer or a depth replacement replaces the whole target, see layerOutput and depthOnly.
 			clear(output);
 		}
+		// Getting the index buffer may upload it, which cannot happen inside a pass.
+		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
+		GpuBuffer indexBuffer = indices.getBuffer(6);
 		try (RenderPass pass = pipeline.layer ? openPass(pipeline.label, color(output), depth(output), output)
 			: pipeline.depthOnly ? depthPass(pipeline.label, output) : colorPass(pipeline.label, output)) {
 			pass.setPipeline(pipeline.pipeline);
@@ -165,23 +169,28 @@ final class Gpu {
 			for (Sampler sampler : samplers) {
 				bind(pass, sampler.name(), sampler.depth() ? depth(sampler.target()) : color(sampler.target()));
 			}
-			drawScreenQuad(pass);
+			pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
+			pass.setIndexBuffer(indexBuffer, indices.type());
+			pass.drawIndexed(0, 0, 6, 1);
 		}
 	}
 
 	/** Blending for premultiplied colour. */
 	private static final BlendFunction PREMULTIPLIED_ALPHA = BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA;
 
-	/** A pipeline that covers the screen and samples the given textures. */
+	/**
+	 * A pipeline that covers the screen and samples the given textures. Before 1.21.9 there is no {@code core/screenquad}
+	 * that draws one triangle without vertices, so it draws the shared quad with {@code core/blit_screen}.
+	 */
 	private static RenderPipeline.Builder screenQuad(String location, String fragmentShader, String... samplers) {
 		RenderPipeline.Builder builder = RenderPipeline.builder()
 			.withLocation(ExitMod.id(location))
-			.withVertexShader("core/screenquad")
+			.withVertexShader("core/blit_screen")
 			.withFragmentShader(ExitMod.id(fragmentShader));
 		for (String name : samplers) {
 			builder.withSampler(name);
 		}
-		builder.withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES);
+		builder.withVertexFormat(DefaultVertexFormat.POSITION, VertexFormat.Mode.QUADS);
 		return builder;
 	}
 
@@ -214,11 +223,6 @@ final class Gpu {
 	/** Opens a pass on the depth of {@code target} and keeps its contents. Its colour is attached too, unwritten (see {@link #depthOnly}). */
 	private static RenderPass depthPass(String label, RenderTarget target) {
 		return openPass(label, color(target), depth(target), target);
-	}
-
-	/** Draws the full-screen shape of a {@link #screenQuad} pipeline. */
-	private static void drawScreenQuad(RenderPass pass) {
-		pass.draw(0, 3);
 	}
 
 	private static GpuTextureView color(RenderTarget target) {

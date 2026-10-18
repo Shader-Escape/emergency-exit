@@ -85,7 +85,7 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.10 has no shadow render callback). EXIT
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.8 has no shadow render callback). EXIT
 	 * must skip what is drawn there.
 	 */
 	public static void inShadowPass() {
@@ -136,7 +136,7 @@ public final class SmokeTest {
 		if (!this.requestedScreen && mc.getOverlay() == null && this.ticks > 40) {
 			this.requestedScreen = true;
 			log("opening the create-world screen");
-			CreateWorldScreen.openFresh(mc, () -> {});
+			CreateWorldScreen.openFresh(mc, mc.screen);
 		}
 	}
 

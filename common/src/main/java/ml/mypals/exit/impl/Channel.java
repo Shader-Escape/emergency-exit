@@ -7,8 +7,7 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitContext;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,7 +30,10 @@ final class Channel implements ExitChannel {
 	private boolean preparedThisFrame;
 	private boolean usedThisFrame;
 	private boolean usedLastFrame;
-	private @Nullable SubmitNodeStorage batch;
+	/** Kept from frame to frame, with its memory. */
+	private @Nullable BatchDrawer.Batch batch;
+	/** Whether the batch was asked for this frame. */
+	private boolean batchOpen;
 
 	Channel(ResourceLocation id, ExitOptions options, int order) {
 		this.id = id;
@@ -50,7 +52,7 @@ final class Channel implements ExitChannel {
 	}
 
 	@Override
-	public void draw(@Nullable SubmitNodeCollector passThrough, Consumer<ExitContext> drawing) {
+	public void draw(@Nullable MultiBufferSource passThrough, Consumer<ExitContext> drawing) {
 		RenderSystem.assertOnRenderThread();
 		DrawContext outer = ExitRuntime.drawing;
 		if (outer != null) {
@@ -72,8 +74,8 @@ final class Channel implements ExitChannel {
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
 			// Recorded into the batch, so the whole channel is drawn in one frame: solid before translucent.
-			SubmitNodeCollector collector = !routed && passThrough != null ? passThrough : this.batchStorage();
-			this.run(new DrawContext(this, collector, routed, ExitRuntime.camera()), drawing);
+			MultiBufferSource buffers = !routed && passThrough != null ? passThrough : this.batchSource();
+			this.run(new DrawContext(this, buffers, routed, ExitRuntime.camera()), drawing);
 		} finally {
 			ExitRuntime.end();
 		}
@@ -111,7 +113,7 @@ final class Channel implements ExitChannel {
 	}
 
 	@Override
-	public SubmitNodeCollector batch(@Nullable SubmitNodeCollector passThrough) {
+	public MultiBufferSource batch(@Nullable MultiBufferSource passThrough) {
 		RenderSystem.assertOnRenderThread();
 		if (!ExitRuntime.inLevel()) {
 			ExitRuntime.warnOnce("batch-outside-level", "EXIT: " + this.id + " asked for its batch outside the level rendering; it is dropped");
@@ -123,13 +125,14 @@ final class Channel implements ExitChannel {
 		if (!ExitRuntime.isActive() && passThrough != null) {
 			return passThrough;
 		}
-		return this.batchStorage();
+		return this.batchSource();
 	}
 
-	private SubmitNodeStorage batchStorage() {
+	private BatchDrawer.Batch batchSource() {
 		if (this.batch == null) {
-			this.batch = FeatureDrawer.newStorage();
+			this.batch = new BatchDrawer.Batch();
 		}
+		this.batchOpen = true;
 		return this.batch;
 	}
 
@@ -138,7 +141,7 @@ final class Channel implements ExitChannel {
 		if (this.options.wantsFrame() != null) {
 			return this.options.wantsFrame().getAsBoolean();
 		}
-		return this.usedLastFrame || this.usedThisFrame || this.batch != null;
+		return this.usedLastFrame || this.usedThisFrame || this.batchOpen;
 	}
 
 	@Override
@@ -151,14 +154,13 @@ final class Channel implements ExitChannel {
 
 	/** Renders this frame's batch into the channel's target, or into the main target when not routed. */
 	void drawBatch() {
-		SubmitNodeStorage submitted = this.batch;
-		this.batch = null;
-		if (submitted == null) {
+		BatchDrawer.Batch drawn = this.batch;
+		if (drawn == null || drawn.isEmpty()) {
 			return;
 		}
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
-			FeatureDrawer.draw(submitted, routed ? this.prepareForDraw() : Gpu.mainTarget());
+			BatchDrawer.draw(drawn, routed ? this.prepareForDraw() : Gpu.mainTarget());
 		} finally {
 			ExitRuntime.end();
 		}
@@ -246,7 +248,10 @@ final class Channel implements ExitChannel {
 		this.preparedThisFrame = false;
 		this.usedThisFrame = false;
 		this.translucentDrawn = false;
-		this.batch = null;
+		this.batchOpen = false;
+		if (this.batch != null) {
+			this.batch.discard();
+		}
 	}
 
 	void close() {
@@ -261,6 +266,10 @@ final class Channel implements ExitChannel {
 		this.translucentDrawn = false;
 		this.preparedThisFrame = false;
 		this.usedThisFrame = false;
-		this.batch = null;
+		this.batchOpen = false;
+		if (this.batch != null) {
+			this.batch.close();
+			this.batch = null;
+		}
 	}
 }
