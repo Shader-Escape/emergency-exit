@@ -7,13 +7,16 @@ import ml.mypals.exit.impl.DebugView;
 import ml.mypals.exit.impl.ExitRuntime;
 import ml.mypals.exit.impl.SceneSize;
 import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
+import net.coderbot.iris.Iris;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
+import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
@@ -37,8 +40,11 @@ public final class SmokeTest {
 	private static final String TAG = "[emergency_exit-smoke] ";
 	private static final String WORLD = "EXIT Smoke";
 	private static final String VERSION = SharedConstants.getCurrentVersion().getName();
-	/** Client ticks to stay in the world, 20 per second. */
-	private static final int TICKS_IN_WORLD = 400;
+	/**
+	 * Client ticks to stay in the world, 20 per second. The last scene runs at 393 ticks after the shapes are placed,
+	 * and the shapes are placed about 21 ticks into the world, so the run has to last a little longer than 400.
+	 */
+	private static final int TICKS_IN_WORLD = 420;
 	/** Give up after this many client ticks without a world. */
 	private static final int TIMEOUT_TICKS = 20 * 60 * 5;
 
@@ -52,6 +58,14 @@ public final class SmokeTest {
 	private boolean requestedScreen;
 	private boolean created;
 	private boolean done;
+	/** The block coordinates of the water and stone walls the scenes place in front of the boxes, while they are up. */
+	private int[] waterWall;
+	private int[] stoneWall;
+	/** The window size before the resized scene changes it, so the scene can put it back. */
+	private int windowWidth;
+	private int windowHeight;
+	/** Whether the shader pack was reloaded, which only the run with a pack does. */
+	private boolean packReloaded;
 
 	/** The loader's name, part of the screenshot names. */
 	private String loader = "unknown";
@@ -84,6 +98,9 @@ public final class SmokeTest {
 		if (this.ticks == 1) {
 			// The check runs unattended, and a pause menu would cover the screenshots.
 			mc.options.pauseOnLostFocus = false;
+			// The window is hidden, so nothing needs the frames to be fast, and each frame that is drawn costs the
+			// development client a little native memory. 30 frames per second leaves room for the whole run.
+			mc.options.framerateLimit().set(30);
 		}
 		if (mc.level != null && mc.player != null) {
 			this.ticksInWorld++;
@@ -157,11 +174,13 @@ public final class SmokeTest {
 				DebugShapes.toggle(mc.player);
 			}
 			this.placedAt = this.ticksInWorld;
-			log("placed the test shapes at " + DebugShapes.center());
+			log("placed the test shapes at " + DebugShapes.center() + " on tick " + this.ticksInWorld);
 		}
 		if (this.placedAt < 0) {
 			return;
 		}
+		// The command feedback and the teleport messages of the scenes would cover the middle of every screenshot.
+		mc.gui.getChat().clearMessages(true);
 		switch (this.ticksInWorld - this.placedAt) {
 			case 100 -> {
 				log("scene " + SceneSize.width() + "x" + SceneSize.height() + ", window " + mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight()
@@ -179,8 +198,143 @@ public final class SmokeTest {
 			case 146 -> DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
 			case 150 -> viewFromTheSide(mc);
 			case 200 -> presented(mc, "side");
+			// The checks of porting.md 7.3 that can be made into a screenshot. Everything after 200 runs from the
+			// side view, so the first scene levels the view and places the boxes again, the right way round.
+			case 205 -> {
+				DebugView.set(DebugView.Mode.MAIN_DEPTH, Exit.MAIN);
+				log("scene main_depth: debug view " + DebugView.Mode.MAIN_DEPTH.id());
+			}
+			case 220 -> screenshot(mc, "main_depth");
+			case 221 -> {
+				DebugView.set(DebugView.Mode.TRANSLUCENT_DEPTH, Exit.MAIN);
+				log("scene translucent_depth: debug view " + DebugView.Mode.TRANSLUCENT_DEPTH.id());
+			}
+			case 236 -> screenshot(mc, "translucent_depth");
+			case 237 -> {
+				DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
+				log("scene debug_off: debug view " + DebugView.Mode.OFF.id());
+			}
+			case 252 -> screenshot(mc, "debug_off");
+			case 253 -> log("scene shapes_off: shapes " + (DebugShapes.toggle(mc.player) ? "on" : "off"));
+			case 268 -> screenshot(mc, "shapes_off");
+			case 269 -> {
+				// Level the view, so the boxes, the water and the wall line up with the world axes.
+				mc.player.connection.sendCommand("tp @s ~ ~ ~ 0 10");
+				log("scene water: levelled the view");
+			}
+			case 270 -> log("scene water: shapes " + (DebugShapes.toggle(mc.player) ? "on" : "off") + " at " + DebugShapes.center());
+			// Water flows, so it is placed only a few ticks before the screenshot; placed earlier it has spread over
+			// the whole view and the boxes it is meant to cover cannot be told apart from the rest.
+			case 293 -> this.waterWall = fillBetween(mc, 1, -2.5, 0.5, 1, "minecraft:water", "water");
+			case 300 -> screenshot(mc, "water");
+			case 301 -> clearBetween(mc, this.waterWall, "water");
+			case 302 -> {
+				// Hold a block and look left of and above the boxes, so they sit at the bottom right of the view,
+				// where the arm and the held item are.
+				mc.player.connection.sendCommand("give @s minecraft:stone 1");
+				lookAt(mc, DebugShapes.center().subtract(rightOf(mc).scale(2)).add(0, 1.1, 0));
+				log("scene hand: looking past the boxes, holding a block");
+			}
+			case 320 -> screenshot(mc, "hand");
+			case 321 -> {
+				lookAt(mc, DebugShapes.center());
+				log("scene hand: looking at the boxes again");
+			}
+			case 323 -> this.stoneWall = fillBetween(mc, 1, -2.5, 0.5, 1, "minecraft:stone", "wall");
+			case 350 -> screenshot(mc, "wall");
+			case 351 -> clearBetween(mc, this.stoneWall, "wall");
+			case 352 -> {
+				this.windowWidth = mc.getWindow().getWidth();
+				this.windowHeight = mc.getWindow().getHeight();
+				GLFW.glfwSetWindowSize(mc.getWindow().getWindow(), 640, 360);
+				log("scene resized: window " + this.windowWidth + "x" + this.windowHeight + " to 640x360");
+			}
+			case 372 -> presented(mc, "resized");
+			case 373 -> {
+				GLFW.glfwSetWindowSize(mc.getWindow().getWindow(), this.windowWidth, this.windowHeight);
+				log("scene resized: window back to " + this.windowWidth + "x" + this.windowHeight);
+			}
+			case 374 -> reloadShaderPack();
+			case 393 -> {
+				if (this.packReloaded) {
+					screenshot(mc, "pack_reloaded");
+				}
+			}
 			default -> {
 			}
+		}
+	}
+
+	/**
+	 * Fills a wall of one block in front of the boxes and returns its block coordinates, or null when it could not be
+	 * placed. The wall is {@code distance} blocks in front of the middle box, runs from {@code fromRight} to
+	 * {@code toRight} blocks along the player's right and {@code halfHeight} blocks up and down. It is kept narrower
+	 * than the row of boxes, so the screenshots show the boxes it covers next to the ones it does not.
+	 */
+	@Nullable
+	private int[] fillBetween(Minecraft mc, double distance, double fromRight, double toRight, double halfHeight, String block, String scene) {
+		Vec3 center = DebugShapes.center();
+		if (center == null) {
+			log("scene " + scene + ": the shapes are off, nothing placed");
+			return null;
+		}
+		Vec3 forward = horizontalLook(mc);
+		Vec3 right = new Vec3(-forward.z, 0, forward.x);
+		Vec3 at = center.subtract(forward.scale(distance));
+		Vec3 left = at.add(right.scale(fromRight));
+		Vec3 end = at.add(right.scale(toRight));
+		int x1 = (int) Math.floor(Math.min(left.x, end.x));
+		int x2 = (int) Math.floor(Math.max(left.x, end.x));
+		int z1 = (int) Math.floor(Math.min(left.z, end.z));
+		int z2 = (int) Math.floor(Math.max(left.z, end.z));
+		int y1 = (int) Math.floor(at.y - halfHeight);
+		int y2 = (int) Math.floor(at.y + halfHeight);
+		mc.player.connection.sendCommand("fill " + x1 + " " + y1 + " " + z1 + " " + x2 + " " + y2 + " " + z2 + " " + block);
+		log("scene " + scene + ": " + block + " wall " + (x2 - x1 + 1) + " wide, " + (y2 - y1 + 1) + " tall, "
+			+ (z2 - z1 + 1) + " deep at " + x1 + " " + y1 + " " + z1 + " to " + x2 + " " + y2 + " " + z2 + ", " + distance
+			+ " blocks in front of the boxes, covering the boxes " + fromRight + " to " + toRight + " blocks to their right");
+		return new int[] {x1, y1, z1, x2, y2, z2};
+	}
+
+	/** Removes a wall placed by {@link #fillBetween}. */
+	private void clearBetween(Minecraft mc, @Nullable int[] wall, String scene) {
+		if (wall == null) {
+			return;
+		}
+		mc.player.connection.sendCommand("fill " + wall[0] + " " + wall[1] + " " + wall[2] + " " + wall[3] + " " + wall[4] + " " + wall[5] + " minecraft:air");
+		log("scene " + scene + ": cleared the wall");
+	}
+
+	/** Points the player at {@code target} without moving it. */
+	private void lookAt(Minecraft mc, Vec3 target) {
+		mc.player.connection.sendCommand(String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f facing %.3f %.3f %.3f",
+			mc.player.getX(), mc.player.getY(), mc.player.getZ(), target.x, target.y, target.z));
+	}
+
+	/** The player's view direction with the vertical part dropped, the way {@link DebugShapes} lines the boxes up. */
+	private static Vec3 horizontalLook(Minecraft mc) {
+		Vec3 look = mc.player.getLookAngle();
+		return new Vec3(look.x, 0, look.z).normalize();
+	}
+
+	/** The player's horizontal right. */
+	private static Vec3 rightOf(Minecraft mc) {
+		Vec3 forward = horizontalLook(mc);
+		return new Vec3(-forward.z, 0, forward.x);
+	}
+
+	/** Reloads the shader pack, as in porting.md 7.3 item 7. Without one there is nothing to reload. */
+	private void reloadShaderPack() {
+		if (!IrisCompat.isPackInUse()) {
+			log("scene pack_reloaded: no shader pack in use, nothing to reload");
+			return;
+		}
+		try {
+			Iris.reload();
+			this.packReloaded = true;
+			log("scene pack_reloaded: reloaded the shader pack");
+		} catch (IOException e) {
+			log("scene pack_reloaded: the shader pack could not be reloaded: " + e);
 		}
 	}
 
