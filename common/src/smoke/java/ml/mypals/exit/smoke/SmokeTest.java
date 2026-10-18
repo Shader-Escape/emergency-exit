@@ -88,7 +88,7 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.4 has no shadow render callback). EXIT
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.3 has no shadow render callback). EXIT
 	 * must skip what is drawn there.
 	 */
 	public static void inShadowPass() {

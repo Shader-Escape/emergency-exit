@@ -1,6 +1,6 @@
 plugins {
     id 'multiloader-loader'
-    // Minecraft 1.21.4 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    // Minecraft 1.21.3 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
 }
 

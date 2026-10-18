@@ -11,13 +11,17 @@ final class IrisHooks {
 	static boolean isRenderingShadowPass() {
 		return IrisApi.getInstance().isRenderingShadowPass();
 	}
+	// Iris 1.8.1 (for 1.21.3) has no ImmediateState.bypass. EXIT keeps its own, and IrisShaderOverrideMixin reads it:
+	// later Iris only reads its bypass next to shouldOverrideShaders, when it picks the program for a vanilla shader.
+	private static boolean bypass;
+
 	static boolean bypass() {
-		return ImmediateState.bypass;
+		return bypass;
 	}
 	static void setBypass(boolean bypass) {
-		ImmediateState.bypass = bypass;
+		IrisHooks.bypass = bypass;
 	}
-	// Iris 1.8.11 (for 1.21.5) widens the format of every BufferBuilder made while a pack is in use, unless skipExtension
+	// Iris 1.8 (1.8.1 for 1.21.3) widens the format of every BufferBuilder made while a pack is in use, unless skipExtension
 	// is set; isRenderingLevel does not matter here. The vanilla pipelines keep the vanilla formats, so the switch works
 	// as on 26.3. (Iris 1.9 and later, for 1.21.6 to 26.2, hand out the widened formats as the vanilla ones instead.)
 	static final boolean HAS_SKIP_EXTENSION = true;

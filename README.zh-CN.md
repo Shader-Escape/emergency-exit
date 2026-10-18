@@ -8,13 +8,13 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
 请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-这个分支对应 Minecraft **1.21.4**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
+这个分支对应 Minecraft **1.21.3**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码；`master` 是 26.3。
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.4`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.3`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
 调用时机要在关卡渲染期间（`LevelRenderer.renderLevel` 里面）。各加载器可用的位置：
 
@@ -24,10 +24,10 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 | 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` 等 | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
 | portal | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`LAST` | `RenderLevelStageEvent` 的 `Stage.AFTER_CUTOUT_BLOCKS` 等 |
 
-1.21.4 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。1.21.5 之前没有渲染通道
+1.21.3 没有 `SubmitNodeCollector`：绘制和批量用的是 `MultiBufferSource`（见"API 稳定性"）。1.21.5 之前没有渲染通道
 （`RenderPass`），所有绘制都画进当前绑定的帧缓冲，所以主渲染通道里的这些事件都可以用 portal。
 
-NeoForge 1.21.4 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
+NeoForge 1.21.3 的事件不交出 buffer source，没有可直通的：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
 没有光影包时，批量在关卡渲染结束时画进主目标。
 
 Fabric 的 `WorldRenderEvents.END` 和 NeoForge 的 `RenderLevelStageEvent`（`Stage.AFTER_LEVEL`）在关卡渲染的末尾触发，EXIT 也在那里合并本帧，
@@ -118,13 +118,13 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 
 | 开关 | 默认 | 说明                                                                   |
 |---|---|----------------------------------------------------------------------|
-| `bypass` | `ON` | Iris 的 `ImmediateState.bypass`：不把原版管线替换成光影包的程序                       |
+| `bypass` | `ON` | Iris 的 `ImmediateState.bypass`：不把原版管线替换成光影包的程序（1.21.3 的 Iris 1.8.1 没有这个开关，EXIT 自己记，开着时不让 Iris 替换原版着色器）                       |
 | `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽 |
 | `renderingLevel` | `KEEP` | Iris 的 `ImmediateState.isRenderingLevel`：开着时 Iris 会加宽此刻开始的缓冲的顶点格式     |
 
  **注意**
 
-* **portal 输出行为：** 1.21.4 没有渲染通道，所有绘制都画进当前绑定的帧缓冲。portal 改道期间，EXIT 绑定通道目标，
+* **portal 输出行为：** 1.21.3 没有渲染通道，所有绘制都画进当前绑定的帧缓冲。portal 改道期间，EXIT 绑定通道目标，
   并用一个 mixin 让 `Minecraft.getMainRenderTarget()` 返回通道目标（原版绑定主目标都经过它，渲染类型也是）。
   所以对主目标画的代码不用改。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha，通道里存的是预乘颜色。
   以下情况不会自动改道，需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
@@ -229,7 +229,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   （手部之前、半透明之前）。没有复制时通道照样能画，只是那一帧的遮挡改用当时的主深度。
 * **API 稳定性** `ml.mypals.exit.api` 是 API；`impl`、`compat`、`mixin` 不是。API 里用到了 Minecraft 的类型
   （`MultiBufferSource`、`Camera`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
-  1.21.4 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
+  1.21.3 没有 `SubmitNodeCollector`，也没有相机渲染状态：26.3 里收、交 `SubmitNodeCollector` 的地方，这个分支用
   `MultiBufferSource`（`Exit.draw(MultiBufferSource, ...)`、`ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`），
   `ExitContext.camera()` 是 `Camera`。
 
@@ -249,7 +249,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
   * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AFTER_CUTOUT_BLOCKS`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.4 没有 Gizmo，所以没有青色线框）
+  * 蓝色（左）：portal 里直接对主目标绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.3 没有 Gizmo，所以没有青色线框）
 
 ## 开发
 
@@ -261,10 +261,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa 等都放进去）。
   每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
   日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是
-  `run/fabric-1.21.4` 和 `run/neoforge-1.21.4`。
+  `run/fabric-1.21.3` 和 `run/neoforge-1.21.3`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
-  但 SR 没有 1.21.4 的版本，开发运行不加载它。
+  但 SR 没有 1.21.3 的版本，开发运行不加载它。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 
 ## 与 LitematicaPass 的关系（计划）

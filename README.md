@@ -7,13 +7,13 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-This branch is for Minecraft **1.21.4** (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft
+This branch is for Minecraft **1.21.3** (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft
 version gets its own git branch with plain code for that version; `master` is 26.3.
 
 ### Loaders
 
 Both loaders share one API, with one jar each: `emergency_exit-fabric` and `emergency_exit-neoforge` (Maven
-`ml.mypals.exit:emergency_exit-<loader>:0.1.0+1.21.4`). Iris is optional. Without a shader pack nothing is routed.
+`ml.mypals.exit:emergency_exit-<loader>:0.1.0+1.21.3`). Iris is optional. Without a shader pack nothing is routed.
 
 Call EXIT while the level renders, inside `LevelRenderer.renderLevel`.
 
@@ -23,11 +23,11 @@ Call EXIT while the level renders, inside `LevelRenderer.renderLevel`.
 | Drawings (recorded into the batch) | `WorldRenderEvents.BEFORE_ENTITIES`, `AFTER_ENTITIES`, `LAST` and others | `RenderLevelStageEvent`, `Stage.AFTER_CUTOUT_BLOCKS` and others |
 | Portals | `WorldRenderEvents.BEFORE_ENTITIES`, `AFTER_ENTITIES`, `LAST` | `RenderLevelStageEvent`, `Stage.AFTER_CUTOUT_BLOCKS` and others |
 
-1.21.4 has no `SubmitNodeCollector`: drawings and batches take a `MultiBufferSource` (see API stability below). There
+1.21.3 has no `SubmitNodeCollector`: drawings and batches take a `MultiBufferSource` (see API stability below). There
 are no render passes before 1.21.5 (everything draws into the bound framebuffer), so portals work in the events inside
 the main pass.
 
-The events of NeoForge for 1.21.4 hand out no buffer source, so there is nothing to pass through: use `Exit.batch()`
+The events of NeoForge for 1.21.3 hand out no buffer source, so there is nothing to pass through: use `Exit.batch()`
 and `Exit.draw(null, ...)`. Without a shader pack the batch then renders into the main target at the end of the level
 rendering.
 
@@ -114,10 +114,10 @@ D32 target once it draws translucent render types, and blending two or more cost
   the render thread and `plainFormat`, below). Outside it a drawing is dropped (logged once) and a portal does not
   route. A channel's target is seeded with the scene depth when it is first used in the frame, so route (portal or `redirect`) once the
   level's frame graph runs (as Litematica does), not before.
-* **Portals.** `portal(overrides, body)` sets Iris's `bypass` (default on), `skipExtension` (default on, per thread) and `isRenderingLevel` (default left alone), each `KEEP`/`ON`/`OFF`, while `body` runs, and restores them after. It
+* **Portals.** `portal(overrides, body)` sets Iris's `bypass` (default on; Iris 1.8.1 for 1.21.3 has none, so EXIT keeps its own and keeps Iris from replacing vanilla shaders while it is on), `skipExtension` (default on, per thread) and `isRenderingLevel` (default left alone), each `KEEP`/`ON`/`OFF`, while `body` runs, and restores them after. It
   routes with a shader pack in use, outside its shadow pass, while the level renders; the switches are set whenever a
   pack is in use outside its shadow pass. While it routes, the channel's target is bound and
-  `Minecraft.getMainRenderTarget()` returns it (a mixin), for any mod: 1.21.4 has no render passes, everything draws
+  `Minecraft.getMainRenderTarget()` returns it (a mixin), for any mod: 1.21.3 has no render passes, everything draws
   into the bound framebuffer, and vanilla binds the main target through that getter (render types included). Drawings
   in the portal blend their alpha as `(ONE, ONE_MINUS_SRC_ALPHA)`, so the channel holds premultiplied colour. Not moved,
   so use `channel.redirect(yourTarget)` there: other targets, a main target fetched before the portal began, and
@@ -158,14 +158,14 @@ D32 target once it draws translucent render types, and blending two or more cost
   occlusion against the main depth at that moment for that frame.
 * **API stability.** `ml.mypals.exit.api` is the API; `impl`, `compat` and `mixin` are not. The API names Minecraft
   types (`MultiBufferSource`, `Camera`, `PoseStack`, `RenderTarget`), so it is stable within one Minecraft version.
-  1.21.4 has no `SubmitNodeCollector` and no camera render state: where 26.3 takes or hands out a
+  1.21.3 has no `SubmitNodeCollector` and no camera render state: where 26.3 takes or hands out a
   `SubmitNodeCollector` this branch uses a `MultiBufferSource` (`Exit.draw(MultiBufferSource, ...)`,
   `ExitContext.bufferSource()`, `Exit.batch(MultiBufferSource)`), and `ExitContext.camera()` is the `Camera`.
 
 Debug: `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [channel]` shows a
 channel's buffers instead of the frame (with a shader pack in use). `/emergency_exit debug shapes` turns three test boxes
 on, 5 blocks in front of you, or off again: red = translucent drawing, green = batch (solid), yellow = a solid box on another channel behind the green one, blended by depth, blue = a pass on the main target in a
-portal, moved into a channel that shows through the world. 1.21.4 has no gizmos, so there is no cyan outline.
+portal, moved into a channel that shows through the world. 1.21.3 has no gizmos, so there is no cyan outline.
 
 ## Development
 
@@ -179,10 +179,10 @@ event hooks of the debug shapes. Loader-specific queries go through the `Platfor
   Iris, so put BSL, Kappa and so on there). Each phase takes screenshots
   (`screenshots/emergency_exit-smoke-<version>-<loader>-<pack>-<view>.png`) and checks what EXIT did; then the game
   quits. The log ends with `RESULT: OK`. `-Demergency_exit.smoke.packs=none,BSL.zip` picks the phases instead. They run
-  in `run/fabric-1.21.4` and `run/neoforge-1.21.4`.
+  in `run/fabric-1.21.3` and `run/neoforge-1.21.3`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * The smoke test also saves `*-presented.png`, the window's front buffer, which is what the player sees. EXIT still
-  follows the render size of the Super Resolution mod when it is present, but SR has no build for 1.21.4, so the
+  follows the render size of the Super Resolution mod when it is present, but SR has no build for 1.21.3, so the
   development runs do not load it.
 * `./gradlew publishToMavenLocal` publishes both jars for other mods' development setups.
 
