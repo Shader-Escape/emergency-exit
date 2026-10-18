@@ -51,13 +51,14 @@ final class Gpu {
 
 	/** A colour and depth target, cleared to transparent black. */
 	static TextureTarget colorDepthTarget(String label, int width, int height) {
-		TextureTarget target = new TextureTarget(width, height, true);
+		TextureTarget target = new TextureTarget(width, height, true, Minecraft.ON_OSX);
 		target.setClearColor(0, 0, 0, 0);
 		return target;
 	}
 
 	static void resize(RenderTarget target, int width, int height) {
-		target.resize(width, height);
+		// Before 1.21.2 resizing and clearing take whether to check for GL errors (macOS).
+		target.resize(width, height, Minecraft.ON_OSX);
 	}
 
 	/** A target whose depth is used. It has a colour texture too, since every target has one. */
@@ -67,7 +68,7 @@ final class Gpu {
 
 	/** A target with only a colour texture. */
 	static TextureTarget colorTarget(String label, int width, int height) {
-		TextureTarget target = new TextureTarget(width, height, false);
+		TextureTarget target = new TextureTarget(width, height, false, Minecraft.ON_OSX);
 		target.setClearColor(0, 0, 0, 0);
 		return target;
 	}
@@ -75,7 +76,7 @@ final class Gpu {
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}, and keeps what was bound. */
 	static void clear(RenderTarget target) {
 		Runnable restore = saveBinding();
-		target.clear();
+		target.clear(Minecraft.ON_OSX);
 		restore.run();
 	}
 

@@ -8,10 +8,10 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexMultiConsumer;
 import ml.mypals.exit.compat.IrisCompat;
+import ml.mypals.exit.mixin.RenderSystemAccessor;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -42,9 +42,10 @@ public final class BatchDrawer {
 		// it treats what is drawn as level geometry (its buffer source and entity render context), so keep it off.
 		boolean renderingLevel = IrisCompat.isRenderingLevel();
 		IrisCompat.setRenderingLevel(false);
-		Matrix4fStack modelView = RenderSystem.getModelViewStack();
-		modelView.pushMatrix();
-		modelView.set(ExitRuntime.viewRotation());
+		// Before 1.21.2 draws read RenderSystem's model-view matrix, not the stack. EXIT swaps in its own and puts the same
+		// object back (RenderSystemAccessor).
+		Matrix4f modelViewBefore = RenderSystemAccessor.emergency_exit$modelViewMatrix();
+		RenderSystemAccessor.emergency_exit$setModelViewMatrix(new Matrix4f(ExitRuntime.viewRotation()));
 		try {
 			executeInto(target, () -> {
 				batch.colour.draw(false);
@@ -56,7 +57,7 @@ public final class BatchDrawer {
 				TranslucentDepth.record(() -> batch.depth.draw(true), channel.translucentDepth());
 			}
 		} finally {
-			modelView.popMatrix();
+			RenderSystemAccessor.emergency_exit$setModelViewMatrix(modelViewBefore);
 			IrisCompat.setRenderingLevel(renderingLevel);
 			batch.discard();
 		}
@@ -87,7 +88,7 @@ public final class BatchDrawer {
 		}
 		if (projection != null) {
 			RenderSystem.backupProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(projection), RenderSystem.getProjectionType());
+			RenderSystem.setProjectionMatrix(new Matrix4f(projection), RenderSystem.getVertexSorting());
 		}
 		try {
 			execute.run();
@@ -201,7 +202,7 @@ public final class BatchDrawer {
 
 		private void draw(RenderType type, MeshData mesh) {
 			if (type.sortOnUpload()) {
-				mesh.sortQuads(this.memory.get(type), RenderSystem.getProjectionType().vertexSorting());
+				mesh.sortQuads(this.memory.get(type), RenderSystem.getVertexSorting());
 			}
 			type.draw(mesh);
 		}

@@ -12,13 +12,13 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 import ml.mypals.exit.compat.IrisCompat;
+import ml.mypals.exit.mixin.RenderSystemAccessor;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 import org.joml.Vector4f;
 import org.jetbrains.annotations.Nullable;
 
@@ -201,9 +201,9 @@ final class SceneScale {
 	 * depth and no colour (GlOverrides). Before 1.21.5 there is no pipeline to copy: the render type sets its own masks.
 	 */
 	private static void draw(RenderType type, MeshData mesh, Matrix4f modelView) {
-		Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
-		modelViewStack.pushMatrix();
-		modelViewStack.set(modelView);
+		// Before 1.21.2 draws read RenderSystem's model-view matrix: swap in the probe's and put the same object back.
+		Matrix4f modelViewBefore = RenderSystemAccessor.emergency_exit$modelViewMatrix();
+		RenderSystemAccessor.emergency_exit$setModelViewMatrix(modelView);
 		boolean depthOnly = GlOverrides.depthOnly;
 		GlOverrides.depthOnly = true;
 		try {
@@ -212,7 +212,7 @@ final class SceneScale {
 		} finally {
 			GlOverrides.depthOnly = depthOnly;
 			GlStateManager._colorMask(true, true, true, true);
-			modelViewStack.popMatrix();
+			RenderSystemAccessor.emergency_exit$setModelViewMatrix(modelViewBefore);
 		}
 	}
 

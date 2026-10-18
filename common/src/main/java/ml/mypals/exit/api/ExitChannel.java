@@ -54,7 +54,7 @@ public interface ExitChannel {
 	 * a main target fetched before the portal began.
 	 * <ul>
 	 *     <li>It routes while the level renders with a shader pack, outside its shadow pass. Route only after the
-	 *     level's frame graph has started, for example in {@code LAST}.</li>
+	 *     level has started drawing, for example in {@code LAST}.</li>
 	 *     <li>The switches are set whenever a shader pack is in use outside its shadow pass.</li>
 	 *     <li>In the shadow pass {@code body} does not run.</li>
 	 *     <li>Off the render thread only {@link PortalOverrides#skipExtension()} is set, for that thread.</li>
