@@ -1,8 +1,8 @@
 package ml.mypals.exit.compat;
 
-import net.irisshaders.iris.Iris;
+import net.coderbot.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
-import net.irisshaders.iris.vertices.ImmediateState;
+import net.coderbot.iris.vertices.ImmediateState;
 
 final class IrisHooks {
 	static boolean isPackInUse() {

@@ -7,12 +7,12 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-Minecraft **1.20.4** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
+Minecraft **1.20.2** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
 its own git branch with plain code for that version.
 
 ### Loaders
 
-One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.20.4`). Iris is optional.
+One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.20.2`). Iris is optional.
 Without a shader pack nothing is routed. Iris has no NeoForge build for this Minecraft version, so this branch is
 Fabric only.
 
@@ -164,7 +164,7 @@ event hooks of the debug shapes. Loader-specific queries go through the `Platfor
 
 * `./gradlew build` builds the jar (`fabric/build/libs`).
 * `./gradlew :fabric:runSmokeClient` creates a world, turns on the test shapes, takes screenshots and quits. The log
-  ends with `RESULT: OK`. It runs in `run/fabric-1.20.4`. To test routing, put a shader pack into its `shaderpacks`
+  ends with `RESULT: OK`. It runs in `run/fabric-1.20.2`. To test routing, put a shader pack into its `shaderpacks`
   folder and enable it in `config/iris.properties`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * `./gradlew publishToMavenLocal` publishes the jar for other mods' development setups.
