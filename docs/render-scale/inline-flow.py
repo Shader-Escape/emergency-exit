@@ -10,7 +10,10 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 PAGE = HERE / "index.html"
-BLOCKS = {"flow-bsl": "flow-bsl.json", "flow-kappa": "flow.json", "flow-sr": "flow-sr.json"}
+BLOCKS = {
+    "flow-bsl": "flow-bsl.json", "flow-kappa": "flow.json", "flow-sr": "flow-sr.json",
+    "flow-bsl-en": "flow-bsl-en.json", "flow-kappa-en": "flow-en.json", "flow-sr-en": "flow-sr-en.json",
+}
 
 
 def main():
