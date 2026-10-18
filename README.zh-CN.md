@@ -38,6 +38,7 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 | **合并**（`composite`） | 关卡渲染结束时，把各通道目标按深度画回主目标。手部所在像素丢弃，半透明表面之后的部分变暗。 |
 | **通道混合**（`blendWithChannels`） | 合并前，参与混合的通道先依次并入一张累积层：逐像素比较深度，近的盖在远的上面（按两边的 alpha 混合），然后累积层作为一层合并到画面上。 |
 | **即时绘制**（`draw`） | 给一个托管上下文（`SubmitNodeCollector`、相机相对的 `PoseStack`、相机），lambda 返回后立即渲染进通道目标。                                                |
+| **`RenderPass`**（渲染通道） | Minecraft 的一次绘制批次，同一时刻只能开一个，和 EXIT 的通道无关。 |
 | **推迟**（`deferred`） | 在已打开的 `RenderPass` 里，或关卡渲染通道**开始之前**调用即时绘制时，lambda 照常执行，但提交的内容并入批量稍后再画。                                                  |
 | **批量**（`batch`） | 本帧随时往里提交的收集器，关卡渲染结束时一次性画进通道目标。可用 `flushBatch()` 提前。                                                                      |
 | **直通收集器** | 传给绘制方法的原版收集器（可为 `null`），不改道时绘制直接交给它。                                                                                     |
@@ -82,8 +83,10 @@ LevelRenderEvents.END_MAIN.register(context ->
 
 lambda 立即执行。返回后把提交的内容渲染进通道目标。
 第一个参数是"直通收集器"（可为 `null`），不改道（比如没有加载光影包）时，绘制直接交给它。
-
-`ExitContext` 提供：
+>高版本已经有`SubmitNodeCollector`，同一次提交里的内容会按渲染类型合批，所以`draw()`和`batch()`的差别主要在什么时候画：
+在渲染通道之外调用的`draw()`会在`lambda`返回时立刻画进通道目标，`batch()` 则到关卡渲染结束才画。`draw()` 另外提供改道用的收集器
+`（ExitContext.collector()）`和绘制需要的上下文（相机、`PoseStack`、`target()`、`openPass`）。
+在没有 `SubmitNodeCollector` 的旧版本分支（1.21.9 之前），这个托管上下文的作用会更大。
 
 | 方法 | 说明 |
 |---|---|
@@ -91,7 +94,7 @@ lambda 立即执行。返回后把提交的内容渲染进通道目标。
 | `poseStack()` | 位于相机位置的 `PoseStack`（相机相对坐标，不含旋转） |
 | `cameraPos()` / `camera()` | 相机位置 / 本帧的 `CameraRenderState` |
 | `partialTick()` | 相机实体本帧的 partial tick |
-| `modelView()` | 视图旋转矩阵，自己开 pass 时用作 model-view |
+| `modelView()` | 视图旋转矩阵，自己开 RenderPass 时用作 model-view |
 | `target()` | 绘制去向：改道时是通道目标，否则是主目标 |
 | `openPass(label)` | 打开一个画进 `target()` 的 `RenderPass`，已绑定默认 uniform 和关卡投影；返回前自行关闭 |
 | `deferred()` | 提交的内容是否被推迟到批量里绘制（见下文"已打开的渲染通道"） |
@@ -101,7 +104,7 @@ lambda 立即执行。返回后把提交的内容渲染进通道目标。
 
 ```java
 channel.portal(() -> {    // 或 主通道Exit.portal(...)
-    myRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());  // 对主目标开的 pass 会自动改画进通道目标
+    myRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());  // 对主目标开的 RenderPass 会自动改画进通道目标
     RenderTarget target = channel.redirect(fb);  // 其它目标需要自己重定向
     ...
 });
@@ -121,19 +124,19 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
  **注意**
 
 * **portal 输出行为：** 26.3 没有全局的输出目标覆盖（1.21.6–26.2 的 `RenderSystem.outputColorTextureOverride` 已被删除），
-  EXIT 用一个 mixin 仿造了它：portal 改道期间，**新开的**渲染通道只要把主目标当作颜色或深度附件，就会被换成通道目标
-  （render area 也会限制在通道目标大小以内，配合 Super Resolution）。所以自己对主目标开 pass 的代码不用改。以下情况不会自动改道，
+  EXIT 用一个 mixin 仿造了它，portal 改道期间，**新开的**渲染通道只要把主目标当作颜色或深度附件，就会被换成通道目标
+  （render area 也会限制在通道目标大小以内，配合 Super Resolution）。所以自己对主目标开 RenderPass 的代码不用改。以下情况不会自动改道，
   需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
-  * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 pass）——附件在开 pass 时就定了；
+  * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 RenderPass）——附件在开 RenderPass 时就定了；
   * 对主目标的清除、复制（`clear*`、`copyTextureToTexture`）。
 
-  这个替换是全局的：portal 期间任何 mod 新开的、画进主目标的 pass 都会被改道。
+  这个替换是全局的：portal 期间任何 mod 新开的、画进主目标的 RenderPass 都会被改道。
 * **Gizmo：** portal 改道期间，在渲染线程上用原版 `Gizmos`（`Gizmos.cuboid`、`Gizmos.line` 等）添加的 Gizmo 会被收进该通道，
   在关卡渲染结束时随通道的批量一起画进通道目标，不再由原版绘制。持续显示、淡出、总在最前这些属性照常生效。
 * **只在区间内有效：** `redirect` 只能在 portal（或 `draw` 的 lambda）里调用。如果在区间外、非渲染线程、或在另一个通道的
   portal 里调用会抛出 `IllegalStateException`。在区间内外都可能会跑的代码，执行前务必检查`Exit.isRouting()`或 `Exit.inPortal()`。
-* **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（主目标上的新 pass 被换到通道目标，`redirect` 返回通道目标；否则都保持原样）；
+* **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（主目标上的新 RenderPass 被换到通道目标，`redirect` 返回通道目标；否则都保持原样）；
   开关在有光影包且不在阴影通道时就会设置（关卡渲染之外也是）。阴影通道里 lambda 不执行。
 * **嵌套。** portal 可以嵌套，但同一时间只能在一个通道上；里面的即时绘制（须在同一通道）沿用 portal 设好的开关。
 * **异线程（编译 VBO 等需求）。** 在非渲染线程调用 portal 时，只设置**当前线程**的 `skipExtension`，
@@ -180,7 +183,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 累积层每个像素只记一个深度：两个通道的结果是准确的，三个以上在同一像素交错时是近似的。
   * 半透明的渲染类型不写深度。对 EXIT 自己画的内容（即时绘制、批量、portal 里经由 EXIT 渲染的 submit），EXIT 会把其中的半透明
     submit 用只写深度的管线副本再画一遍，写进该通道的一张深度目标；合并前取两者中更近的深度作为通道深度，所以半透明内容也能和别的通道正确排序。
-    你自己开的 pass（portal 里，或 `ExitContext.openPass`）里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
+    你自己开的 RenderPass（portal 里，或 `ExitContext.openPass`）里的半透明内容仍然没有自己的深度，比较时用初始化的场景深度，会被当成在很远处。
   * 关掉 `blendWithChannels` 的通道不参与混合，在累积层之后按优先级、再按创建顺序盖在上面（比如永远显示在最前的标记）。
 * 每个通道占用一张场景大小的 RGBA8 + D32 目标，画过半透明 submit 后再多一张 D32；有两个以上通道混合时，再多两张同样大小的累积层。
 
@@ -214,7 +217,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   和 `portal` 的区间都不执行，`batch` 返回的收集器会丢弃提交的内容（`plainFormat` 不受影响）。另外，Fabric 的
   `LevelRenderEvents` 本来就不会在 Iris 的阴影通道里触发。
 * **顺序** 不在渲染通道内的即时绘制在 lambda 返回时渲染；批量在关卡渲染结束时渲染，排在即时绘制之后，或者用
-  `flushBatch()` 提前。用 `ExitContext.openPass` 自己开的 pass 排在该次绘制的提交内容之前。
+  `flushBatch()` 提前。用 `ExitContext.openPass` 自己开的 RenderPass 排在该次绘制的提交内容之前。
 * **混合** 合并时把通道颜色视为预乘 alpha（原版半透明管线没问题）。
 * **自建顶点缓冲** Iris 在构建顶点缓冲时会加宽顶点格式；如果要用原版管线在改道状态下绘制自建的缓冲，
   请在 `Exit.plainFormat(...)` 里构建（编译多在工作线程上，`plainFormat` 在任何线程都可用）。
@@ -228,6 +231,8 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 ## 调试
 
+这些是调试功能，帮助你确认是否有错误的事情正在发生。
+
 * `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [通道]`：用某个通道
   （默认主通道）的合并缓冲区替换画面（需要启用光影包）。
   * `color`：通道目标的颜色（灰色背景）
@@ -239,7 +244,7 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * 红色（右）：主通道上的即时绘制（Fabric 的 `AFTER_SOLID_FEATURES`、NeoForge 的 `AfterOpaqueFeatures`，在主渲染通道内，因此被推迟到批量）
   * 绿色（中）：主通道的批量（Fabric 的 `COLLECT_SUBMITS`、NeoForge 的 `SubmitCustomGeometryEvent`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的即时绘制（关卡渲染结束时，在任何渲染通道之外），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 pass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
+  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
 
 ## 开发
 
@@ -256,20 +261,3 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
   即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
-
-## 与 LitematicaPass 的关系（计划）
-
-之后 LitematicaPass 在 26.3 上依赖 EXIT（用 `publishToMavenLocal` 构建，以 `include` 嵌入），
-旧版本在 EXIT 移植过去之前继续使用自己的那份渲染流程：
-
-| LitematicaPass 现在（26.3） | 改用 EXIT 后 |
-|---|---|
-| `SchematicTarget` + `SceneDepth` + `DepthSeed` + `Composite` | 一个通道 `litematicapass:schematic`，`wantsFrame` = Litematica 的渲染开关 |
-| 包装 `piecewiseDrawBlockLayerGroup` | `channel.portal(() -> original.call(channel.redirect(fb), group));` |
-| 实体进自己的存储，在不透明地形之后绘制 | `piecewiseRenderEntities` 里用 `channel.batch(queue)`；不透明组之后 `channel.flushBatch()` |
-| 覆盖层和 `RenderHandler` 的框：`begin/end` | 外面包一层 `channel.portal(...)` |
-| malilib `RenderUtils.mainTarget()` → `targetFor` | `Exit.isRouting() ? Exit.redirect(original) : original` |
-| `ChunkRendererSchematicVboMixin.plainFormat` | `Exit.plainFormat(...)` |
-| `LegacyTerrainFixUniformMixin`：`!SchematicTarget.isActive()` | `!Exit.isActive()` |
-| `/litematicapass debug` | `/emergency_exit debug ... litematicapass:schematic` |
-| `LevelRendererMixin`、`IrisRenderingPipelineMixin` | 在 EXIT 里 |
