@@ -11,6 +11,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 26.1.2 | `port/26.1.2` | 25 | 无混淆 | 1.11.4（26.1） |
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
 | 1.21.10 | `port/1.21.10` | 21 | 混淆，Mojang 映射 | 1.9.7 |
+| 1.21.8 | `port/1.21.8` | 21 | 混淆，Mojang 映射 | 1.9.6 |
 
 ## 26.2（相对 26.3）
 
@@ -174,3 +175,52 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - NeoForge 开发运行同样要在 `run/neoforge-1.21.10/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
 - 冒烟测试一次跑完：先不开光影，再对 `shaderpacks` 里每个光影包各跑一轮（通过 Iris 的配置和 `Iris.reload()` 切换），
   截图名里带上光影包名。
+
+## 1.21.8（相对 1.21.10）
+
+**构建**
+- NeoForm `1.21.8-20250717.133445`，NeoForge `21.8.57`，Fabric API `0.136.1+1.21.8`，Iris 1.9.6、Sodium 0.7.3。
+- NeoForge 21.8 的 FML 是静态的 `FMLLoader.getLoadingModList()`、`FMLLoader.isProduction()`，没有 `FMLLoader.getCurrent()`。
+- 冒烟测试的建世界：`CreateWorldScreen.openFresh(mc, lastScreen)` 收的是上一个界面，不是回调。
+
+**API**
+- 没有 `SubmitNodeCollector`，按移植说明 4.1 换成 `MultiBufferSource`：`Exit.draw(MultiBufferSource, …)`、
+  `ExitChannel.draw(MultiBufferSource, …)`、`ExitContext.bufferSource()`（代替 `collector()`）、
+  `Exit.batch(…)`/`ExitChannel.batch(…)` 收、交 `MultiBufferSource`。
+- 没有相机渲染状态 `CameraRenderState`，`ExitContext.camera()` 交出 `Camera`（`cameraPos()` 取 `getPosition()`）。
+
+**特征（批量）**
+- 没有 `SubmitNodeStorage` 和特征分发器。通道的批量是 EXIT 自己的 buffer source（`BatchDrawer.Batch`）：每种渲染类型
+  一块 `ByteBufferBuilder`，跨帧复用。原版 `BufferSource` 在再次取同一类型（线带、扇形等相连图元）或换到共享缓冲时
+  会当场画出，EXIT 的不会：相连图元的上一段先封成网格存着。
+- 帧末先画不混合的渲染类型，再画半透明的。判断用渲染类型的管线有没有混合（`CompositeRenderTypeAccessor`，
+  1.21.8 的 `RenderType` 没有 `pipeline()`），别的 `RenderType` 子类按 `sortOnUpload()`。
+- 半透明渲染类型的顶点同时写进第二组缓冲（`VertexMultiConsumer`），半透明深度用它再画一遍。
+- 开始缓冲时关掉 Iris 的 `isRenderingLevel`，因为 Iris 在 `BufferBuilder` 构造时决定要不要加宽格式。
+- 去掉了 `FeatureRenderDispatcherAccessor`、`FeatureRenderDispatcherMixin`；`FeatureDrawer` 改名 `BatchDrawer`。
+
+**渲染通道**
+- 没有 `core/screenquad`（1.21.9 才有）。全屏通道用 `core/blit_screen`、`POSITION`/`QUADS` 格式、
+  `RenderSystem.getQuadVertexBuffer()` 和四边形索引画（照 LitematicaPass）。索引缓冲在开通道之前取。
+- 1.21.8 画的时候必须有槽 0 的顶点缓冲（开发环境的校验），不能像 1.21.9 起那样不绑顶点就画。
+
+**关卡钩子**
+- `LevelRenderer.renderLevel(GraphicsResourceAllocator, DeltaTracker, boolean, Camera, Matrix4f, Matrix4f, GpuBufferSlice,
+  Vector4f, boolean)`：没有剔除投影参数，也没有 `LevelRenderState`。相机直接取参数里的 `Camera`。
+- 帧图（`FrameGraphBuilder.execute`）和 1.21.10 相同。主渲染通道里不会一直开着一个 `RenderPass`（每种渲染类型画时自己开），
+  所以主渲染通道里的事件都能用 portal。
+
+**加载器事件**
+- Fabric API 的 `WorldRenderEvents` 在 `net.fabricmc.fabric.api.client.rendering.v1`（不是 `.world`），
+  上下文给 `consumers()`（`MultiBufferSource`）和 `camera()`；没有 `END_MAIN`，用 `LAST`。`END` 在 `renderLevel` 返回时触发，
+  和 EXIT 的合并在同一处，不保证在合并之前。
+- NeoForge 21.8 的 `RenderLevelStageEvent.*` 不给 buffer source，调试方块用 `getCamera()`，不直通。
+
+**Iris**
+- Iris 1.9.6 和 1.9.7 一样有 `ImmediateState.skipExtension`，EXIT 照旧不动它。
+- 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
+
+**开发运行**
+- NeoForge 开发运行同样要在 `run/neoforge-1.21.8/config/neoforge-client.toml` 里设 `enableB3DValidationLayer = false`。
+- 冒烟测试另外检查 EXIT 的每条管线都能编译（`precompilePipeline(...).isValid()`）。没有这一项时，全屏着色器缺失只会
+  在日志里报错，计数照样通过。
