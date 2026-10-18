@@ -1,6 +1,8 @@
 package ml.mypals.exit.compat;
 
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import ml.mypals.exit.platform.Platform;
+import org.jspecify.annotations.Nullable;
 
 public final class IrisCompat {
 	public static final boolean LOADED = Platform.INSTANCE.isModLoaded("iris");
@@ -36,5 +38,22 @@ public final class IrisCompat {
 		if (LOADED) {
 			IrisHooks.setRenderingLevel(renderingLevel);
 		}
+	}
+
+	/** The shader pack's rendering pipeline, or null. A new one is made whenever the pack or its options change. */
+	public static @Nullable Object pipeline() {
+		return LOADED ? IrisHooks.pipeline() : null;
+	}
+
+	/** Makes Iris draw {@code copy} with the shader pack's program for {@code original}. */
+	public static void usePackProgramOf(RenderPipeline original, RenderPipeline copy) {
+		if (LOADED) {
+			IrisHooks.usePackProgramOf(original, copy);
+		}
+	}
+
+	/** The colour write mask of each draw buffer, as OpenGL has it now. Changing the array changes nothing. */
+	public static int[] colorMasks() {
+		return IrisHooks.colorMasks().clone();
 	}
 }

@@ -29,7 +29,7 @@ final class DepthSeed {
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
 		if (opaque == null) {
-			opaque = main;
+			opaque = SceneDepth.current(main);
 		}
 		if (noHand == null) {
 			noHand = opaque;

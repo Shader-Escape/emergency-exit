@@ -69,6 +69,11 @@ final class Gpu {
 		return new TextureTarget(label, width, height, null, GpuFormat.D32_FLOAT);
 	}
 
+	/** A target with only a colour texture. */
+	static TextureTarget colorTarget(String label, int width, int height) {
+		return new TextureTarget(label, width, height, GpuFormat.RGBA8_UNORM, null);
+	}
+
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
 	static void clear(RenderTarget target) {
 		RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
@@ -105,6 +110,11 @@ final class Gpu {
 		return new Pipeline(location, fragmentShader, true, false, defines, samplers);
 	}
 
+	/** A full-screen pass that replaces a target's depth, without depth test. */
+	static Pipeline depthReplacePipeline(String location, String fragmentShader, Map<String, Integer> defines, String... samplers) {
+		return new Pipeline(location, fragmentShader, true, false, false, true, defines, samplers);
+	}
+
 	/** A full-screen pass that replaces a target's RGBA colour and its depth, without blending or depth test. */
 	static Pipeline layerPipeline(String location, String fragmentShader, Map<String, Integer> defines, String... samplers) {
 		return new Pipeline(location, fragmentShader, false, false, true, defines, samplers);
@@ -118,11 +128,16 @@ final class Gpu {
 
 		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, Map<String, Integer> defines,
 			String[] samplers) {
-			this(location, fragmentShader, depthOnly, premultiplied, false, defines, samplers);
+			this(location, fragmentShader, depthOnly, premultiplied, false, false, defines, samplers);
 		}
 
 		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, boolean layer,
 			Map<String, Integer> defines, String[] samplers) {
+			this(location, fragmentShader, depthOnly, premultiplied, layer, false, defines, samplers);
+		}
+
+		private Pipeline(String location, String fragmentShader, boolean depthOnly, boolean premultiplied, boolean layer,
+			boolean replaceDepth, Map<String, Integer> defines, String[] samplers) {
 			this.depthOnly = depthOnly;
 			this.layer = layer;
 			this.label = ExitMod.MOD_ID + "/" + location;
@@ -131,7 +146,7 @@ final class Gpu {
 			if (layer) {
 				layerOutput(builder);
 			} else if (depthOnly) {
-				depthOnly(builder);
+				depthOnly(builder, replaceDepth);
 			} else {
 				colorOutput(builder, premultiplied ? Optional.of(PREMULTIPLIED_ALPHA) : Optional.empty());
 			}
@@ -180,9 +195,9 @@ final class Gpu {
 			.withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true));
 	}
 
-	/** Makes a pipeline that only writes depth, with the default depth test. */
-	private static void depthOnly(RenderPipeline.Builder builder) {
-		builder.withDepthStencilState(DepthStencilState.DEFAULT);
+	/** Makes a pipeline that only writes depth, with the default depth test or, to replace the depth, none. */
+	private static void depthOnly(RenderPipeline.Builder builder, boolean replace) {
+		builder.withDepthStencilState(replace ? new DepthStencilState(CompareOp.ALWAYS_PASS, true) : DepthStencilState.DEFAULT);
 	}
 
 	/** Opens a pass on the colour of {@code target} and keeps its contents. */

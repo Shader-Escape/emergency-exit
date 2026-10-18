@@ -1,7 +1,10 @@
 package ml.mypals.exit.compat;
 
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.mixin.GlStateManagerAccessor;
+import net.irisshaders.iris.pipeline.IrisPipelines;
 import net.irisshaders.iris.vertices.ImmediateState;
 
 final class IrisHooks {
@@ -30,5 +33,17 @@ final class IrisHooks {
 
 	static void setRenderingLevel(boolean renderingLevel) {
 		ImmediateState.isRenderingLevel = renderingLevel;
+	}
+
+	static Object pipeline() {
+		return Iris.getPipelineManager().getPipelineNullable();
+	}
+
+	static void usePackProgramOf(RenderPipeline original, RenderPipeline copy) {
+		IrisPipelines.copyPipeline(original, copy);
+	}
+
+	static int[] colorMasks() {
+		return GlStateManagerAccessor.getCOLOR_MASK();
 	}
 }
