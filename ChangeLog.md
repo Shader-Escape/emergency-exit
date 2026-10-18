@@ -13,6 +13,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20.6 | `port/1.20.6` | 21 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.4 | `port/1.20.4` | 17 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
+| 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 
 ## 26.2（相对 26.3）
 
@@ -232,3 +233,36 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `renderShadows`）。
 
 其余同 1.20.4。
+
+## 1.18.2（相对 1.20.2）
+
+这一支直接照 `port/1.20.2` 的代码改（1.20.1、1.20、1.19.3 三支是之后才补的），所以下面是相对 1.20.2 的差异。
+
+**构建**
+- Minecraft 1.18.2、Fabric API `0.77.0+1.18.2`、Fabric loader 0.19.5；Java 17。
+- 1.20.1 及更早没有 NeoForm 产物，MultiLoader-Template 的分家（`build-logic`、`common`）删掉，`fabric` 是一个
+  普通 Fabric Loom 项目。只有 Fabric：这个版本的 Iris 没有 NeoForge 版。
+
+**包名和类**
+- 渲染路径还没有 JOML：`com.mojang.math.Matrix4f` / `Matrix3f`。`ExitContext.modelView()` 返回 `Matrix4f`
+  （不是 `Matrix4fc`）；`PoseStack` 的位姿矩阵用 `load()` / `multiply()`；`RenderSystem.setProjectionMatrix()`
+  只有一个参数（没有 `VertexSorting`）。
+- 文字是 `Component`：还没有 `Component.literal`，命令回显用 `new TextComponent(...)`。
+- 1.19 才有 `RenderType.debugQuads()`：半透明的测试盒子改用带本模组白纹理的 `entityTranslucent`，两个测试盒子的
+  渲染类型都是 entity 格式，写顶点时每个元素都要写。
+
+**Iris**
+- Iris 1.6.11 仍在 `net.coderbot.iris`：`ImmediateState`、`WorldRenderingPhase`，管线类是
+  `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`（`shouldOverrideShaders` / `getPhase` 仍在），
+  阴影是 `net.coderbot.iris.pipeline.ShadowRenderer`。
+
+**开发运行**
+- 客户端命令注册用 Fabric API v1 的 `ClientCommandManager.DISPATCHER`（1.19 前没有
+  `ClientCommandRegistrationCallback`）。
+- 冒烟测试：1.18 没有 `WorldCreationUiState`，建世界界面的名字和游戏模式由它自己保管（accessor 取 `nameEdit`、
+  `modeButton`，切到 CREATIVE）；`CreateWorldScreen.openFresh()` 还没有，用 `createFresh(null)` 加 `setScreen()`；
+  `ClientPacketListener.sendCommand()` 要 1.19 才有，命令按 `ServerboundChatPacket` 发；`/tp` 用 yaw/pitch 指定
+  朝向；托管世界默认不给房主命令权限（建房界面也没有开作弊的开关），冒烟测试进世界后先把自己设成 op，每次运行开始
+  先删掉旧世界目录。
+
+其余同 1.20.2。
