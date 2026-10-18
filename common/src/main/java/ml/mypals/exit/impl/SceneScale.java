@@ -227,18 +227,21 @@ final class SceneScale {
 			colors.add(null);
 		}
 		try (GpuBuffer vertices = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe", GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer())) {
+			// Writing the transform and getting the index buffer may map or upload buffers, which cannot happen inside a pass.
+			var transform = RenderSystem.getDynamicUniforms().writeTransform(modelView);
+			var indexBuffer = indices.getBuffer(6);
 			RenderPassDescriptor descriptor = new RenderPassDescriptor(() -> "emergency_exit scale probe", colors,
 				new RenderPassDescriptor.Attachment<>(main.getDepthTextureView(), OptionalDouble.empty()),
 				new RenderPass.RenderArea(0, 0, main.width, main.height));
 			try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
 				pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
 				RenderSystem.bindDefaultUniforms(pass);
-				pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms().writeTransform(modelView));
+				pass.setUniform("DynamicTransforms", transform);
 				for (PreparedRenderType.Texture texture : prepared.textures()) {
 					pass.setUniform(texture.name(), texture.textureView(), texture.sampler());
 				}
 				pass.setVertexBuffer(0, vertices.slice());
-				pass.setIndexBuffer(indices.getBuffer(6), indices.type());
+				pass.setIndexBuffer(indexBuffer, indices.type());
 				pass.drawIndexed(6, 1, 0, 0, 0);
 			}
 		}

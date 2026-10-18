@@ -164,7 +164,7 @@ Minecraft 版本内稳定。某个类型在旧版本不存在时，换成作用�
 - **NeoForge**：大约 1.20.2 起才有（1.20.1 是从 Forge 分出来的过渡版）；Iris 的 NeoForge 版大约从 1.21 起才有。
   这两条都要先核实。没有NeoForge或者NeoForge版Iris的版本版本不用再支持 NeoForge。也不支持 Forge，只留下 Fabric版本。
 - common 子项目在 1.21.11 用 NeoForm/ModDevGradle。
-- 第二个加载器的事件和 Fabric 的对应关系要逐个版本查，写进 README 的加载器表。注意事件触发的时机是否早于 EXIT 的帧末合并；
+- 第二个加载器的事件和 Fabric 的对应关系要逐个版本查，写进 `master` 上 ChangeLog 这个版本那一节的 **使用**。注意事件触发的时机是否早于 EXIT 的帧末合并；
   晚于它的事件里画的东西会被丢掉（README 里 NeoForge `AfterLevel` 的说明）。
 
 ## 5. 移植规则
@@ -172,14 +172,15 @@ Minecraft 版本内稳定。某个类型在旧版本不存在时，换成作用�
 1. **一个版本一个分支，写普通代码。** 分支名 `port/<版本>`，从第 1 节约定的分支开出。分支里只放这个版本的代码：
    不用 stonecutter，不留 `//?` 指令，不留别的版本的死代码。
 2. **API 包名和语义不变。** `ml.mypals.exit.api` 里的类名、方法名和 README 的规则尽量保持不变。类型必须换时，照 4.1 的方式换，
-   在 README 和 ChangeLog 里写清楚。不要另造一套 API。
+   在 ChangeLog 这一节的 **使用** 里写清楚，并更新 `master` README 的版本表。不要另造一套 API。
 3. **行为和 26.3 一致。** 没有光影时什么都不重定向；世界照样挡住你的绘制；半透明表面后面变暗（默认 50%）；第一人称手在最前；
    阴影通道里什么都不画；先画实体再画半透明；多个通道按深度混合。做不到就写下来，不要悄悄删功能。
 4. **`impl`、`compat`、`mixin` 可以随意改。** 只为新版本存在的代码（Super Resolution、缩放探针、`StrictValidationMixin`、
    gizmo 等），在旧版本用不上就删掉，在 ChangeLog 里列出来。
 5. **记录差异。** 每个版本在 `master` 的 `ChangeLog.md` 里加一节“<版本>（相对 <上一个版本>）”，版本表加一行。
    格式照抄已有各节：分“构建 / 包名和类 / 渲染通道 / 管线 / 特征 / 关卡钩子 / 加载器事件 / Iris / 开发运行”小标题，
-   每条一句，写清是什么、EXIT 怎么做。ChangeLog 只在 `master` 上维护，移植分支里不放。
+   每条一句，写清是什么、EXIT 怎么做；最前面是给使用者看的 **使用**。ChangeLog 和完整的 README 都只在 `master` 上维护，
+   移植分支里不放 ChangeLog，README 只是指向 `master` 的简短版本。
 6. **提交风格照抄已有分支。** 先一个 “Port EXIT to Minecraft <版本> (<加载器>)” 提交，提交说明里逐条列出主要差异
    （参考 `git log -1 fe36921`）；之后每修一个问题一个提交，说明里写为什么这样改。
 7. **`master` 上的修复要往下同步。** 有新修复时，用 `git cherry-pick -x` 依次拿到每个移植分支，再加适配提交。
@@ -193,7 +194,9 @@ Minecraft 版本内稳定。某个类型在旧版本不存在时，换成作用�
    LitematicaPass 的 `versions/<版本>/gradle.properties` 取），先能空跑进游戏。
 3. **改到能编译**，再按第 7 节一项项测；先 Fabric，后第二个加载器。
 4. **修问题**：每个问题一个提交。
-5. **写 ChangeLog** 那一节，并在这个分支上把 README 改成这个版本的说法（加载器、事件表、API 类型）。
+5. **写 ChangeLog** 那一节（在 `master` 上），开头是 **使用**：Maven 坐标、各加载器的事件、API 类型和 README 的不同。
+   `master` README 的版本表加一行。README 只在 `master` 上维护：这个分支的 README 换成指向 `master` 的简短版本
+   （照已有的 port 分支），不要在分支上改 README 的正文。
 6. **汇报**（第 8 节），再做下一个版本。
 
 ## 7. 测试：用冒烟测试快速验证

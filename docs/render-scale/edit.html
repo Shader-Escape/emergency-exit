@@ -94,7 +94,8 @@ figcaption { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
 }
 .lane-head small { font-weight: 400; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
 svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
-svg.edges text { font-family: var(--font-body); font-size: 12px; }
+svg.edge-labels { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
+svg.edges text, svg.edge-labels text { font-family: var(--font-body); font-size: 12px; }
 .node {
   position: relative; z-index: 2; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px;
   padding: 0.6rem 0.7rem 0.7rem; display: grid; gap: 0.45rem; align-content: start; align-self: start; min-width: 0;
@@ -200,6 +201,7 @@ td.num { font-family: var(--font-mono); }
     <div class="flow-scroll">
       <div class="flow" id="flow">
         <svg class="edges" id="edges" aria-hidden="true"></svg>
+        <svg class="edge-labels" id="edge-labels" aria-hidden="true"></svg>
       </div>
     </div>
     <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出，窗口 854×480：普通光影用 <code>./gradlew :fabric:runSmokeClient</code> 和 BSL v8.4；Kappa 用 <code>./gradlew :fabric:runSmokeClient</code> 和 Kappa v5.3；Super Resolution 用 <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code>、Sundial Lite 1.2 和 FSR2（放大倍数 1.21）。</p>
@@ -267,6 +269,7 @@ td.num { font-family: var(--font-mono); }
 (function () {
   const flow = document.getElementById("flow");
   const svg = document.getElementById("edges");
+  const labelSvg = document.getElementById("edge-labels");
   const statusEl = document.getElementById("status");
   const btnEdit = document.getElementById("btn-edit");
   const btnSave = document.getElementById("btn-save");
@@ -407,6 +410,8 @@ td.num { font-family: var(--font-mono); }
     const box = flow.getBoundingClientRect();
     svg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
     svg.innerHTML = "";
+    labelSvg.setAttribute("viewBox", "0 0 " + box.width + " " + box.height);
+    labelSvg.innerHTML = "";
     const defs = document.createElementNS(NS, "defs");
     Object.keys(COLOR).forEach((k) => {
       const m = document.createElementNS(NS, "marker");
@@ -467,7 +472,7 @@ td.num { font-family: var(--font-mono); }
         t.setAttribute("stroke-width", "5");
         t.setAttribute("font-weight", "500");
         t.textContent = label;
-        svg.appendChild(t);
+        labelSvg.appendChild(t);
       }
     });
   }

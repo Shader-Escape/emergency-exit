@@ -6,17 +6,33 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 等光影包完成整帧的着色之后，再按深度合并回画面上。光影包既不会替换你的渲染管线，也不会把你的绘制吞掉。
 
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
-请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
+请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不会在你的酒吧里点单炒饭。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-目前只支持 Minecraft **26.3**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。其它版本会陆续移植，
-每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码。
+mod id `emergency_exit`，API 包 `ml.mypals.exit.api`。每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码。
+本文档只在 `master` 上维护，讲所有版本共通的内容，示例用 26.3。其它版本不一样的地方（事件、API 类型、缺少的功能）写在
+[ChangeLog.md](ChangeLog.md) 里该版本那一节的 **使用** 下面。各分支只放一份指向这里的简短 README。
+
+### 版本
+
+| Minecraft | 分支 | Maven 版本 | 绘制和批量用的类型 | 备注 |
+|---|---|---|---|---|
+| 26.3 | `master` | `0.1.0+26.3` | `SubmitNodeCollector` | |
+| 26.2 | `port/26.2` | `0.1.0+26.2` | `SubmitNodeCollector` | |
+| 26.1.2 | `port/26.1.2` | `0.1.0+26.1.2` | `SubmitNodeCollector` | |
+| 1.21.11 | `port/1.21.11` | `0.1.0+1.21.11` | `SubmitNodeCollector` | NeoForge 没有交出关卡收集器的事件 |
+| 1.21.10 | `port/1.21.10` | `0.1.0+1.21.10` | `SubmitNodeCollector` | `ResourceLocation`；没有 Gizmo |
+| 1.21.8 | `port/1.21.8` | `0.1.0+1.21.8` | `MultiBufferSource` | `ExitContext.camera()` 是 `Camera` |
+| 1.21.5 | `port/1.21.5` | `0.1.0+1.21.5` | `MultiBufferSource` | |
+| 1.21.4 | `port/1.21.4` | `0.1.0+1.21.4` | `MultiBufferSource` | 纯 OpenGL：portal 绑定通道目标 |
+| 1.21.3 | `port/1.21.3` | `0.1.0+1.21.3` | `MultiBufferSource` | |
+| 1.21.1 | `port/1.21.1` | `0.1.0+1.21.1` | `MultiBufferSource` | |
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+26.3`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:<Maven 版本>`，见上表）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
-调用时机要在关卡渲染期间（`LevelRenderer.render` 里面）。各加载器可用的位置：
+调用时机要在关卡渲染期间（`LevelRenderer.render` 里面）。26.3 上各加载器可用的位置（其它版本见 ChangeLog 的 **使用**）：
 
 | 用途 | Fabric | NeoForge |
 |---|---|---|
@@ -119,14 +135,15 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 
 * **portal 输出行为：** 26.3 没有全局的输出目标覆盖（1.21.6–26.2 的 `RenderSystem.outputColorTextureOverride` 已被删除），
   EXIT 用一个 mixin 仿造了它，portal 改道期间，**新开的**渲染通道只要把主目标当作颜色或深度附件，就会被换成通道目标
-  （render area 也会限制在通道目标大小以内，配合 Super Resolution）。所以自己对主目标开 RenderPass 的代码不用改。以下情况不会自动改道，
+  （render area 也会限制在通道目标大小以内，配合 Super Resolution）。所以自己对主目标开 RenderPass 的代码不用改。
+  （改道的做法因版本而异，见 ChangeLog：1.21.5 之前是绑定通道目标，并让 `getMainRenderTarget()` 返回它。）以下情况不会自动改道，
   需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
   * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 RenderPass）——附件在开 RenderPass 时就定了；
   * 对主目标的清除、复制（`clear*`、`copyTextureToTexture`）。
 
   这个替换是全局的：portal 期间任何 mod 新开的、画进主目标的 RenderPass 都会被改道。
-* **Gizmo：** portal 改道期间，在渲染线程上用原版 `Gizmos`（`Gizmos.cuboid`、`Gizmos.line` 等）添加的 Gizmo 会被收进该通道，
+* **Gizmo（1.21.11 及以后）：** portal 改道期间，在渲染线程上用原版 `Gizmos`（`Gizmos.cuboid`、`Gizmos.line` 等）添加的 Gizmo 会被收进该通道，
   在关卡渲染结束时随通道的批量一起画进通道目标，不再由原版绘制。持续显示、淡出、总在最前这些属性照常生效。
 * **只在区间内有效：** `redirect` 只能在 portal（或 `draw` 的 lambda）里调用。如果在区间外、非渲染线程、或在另一个通道的
   portal 里调用会抛出 `IllegalStateException`。在区间内外都可能会跑的代码，执行前务必检查`Exit.isRouting()`或 `Exit.inPortal()`。
@@ -222,7 +239,8 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 * **场景深度复制** 有通道本帧要绘制时（它的 `wantsFrame`，或默认"上一帧画过"），每帧复制两次场景深度
   （手部之前、半透明之前）。没有复制时通道照样能画，只是那一帧的遮挡改用当时的主深度。
 * **API 稳定性** `ml.mypals.exit.api` 是 API；`impl`、`compat`、`mixin` 不是。API 里用到了 Minecraft 的类型
-  （`SubmitNodeCollector`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。
+  （`SubmitNodeCollector`、`PoseStack`、`RenderTarget`），因此只在同一个 Minecraft 版本内保持稳定。旧版本没有的类型，
+  该分支换成作用相同的类型（见"版本"表）。
 
 其它工具方法：`Exit.isActive()`（此刻是否会改道：有光影包、不在阴影通道、关卡渲染中）、`Exit.isRouting()`
 （此刻是否有改道中的 portal）、`Exit.inPortal()`（此刻是否在 portal 里）、`Exit.plainFormat(Runnable)`。
@@ -251,11 +269,12 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 * `./gradlew build`：构建两个加载器的 jar（`fabric/build/libs`、`neoforge/build/libs`）。
 * `./gradlew :fabric:runSmokeClient`、`./gradlew :neoforge:runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes`
-  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric` 和 `run/neoforge`，要测试改道，需要在
-  其中的 `shaderpacks` 放入光影包并在 `config/iris.properties` 里启用。
+  的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa、Sundial Lite
+  等都放进去）。每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
+  日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是 `run/fabric` 和 `run/neoforge`（移植分支上是 `run/<加载器>-<版本>`）。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
-* `./gradlew :fabric:runSmokeClient -Pexit.superResolution`：同上，但加载 Super Resolution 模组（只在开发运行时加入），
-  检查拉伸合并。需要支持 SR 的光影包（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
+* `./gradlew :fabric:runSmokeClient -Pexit.superResolution`（只在开发运行能加载 SR 的版本上，见 ChangeLog）：同上，但加载 Super Resolution 模组（只在开发运行时加入），
+  在 SR 支持的光影包那几轮里检查拉伸合并（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
   里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
   即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。

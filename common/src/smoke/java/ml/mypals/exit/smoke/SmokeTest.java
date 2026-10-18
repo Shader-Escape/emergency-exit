@@ -8,7 +8,9 @@ import ml.mypals.exit.impl.ExitRuntime;
 import ml.mypals.exit.impl.FrameDump;
 import ml.mypals.exit.impl.SceneSize;
 import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
+import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.config.IrisConfig;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -25,22 +27,31 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
- * Development check, not part of the mod. It creates a new creative world, turns on the test shapes, takes
- * screenshots and quits. Each loader has a small entry point that calls {@link #init} and {@link #tick}. Run it with
- * {@code ./gradlew :fabric:runSmokeClient} or {@code ./gradlew :neoforge:runSmokeClient}. The game exits with code 2
- * when it did not reach the world in time, and with code 3 when a check failed.
+ * Development check, not part of the mod. It creates a new creative world and turns on the test shapes. Then it runs
+ * one phase per shader pack setting: without shaders, then with each pack in the {@code shaderpacks} folder (or the
+ * comma-separated list in {@code -Demergency_exit.smoke.packs}, where {@code none} means shaders off). Each phase
+ * switches the pack through Iris, takes screenshots and checks the counters, then the game quits. Each loader has a
+ * small entry point that calls {@link #init} and {@link #tick}. Run it with {@code ./gradlew :fabric:runSmokeClient} or
+ * {@code ./gradlew :neoforge:runSmokeClient}. The game exits with code 2 when it did not reach the world in time, and
+ * with code 3 when a check failed.
  */
 public final class SmokeTest {
 	private static final String TAG = "[emergency_exit-smoke] ";
 	private static final String WORLD = "EXIT Smoke";
 	private static final String VERSION = SharedConstants.getCurrentVersion().name();
-	/** Client ticks to stay in the world, 20 per second. */
-	private static final int TICKS_IN_WORLD = 400;
+	private static final String NO_PACK = "none";
+	/** Client ticks of one phase, 20 per second. */
+	private static final int PHASE_TICKS = 220;
+	/** Ticks after switching the pack before the counters of a phase start, while the pack loads. */
+	private static final int SETTLE_TICKS = 60;
 	/** Give up after this many client ticks without a world. */
 	private static final int TIMEOUT_TICKS = 20 * 60 * 5;
 
@@ -57,6 +68,17 @@ public final class SmokeTest {
 
 	/** The loader's name, part of the screenshot names. */
 	private String loader = "unknown";
+
+	private final List<String> phases = new ArrayList<>();
+	private final List<String> failedPhases = new ArrayList<>();
+	private int phase;
+	/** Where the player stood when the shapes were placed, as a teleport target. */
+	private String frontView = "";
+	/** The counters when the current phase started counting. */
+	private long[] phaseStart = new long[0];
+	private boolean irisConfigSaved;
+	private boolean savedShadersEnabled;
+	private String savedPack = "";
 
 	/** Called when the client initializes. */
 	public void init(String loader) {
@@ -91,29 +113,6 @@ public final class SmokeTest {
 				log("in the world after " + this.ticks + " ticks");
 			}
 			this.showcase(mc);
-			if (this.ticksInWorld >= TICKS_IN_WORLD) {
-				this.done = true;
-				log("shader pack in use: " + IrisCompat.isPackInUse() + ", frames composited by EXIT: " + ExitRuntime.compositedFrames());
-				DebugShapes.Stats stats = DebugShapes.stats();
-				log("drawings: " + stats.draws + " (routed: " + stats.routedDraws + "), batches: "
-					+ stats.batchDraws + ", portals: " + stats.portalDraws + " (passes moved into the channel: " + stats.portalRedirectedPasses + "), portal/routing mismatches: "
-					+ stats.portalRoutingMismatches + ", redirects outside a portal that did not throw: " + stats.unguardedRedirects
-					+ ", off-thread portal ok: " + stats.offThreadOk);
-				log("frames blending channels by depth: " + ExitRuntime.blendedFrames() + ", gizmos moved into channels: " + ExitRuntime.redirectedGizmos());
-				log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
-				boolean drew = stats.draws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
-					&& (stats.portalRedirectedPasses > 0 || !IrisCompat.isPackInUse())
-					&& stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk)
-					&& (shadowCallbacks > 0 || !IrisCompat.isPackInUse()) && shadowPassRuns == 0
-					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse())
-					&& (ExitRuntime.redirectedGizmos() > 0 || !IrisCompat.isPackInUse());
-				log(drew ? "RESULT: OK (entered the world and rendered " + TICKS_IN_WORLD + " ticks through EXIT)"
-					: "RESULT: FAILED (the EXIT drawings did not all run)");
-				if (!drew) {
-					Runtime.getRuntime().halt(3);
-				}
-				mc.stop();
-			}
 			return;
 		}
 		if (this.ticks > TIMEOUT_TICKS) {
@@ -142,8 +141,8 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Lifts the player into open sky, places the boxes in front of it and takes screenshots of the normal view and
-	 * some debug views.
+	 * Lifts the player into open sky, places the boxes in front of it, then runs the phases: each takes screenshots of
+	 * the normal view, some debug views and a view from the side.
 	 */
 	private void showcase(Minecraft mc) {
 		if (this.ticksInWorld == 20) {
@@ -158,36 +157,135 @@ public final class SmokeTest {
 				DebugShapes.toggle(mc.player);
 			}
 			this.placedAt = this.ticksInWorld;
-			log("placed the test shapes at " + DebugShapes.center());
+			this.frontView = String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f %.3f %.3f", mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+				mc.player.getYRot(), mc.player.getXRot());
+			this.phases.addAll(phases(mc));
+			log("placed the test shapes at " + DebugShapes.center() + "; phases: " + this.phases);
 			placeBlocks(mc);
 		}
 		if (this.placedAt < 0) {
 			return;
 		}
-		switch (this.ticksInWorld - this.placedAt) {
+		int inPhase = this.ticksInWorld - this.placedAt - this.phase * PHASE_TICKS;
+		String name = this.phases.get(this.phase);
+		switch (inPhase) {
+			case 1 -> this.startPhase(mc, name);
+			case SETTLE_TICKS -> this.phaseStart = counters();
 			// The command feedback would cover the screenshots.
 			case 85, 190 -> mc.gui.hud.getChat().clearMessages(false);
-			// Pictures of EXIT's buffers in one frame, in screenshots/exit-frame-dump.
+			// Pictures of EXIT's buffers in one frame, in screenshots/exit-frame-dump. Each phase replaces them.
 			case 90 -> FrameDump.arm();
 			case 100 -> {
 				log("scene " + SceneSize.width() + "x" + SceneSize.height() + ", window " + mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight()
 					+ ", main target " + mc.gameRenderer.mainRenderTarget().width + "x" + mc.gameRenderer.mainRenderTarget().height
 					+ ", merged stretched: " + SceneSize.mergeStretched());
-				screenshot(mc, "normal");
+				this.screenshot(mc, name, "normal");
 			}
-			case 102 -> presented(mc, "presented");
+			case 102 -> this.presented(mc, name, "presented");
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
-			case 115 -> screenshot(mc, "color");
+			case 115 -> this.screenshot(mc, name, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
-			case 130 -> screenshot(mc, "target_depth");
+			case 130 -> this.screenshot(mc, name, "target_depth");
 			case 131 -> DebugView.set(DebugView.Mode.SCENE_DEPTH, Exit.MAIN);
-			case 145 -> screenshot(mc, "scene_depth");
+			case 145 -> this.screenshot(mc, name, "scene_depth");
 			case 146 -> DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
 			case 150 -> viewFromTheSide(mc);
-			case 200 -> presented(mc, "side");
+			case 200 -> this.presented(mc, name, "side");
+			case PHASE_TICKS -> {
+				this.endPhase(name);
+				this.phase++;
+				if (this.phase >= this.phases.size()) {
+					this.finish(mc);
+				}
+			}
 			default -> {
 			}
 		}
+	}
+
+	/** The phases: no shaders, then each shader pack. Without Iris only the first. */
+	private static List<String> phases(Minecraft mc) {
+		String listed = System.getProperty("emergency_exit.smoke.packs");
+		if (listed != null && !listed.isBlank()) {
+			return Arrays.stream(listed.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+		}
+		List<String> phases = new ArrayList<>();
+		phases.add(NO_PACK);
+		if (!IrisCompat.LOADED) {
+			return phases;
+		}
+		Path packs = mc.gameDirectory.toPath().resolve("shaderpacks");
+		if (Files.isDirectory(packs)) {
+			try (Stream<Path> files = Files.list(packs)) {
+				files.filter(p -> Files.isDirectory(p) || p.getFileName().toString().endsWith(".zip"))
+					.map(p -> p.getFileName().toString()).sorted().forEach(phases::add);
+			} catch (IOException e) {
+				log("could not list the shader packs: " + e);
+			}
+		}
+		return phases;
+	}
+
+	private void startPhase(Minecraft mc, String pack) {
+		log("phase " + (this.phase + 1) + "/" + this.phases.size() + ": " + pack);
+		if (this.phase > 0) {
+			mc.player.connection.sendCommand(this.frontView);
+		}
+		if (IrisCompat.LOADED) {
+			if (!this.irisConfigSaved) {
+				this.irisConfigSaved = true;
+				this.savedShadersEnabled = IrisPacks.shadersEnabled();
+				this.savedPack = IrisPacks.packName();
+			}
+			IrisPacks.use(pack);
+		} else if (!NO_PACK.equals(pack)) {
+			log("Iris is not loaded, so pack " + pack + " cannot be used");
+		}
+	}
+
+	/** Checks what EXIT did in this phase, from the counters since the pack settled. */
+	private void endPhase(String pack) {
+		long[] now = counters();
+		long[] d = new long[now.length];
+		for (int i = 0; i < now.length; i++) {
+			d[i] = now[i] - this.phaseStart[i];
+		}
+		boolean wantPack = !NO_PACK.equals(pack);
+		boolean packInUse = IrisCompat.isPackInUse();
+		log("phase " + pack + ": shader pack in use: " + packInUse + ", frames composited by EXIT: " + d[0]
+			+ ", drawings: " + d[1] + " (routed: " + d[2] + "), batches: " + d[3] + ", portals: " + d[4]
+			+ " (passes moved into the channel: " + d[5] + "), portal/routing mismatches: " + d[6]
+			+ ", frames blending channels by depth: " + d[7] + ", Iris shadow callbacks: " + d[8] + ", gizmos moved into channels: " + d[9]);
+		boolean ok = packInUse == wantPack && d[1] > 0 && d[3] > 0 && d[4] > 0 && d[6] == 0
+			&& (packInUse ? d[0] > 0 && d[2] > 0 && d[5] > 0 && d[7] > 0 && d[8] > 0 && d[9] > 0 : d[0] == 0 && d[2] == 0 && d[5] == 0);
+		log("phase " + pack + ": " + (ok ? "OK" : "FAILED"));
+		if (!ok) {
+			this.failedPhases.add(pack);
+		}
+	}
+
+	private void finish(Minecraft mc) {
+		this.done = true;
+		if (this.irisConfigSaved) {
+			// Leave the Iris settings as the run found them.
+			IrisPacks.restore(this.savedShadersEnabled, this.savedPack);
+		}
+		DebugShapes.Stats stats = DebugShapes.stats();
+		log("redirects outside a portal that did not throw: " + stats.unguardedRedirects + ", off-thread portal ok: " + stats.offThreadOk);
+		log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
+		boolean ok = this.failedPhases.isEmpty() && stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk) && shadowPassRuns == 0;
+		log(ok ? "RESULT: OK (phases " + this.phases + " rendered through EXIT)"
+			: "RESULT: FAILED (failed phases: " + this.failedPhases + ")");
+		if (!ok) {
+			Runtime.getRuntime().halt(3);
+		}
+		mc.stop();
+	}
+
+	private static long[] counters() {
+		DebugShapes.Stats stats = DebugShapes.stats();
+		return new long[] {ExitRuntime.compositedFrames(), stats.draws, stats.routedDraws, stats.batchDraws, stats.portalDraws,
+			stats.portalRedirectedPasses, stats.portalRoutingMismatches, ExitRuntime.blendedFrames(), shadowCallbacks, ExitRuntime.redirectedGizmos()};
 	}
 
 	/**
@@ -227,8 +325,14 @@ public final class SmokeTest {
 			eye.x, eye.y - mc.player.getEyeHeight(), eye.z, center.x, center.y, center.z));
 	}
 
-	private void screenshot(Minecraft mc, String view) {
-		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
+	/** The screenshot name: version, loader, pack (without {@code .zip}) and view. */
+	private String fileName(String pack, String view) {
+		String packName = pack.endsWith(".zip") ? pack.substring(0, pack.length() - 4) : pack;
+		return "emergency_exit-smoke-" + VERSION + "-" + this.loader + "-" + packName.replaceAll("[^A-Za-z0-9._+-]", "_") + "-" + view + ".png";
+	}
+
+	private void screenshot(Minecraft mc, String pack, String view) {
+		String name = this.fileName(pack, view);
 		Screenshot.grab(mc.gameDirectory, name, mc.gameRenderer.mainRenderTarget(), 1, message -> log("screenshot " + name));
 	}
 
@@ -236,7 +340,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc, String view) {
+	private void presented(Minecraft mc, String pack, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -254,9 +358,11 @@ public final class SmokeTest {
 				image.setRGB(x, y, (pixels.get(i) & 0xFF) << 16 | (pixels.get(i + 1) & 0xFF) << 8 | pixels.get(i + 2) & 0xFF);
 			}
 		}
-		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
+		String name = this.fileName(pack, view);
 		try {
-			ImageIO.write(image, "png", mc.gameDirectory.toPath().resolve("screenshots").resolve(name).toFile());
+			Path screenshots = mc.gameDirectory.toPath().resolve("screenshots");
+			Files.createDirectories(screenshots);
+			ImageIO.write(image, "png", screenshots.resolve(name).toFile());
 			log("screenshot " + name);
 		} catch (IOException e) {
 			log("could not save " + name + ": " + e);
@@ -286,5 +392,46 @@ public final class SmokeTest {
 	private static void log(String message) {
 		System.out.println(TAG + message);
 		System.out.flush();
+	}
+
+	/** Switches Iris's shader pack. Only touched when Iris is loaded. */
+	private static final class IrisPacks {
+		static boolean shadersEnabled() {
+			return Iris.getIrisConfig().areShadersEnabled();
+		}
+
+		static String packName() {
+			String name = Iris.getCurrentPackName();
+			return name == null ? "" : name;
+		}
+
+		/** Turns shaders off for {@code none}, otherwise loads that pack. Iris reloads its config from disk, so save it. */
+		static void use(String pack) {
+			IrisConfig config = Iris.getIrisConfig();
+			boolean on = !NO_PACK.equals(pack);
+			config.setShadersEnabled(on);
+			if (on) {
+				config.setShaderPackName(pack);
+			}
+			try {
+				config.save();
+				Iris.reload();
+			} catch (IOException e) {
+				log("could not switch the shader pack to " + pack + ": " + e);
+			}
+		}
+
+		static void restore(boolean enabled, String pack) {
+			IrisConfig config = Iris.getIrisConfig();
+			config.setShadersEnabled(enabled);
+			if (!pack.isEmpty() && !"(off)".equals(pack)) {
+				config.setShaderPackName(pack);
+			}
+			try {
+				config.save();
+			} catch (IOException e) {
+				log("could not restore the Iris settings: " + e);
+			}
+		}
 	}
 }
