@@ -51,9 +51,4 @@ public final class IrisCompat {
 			IrisHooks.usePackProgramOf(original, copy);
 		}
 	}
-
-	/** The colour write mask of each draw buffer, as OpenGL has it now. Changing the array changes nothing. */
-	public static int[] colorMasks() {
-		return IrisHooks.colorMasks().clone();
-	}
 }
