@@ -218,9 +218,11 @@ public final class SmokeTest {
 				log("scene water: levelled the view");
 			}
 			case 270 -> log("scene water: shapes " + (DebugShapes.toggle(mc.player) ? "on" : "off") + " at " + DebugShapes.center());
-			// Water flows, so it is placed only a few ticks before the screenshot; placed earlier it has spread over
-			// the whole view and the boxes it is meant to cover cannot be told apart from the rest.
-			case 293 -> this.waterWall = fillBetween(mc, 1, -0.5, 0.5, 0, "minecraft:water", "water");
+			// A reference shot from the same camera before anything is placed, so the covered shot can be compared
+			// with it pixel for pixel instead of by eye.
+			case 285 -> screenshot(mc, "covered_ref");
+			// The translucent-only depth needs a translucent surface, so a pane of water is up for these few ticks.
+			case 288 -> this.waterWall = fillBetween(mc, 1, -0.7, 0.7, 1, "minecraft:water", "translucent_depth");
 			// The translucent-only depth is only worth a screenshot where there are translucent surfaces, so it is
 			// taken here, with the water up, instead of earlier from the side view, which holds none and came out blank.
 			case 294 -> {
@@ -230,13 +232,18 @@ public final class SmokeTest {
 			case 298 -> screenshot(mc, "translucent_depth");
 			case 299 -> {
 				DebugView.set(DebugView.Mode.OFF, Exit.MAIN);
-				log("scene water: debug view back to " + DebugView.Mode.OFF.id());
+				clearBetween(mc, this.waterWall, "translucent_depth");
+				log("scene covered: debug view back to " + DebugView.Mode.OFF.id());
 			}
-			case 300 -> screenshot(mc, "water");
-			case 301 -> clearBetween(mc, this.waterWall, "water");
-			case 302 -> this.stoneWall = fillBetween(mc, 1, -3.0, 3.0, 1, "minecraft:stone", "wall");
-			case 305 -> screenshot(mc, "wall");
-			case 306 -> clearBetween(mc, this.stoneWall, "wall");
+			// The covered part is meant to darken by half. Glass shows that: the box itself stays visible through it,
+			// so the covered part can be compared with the uncovered boxes in the same shot. Water under a shader pack
+			// is far too opaque to judge a fifty percent difference.
+			case 300 -> this.waterWall = fillBetween(mc, 1, -0.2, 0.2, 0, "minecraft:glass", "covered");
+			case 305 -> screenshot(mc, "covered");
+			case 306 -> clearBetween(mc, this.waterWall, "covered");
+			case 315 -> this.stoneWall = fillBetween(mc, 1, -3.0, 3.0, 1, "minecraft:stone", "wall");
+			case 320 -> screenshot(mc, "wall");
+			case 321 -> clearBetween(mc, this.stoneWall, "wall");
 			case 307 -> {
 				this.windowWidth = mc.getWindow().getWidth();
 				this.windowHeight = mc.getWindow().getHeight();
@@ -361,8 +368,10 @@ public final class SmokeTest {
 	}
 
 	private void screenshot(Minecraft mc, String view) {
-		// The tutorial and recipe toasts sit in the top right corner of every shot otherwise.
+		// The tutorial and recipe toasts sit in the top right corner of every shot otherwise, and the command feedback
+		// of the scene setup can arrive a tick late, after the per tick clear.
 		mc.getToasts().clear();
+		mc.gui.getChat().clearMessages(true);
 		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
 		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), message -> log("screenshot " + name));
 	}
