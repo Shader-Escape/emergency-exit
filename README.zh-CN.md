@@ -251,11 +251,12 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 * `./gradlew build`：构建两个加载器的 jar（`fabric/build/libs`、`neoforge/build/libs`）。
 * `./gradlew :fabric:runSmokeClient`、`./gradlew :neoforge:runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes`
-  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric` 和 `run/neoforge`，要测试改道，需要在
-  其中的 `shaderpacks` 放入光影包并在 `config/iris.properties` 里启用。
+  的测试方块，先不开光影跑一轮，再对运行目录 `shaderpacks` 里的每个光影包各跑一轮（通过 Iris 切换，所以把 BSL、Kappa、Sundial Lite
+  等都放进去）。每一轮截图（`screenshots/emergency_exit-smoke-<版本>-<加载器>-<光影包>-<视图>.png`）并检查 EXIT 的计数，然后退出；
+  日志最后是 `RESULT: OK`。用 `-Demergency_exit.smoke.packs=none,BSL.zip` 可以指定要跑的几轮。运行目录分别是 `run/fabric` 和 `run/neoforge`。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
 * `./gradlew :fabric:runSmokeClient -Pexit.superResolution`：同上，但加载 Super Resolution 模组（只在开发运行时加入），
-  检查拉伸合并。需要支持 SR 的光影包（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
+  在 SR 支持的光影包那几轮里检查拉伸合并（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
   里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
   即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
