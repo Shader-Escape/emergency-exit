@@ -2,7 +2,7 @@ package ml.mypals.exit.compat;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.exit.platform.Platform;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public final class IrisCompat {
 	public static final boolean LOADED = Platform.INSTANCE.isModLoaded("iris");

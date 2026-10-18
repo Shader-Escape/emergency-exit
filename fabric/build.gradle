@@ -1,6 +1,6 @@
 plugins {
     id 'multiloader-loader'
-    // Minecraft 1.21.11 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    // Minecraft 1.21.10 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
 }
 
@@ -18,10 +18,6 @@ dependencies {
     // Iris nests these libraries in its jar, but the development runs do not load nested jars.
     for (library in ['org.anarres:jcpp:1.4.14', 'org.antlr:antlr4-runtime:4.13.1', "io.github.douira:glsl-transformer:${glsl_transformer_version}"]) {
         localRuntime(library) { transitive = false }
-    }
-    // -Pexit.superResolution adds the Super Resolution mod to the development runs.
-    if (project.hasProperty('exit.superResolution')) {
-        modLocalRuntime("maven.modrinth:${super_resolution_fabric}")
     }
 }
 

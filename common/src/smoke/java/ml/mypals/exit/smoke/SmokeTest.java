@@ -63,7 +63,7 @@ public final class SmokeTest {
 	}
 
 	/**
-	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.11 has no shadow render callback). EXIT
+	 * Called inside Iris's shadow pass (ShadowRendererMixin; Iris for 1.21.10 has no shadow render callback). EXIT
 	 * must skip what is drawn there.
 	 */
 	public static void inShadowPass() {
@@ -99,14 +99,13 @@ public final class SmokeTest {
 					+ stats.batchDraws + ", portals: " + stats.portalDraws + " (passes moved into the channel: " + stats.portalRedirectedPasses + "), portal/routing mismatches: "
 					+ stats.portalRoutingMismatches + ", redirects outside a portal that did not throw: " + stats.unguardedRedirects
 					+ ", off-thread portal ok: " + stats.offThreadOk);
-				log("frames blending channels by depth: " + ExitRuntime.blendedFrames() + ", gizmos moved into channels: " + ExitRuntime.redirectedGizmos());
+				log("frames blending channels by depth: " + ExitRuntime.blendedFrames());
 				log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
 				boolean drew = stats.draws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
 					&& (stats.portalRedirectedPasses > 0 || !IrisCompat.isPackInUse())
 					&& stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk)
 					&& (shadowCallbacks > 0 || !IrisCompat.isPackInUse()) && shadowPassRuns == 0
-					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse())
-					&& (ExitRuntime.redirectedGizmos() > 0 || !IrisCompat.isPackInUse());
+					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse());
 				log(drew ? "RESULT: OK (entered the world and rendered " + TICKS_IN_WORLD + " ticks through EXIT)"
 					: "RESULT: FAILED (the EXIT drawings did not all run)");
 				if (!drew) {

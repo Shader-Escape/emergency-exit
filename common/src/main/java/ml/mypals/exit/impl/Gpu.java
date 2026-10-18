@@ -9,11 +9,10 @@ import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.mixin.RenderPipelinesAccessor;
 import net.minecraft.client.Minecraft;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Optional;
@@ -241,6 +240,7 @@ final class Gpu {
 	}
 
 	private static void bind(RenderPass pass, String name, GpuTextureView view) {
-		pass.bindTexture(name, view, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+		// Before 1.21.11 there are no sampler objects: the texture's own sampling is used, which texelFetch ignores.
+		pass.bindSampler(name, view);
 	}
 }

@@ -11,10 +11,10 @@ import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.state.CameraRenderState;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -30,7 +30,7 @@ import java.util.Set;
  * portals. Everything runs on the render thread, except {@link #plainFormat} and portals opened on other threads.
  */
 public final class ExitRuntime {
-	private static final Map<Identifier, Channel> CHANNELS = new LinkedHashMap<>();
+	private static final Map<ResourceLocation, Channel> CHANNELS = new LinkedHashMap<>();
 	/** The channels sorted by priority, then by creation. */
 	private static List<Channel> mergeOrder = List.of();
 	private static @Nullable Channel main;
@@ -65,7 +65,7 @@ public final class ExitRuntime {
 		return main;
 	}
 
-	public static ExitChannel channel(Identifier id, ExitOptions options) {
+	public static ExitChannel channel(ResourceLocation id, ExitOptions options) {
 		RenderSystem.assertOnRenderThread();
 		Channel existing = CHANNELS.get(id);
 		if (existing != null) {
@@ -82,11 +82,11 @@ public final class ExitRuntime {
 		return channel;
 	}
 
-	static @Nullable Channel find(Identifier id) {
+	static @Nullable Channel find(ResourceLocation id) {
 		return CHANNELS.get(id);
 	}
 
-	static Set<Identifier> channelIds() {
+	static Set<ResourceLocation> channelIds() {
 		return CHANNELS.keySet();
 	}
 
@@ -204,7 +204,7 @@ public final class ExitRuntime {
 		return camera;
 	}
 
-	/** The level's projection. The camera state of 1.21.11 does not hold it. */
+	/** The level's projection. The camera state before 26.1 does not hold it. */
 	static Matrix4fc projectionMatrix() {
 		return PROJECTION;
 	}
@@ -223,13 +223,6 @@ public final class ExitRuntime {
 	}
 
 	private static long blendedFrames;
-	private static long redirectedGizmos;
-
-	/** Counts gizmos that portals moved into channels. Used by the checks. */
-	public static long redirectedGizmos() {
-		return redirectedGizmos;
-	}
-
 	/** Counts frames that blended two or more channels by depth. Used by the checks. */
 	public static long blendedFrames() {
 		return blendedFrames;
@@ -373,7 +366,6 @@ public final class ExitRuntime {
 				DebugShapes.atLevelEnd();
 			}
 			for (Channel channel : mergeOrder) {
-				redirectedGizmos += channel.submitGizmos();
 				channel.drawBatch();
 			}
 			for (Channel channel : mergeOrder) {

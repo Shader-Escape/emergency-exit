@@ -2,7 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import ml.mypals.exit.api.Exit;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -37,7 +37,7 @@ public final class DebugView {
 	}
 
 	private static Mode mode = Mode.OFF;
-	private static Identifier channel = Exit.MAIN;
+	private static ResourceLocation channel = Exit.MAIN;
 	private static final Gpu.Pipeline[] PIPELINES = new Gpu.Pipeline[Mode.values().length * 2];
 
 	private DebugView() {}
@@ -47,11 +47,11 @@ public final class DebugView {
 	}
 
 	/** The channel the view shows. */
-	public static Identifier channel() {
+	public static ResourceLocation channel() {
 		return channel;
 	}
 
-	public static void set(Mode newMode, Identifier newChannel) {
+	public static void set(Mode newMode, ResourceLocation newChannel) {
 		mode = newMode;
 		channel = newChannel;
 	}

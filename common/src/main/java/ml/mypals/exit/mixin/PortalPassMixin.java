@@ -7,7 +7,7 @@ import com.mojang.blaze3d.opengl.GlCommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.impl.ExitRuntime;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 
 import java.util.OptionalDouble;

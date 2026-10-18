@@ -8,21 +8,24 @@ EXIT 是一个 Fabric 和 NeoForge 通用的库，让自定义的世界渲染绕
 值得注意的是，它由AI从模组 [LitematicaPass](https://github.com/hotpad100c/litematicapass) 的渲染核心中拆出。我知道有些人对AI有意见，但这是唯一可以**快速达到**我预期目的迁移方式。
 请放心，我知道自己在干什么，自己也在使用这个库，我大概能确保它不吃掉你宠物的石头。这不是AI Slop，也不是Wish Coding。如果你遇到任何困难，我很乐意提供帮助。
 
-目前只支持 Minecraft **26.3**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。其它版本会陆续移植，
-每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码。
+这个分支对应 Minecraft **1.21.10**（mod id `emergency_exit`，API 包 `ml.mypals.exit.api`）。
+每个 Minecraft 版本一个 git 分支，分支里只有该版本的代码；`master` 是 26.3。
 
 ### 加载器
 
 两个加载器用同一套 API，各有一个 jar：`emergency_exit-fabric` 和 `emergency_exit-neoforge`（Maven 坐标
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+26.3`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.0+1.21.10`）。Iris 不是必需的，没有光影包时 EXIT 什么都不改道。
 
-调用时机要在关卡渲染期间（`LevelRenderer.render` 里面）。各加载器可用的位置：
+调用时机要在关卡渲染期间（`LevelRenderer.renderLevel` 里面）。各加载器可用的位置：
 
 | 用途 | Fabric | NeoForge |
 |---|---|---|
-| 提交到批量 | `LevelRenderEvents.COLLECT_SUBMITS` | `SubmitCustomGeometryEvent` |
-| 绘制（记进批量） | `LevelRenderEvents.AFTER_SOLID_FEATURES`、`END_MAIN` 等 | `RenderLevelStageEvent.AfterOpaqueFeatures` 等 |
-| 主渲染通道之后、不在任何通道内（portal） | `LevelRenderEvents.END_MAIN` | 没有对应的事件 |
+| 提交到批量 | `WorldRenderEvents.BEFORE_ENTITIES`（`context.commandQueue()`） | `RenderLevelStageEvent.AfterOpaqueBlocks` 等，没有可直通的收集器：`Exit.batch()` |
+| 绘制（记进批量） | `WorldRenderEvents.BEFORE_ENTITIES`、`AFTER_ENTITIES`、`END_MAIN` 等 | `RenderLevelStageEvent.AfterOpaqueBlocks` 等 |
+| 主渲染通道之后、不在任何通道内（portal） | `WorldRenderEvents.END_MAIN` | 没有对应的事件 |
+
+NeoForge 1.21.10 没有交出关卡 `SubmitNodeCollector` 的事件，没有可直通的收集器：用 `Exit.batch()` 和 `Exit.draw(null, ...)`。
+没有光影包时，批量在关卡渲染结束时画进主目标。
 
 NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才触发，那时 EXIT 已经合并完本帧，在里面调用会被丢弃。
 
@@ -58,24 +61,24 @@ NeoForge 的 `RenderLevelStageEvent.AfterLevel` 在关卡渲染结束之后才�
 
 ### 每帧的流程
 
-1. `LevelRenderer.render` 开始：EXIT 记下本帧相机（视图旋转、位置）和关卡投影矩阵。
+1. `LevelRenderer.renderLevel` 开始：EXIT 记下本帧相机（视图旋转、位置）和关卡投影矩阵。
 2. 光影包绘制手部之前、绘制半透明表面之前：各复制一次场景深度（只在有通道本帧要绘制时）。
 3. 你的绘制进入通道目标。通道目标在本帧第一次使用时被清空，并用场景深度初始化。
-4. `LevelRenderer.render` 结束：绘制各通道的批量内容；参与混合的通道按深度并成一层合并到主目标上，其余通道再按优先级盖在上面。
+4. `LevelRenderer.renderLevel` 结束：绘制各通道的批量内容；参与混合的通道按深度并成一层合并到主目标上，其余通道再按优先级盖在上面。
 
 ## 快速开始
 
-所有调用都要在渲染线程上、关卡渲染进行期间进行，比如 Fabric 的 `LevelRenderEvents` 或 NeoForge 的渲染事件（见上文"加载器"）。
+所有调用都要在渲染线程上、关卡渲染进行期间进行，比如 Fabric 的 `WorldRenderEvents` 或 NeoForge 的渲染事件（见上文"加载器"）。
 
 ### 1. 绘制（托管上下文）
 
 ```java
-LevelRenderEvents.END_MAIN.register(context ->
-    Exit.draw(context.submitNodeCollector(), exit -> {
+WorldRenderEvents.BEFORE_ENTITIES.register(context ->
+    Exit.draw(context.commandQueue(), exit -> {
         PoseStack pose = exit.poseStack();  
         Vec3 cam = exit.cameraPos();
         pose.translate(x - cam.x, y - cam.y, z - cam.z);
-        exit.collector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (p, buffer) -> { ... });
+        exit.collector().submitCustomGeometry(pose, RenderType.debugQuads(), (p, buffer) -> { ... });
     }));
 ```
 
@@ -111,22 +114,20 @@ Exit.portal(PortalOverrides.DEFAULT.withRenderingLevel(PortalOverrides.Switch.OF
 | 开关 | 默认 | 说明                                                                   |
 |---|---|----------------------------------------------------------------------|
 | `bypass` | `ON` | Iris 的 `ImmediateState.bypass`：不把原版管线替换成光影包的程序                       |
-| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽 |
+| `skipExtension` | `ON` | Iris 的 `ImmediateState.skipExtension`：该开关线程独立。此刻构建的顶点缓冲保持原版顶点格式，不被加宽。1.21.10 上 EXIT 不动它（见 `PortalOverrides`） |
 | `renderingLevel` | `KEEP` | Iris 的 `ImmediateState.isRenderingLevel`：开着时 Iris 会加宽提交管线写出的顶点格式     |
 
  **注意**
 
-* **portal 输出行为：** 26.3 没有全局的输出目标覆盖（1.21.6–26.2 的 `RenderSystem.outputColorTextureOverride` 已被删除），
-  EXIT 用一个 mixin 仿造了它：portal 改道期间，**新开的**渲染通道只要把主目标当作颜色或深度附件，就会被换成通道目标
-  （render area 也会限制在通道目标大小以内，配合 Super Resolution）。所以自己对主目标开 pass 的代码不用改。以下情况不会自动改道，
+* **portal 输出行为：** portal 改道期间，EXIT 用一个 mixin 把**新开的**、把主目标当作颜色或深度附件的渲染通道换成通道目标。
+  所以自己对主目标开 pass 的代码不用改。（1.21.10 也有 `RenderSystem.outputColorTextureOverride`，但它只管渲染类型；
+  这个 mixin 连直接开的 pass 也一起改道。）以下情况不会自动改道，
   需要用 `channel.redirect(你的目标)`（拿不到通道对象时用静态的 `Exit.redirect(original)`）：
   * 画进主目标以外的目标；
   * 画进 portal 开始之前就已打开的渲染通道（比如事件交给你的 pass）——附件在开 pass 时就定了；
   * 对主目标的清除、复制（`clear*`、`copyTextureToTexture`）。
 
   这个替换是全局的：portal 期间任何 mod 新开的、画进主目标的 pass 都会被改道。
-* **Gizmo：** portal 改道期间，在渲染线程上用原版 `Gizmos`（`Gizmos.cuboid`、`Gizmos.line` 等）添加的 Gizmo 会被收进该通道，
-  在关卡渲染结束时随通道的批量一起画进通道目标，不再由原版绘制。持续显示、淡出、总在最前这些属性照常生效。
 * **只在区间内有效：** `redirect` 只能在 portal（或 `draw` 的 lambda）里调用。如果在区间外、非渲染线程、或在另一个通道的
   portal 里调用会抛出 `IllegalStateException`。在区间内外都可能会跑的代码，执行前务必检查`Exit.isRouting()`或 `Exit.inPortal()`。
 * **何时改道：** 在渲染线程上：有光影包、不在阴影通道、关卡渲染中时改道（主目标上的新 pass 被换到通道目标，`redirect` 返回通道目标；否则都保持原样）；
@@ -144,8 +145,8 @@ Exit.plainFormat(() -> buildMyVbo());
 ### 3. 批量收集
 
 ```java
-LevelRenderEvents.COLLECT_SUBMITS.register(context ->
-    myRenderer.submit(Exit.batch(context.submitNodeCollector())));
+WorldRenderEvents.BEFORE_ENTITIES.register(context ->
+    myRenderer.submit(Exit.batch(context.commandQueue())));
 ```
 
 `batch()` 返回一个 `SubmitNodeCollector`。本帧提交给它的内容，在关卡渲染结束时和 `draw` 记下的内容一起，一次性绘制进通道目标：先画全部实体，再画全部半透明。
@@ -156,7 +157,7 @@ LevelRenderEvents.COLLECT_SUBMITS.register(context ->
 `Exit.draw/portal/batch` 使用共享的**主通道**（`emergency_exit:main`，默认选项）。需要不同选项的 mod 声明自己的通道：
 
 ```java
-ExitChannel xray = Exit.channel(Identifier.fromNamespaceAndPath("mymod", "xray"),
+ExitChannel xray = Exit.channel(ResourceLocation.fromNamespaceAndPath("mymod", "xray"),
     ExitOptions.builder()
         .occludedByWorld(false)                     // 透过世界显示
         .hideUnderHand(true)                        // 手部保持在最前
@@ -195,14 +196,14 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 ## 规则与限制
 
-* **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.render`
+* **线程与时机** 除了 `portal`（异线程时只关格式加宽）和 `plainFormat`，都只能在渲染线程、`LevelRenderer.renderLevel`
   开始到结束之间调用。在此之外，绘制会被丢弃（只警告一次），portal 不改道。通道目标在本帧第一次使用时用场景深度
   初始化，所以改道的 portal（和 `redirect`）要在关卡的渲染通道开始执行之后、且不在已打开的 `RenderPass` 里使用（Litematica 就是这样），不要更早。
 * **嵌套** portal 可以嵌套，但同一时间只能在一个通道上：绘制里再调用绘制会共用外层的收集器；
   在一个通道的 portal 里打开另一个通道会抛异常。
 * **阴影通道** EXIT 不往光影包的阴影图里画任何东西，所以通过 EXIT 绘制的内容没有影子：阴影通道里 `draw` 的 lambda
   和 `portal` 的区间都不执行，`batch` 返回的收集器会丢弃提交的内容（`plainFormat` 不受影响）。另外，Fabric 的
-  `LevelRenderEvents` 本来就不会在 Iris 的阴影通道里触发。
+  `WorldRenderEvents` 本来就不会在 Iris 的阴影通道里触发。
 * **顺序** `draw` 的 lambda 立即执行，但提交的内容不论在哪里调用（主渲染通道里、关卡渲染通道开始之前也一样）都记进通道的批量。
   批量在关卡渲染结束时（或 `flushBatch()` 时）在一帧里画完：先画全部实体，再画全部半透明，所以实体不会盖住更近的半透明。
   portal 是当场画的，排在批量之前：在 portal 里画半透明之前先调用 `flushBatch()`，否则批量里的实体会把它盖住。
@@ -236,10 +237,10 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   * `main_depth`：最终的主深度
   * `translucent_depth`：只含半透明表面的深度
 * `/emergency_exit debug shapes`：在玩家视线前方 5 格处生成三个测试方块，再输入一次关闭：
-  * 红色（右）：主通道上的半透明绘制（Fabric 的 `AFTER_SOLID_FEATURES`、NeoForge 的 `AfterOpaqueFeatures`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
-  * 绿色（中）：主通道的批量（Fabric 的 `COLLECT_SUBMITS`、NeoForge 的 `SubmitCustomGeometryEvent`），不透明、写深度
+  * 红色（右）：主通道上的半透明绘制（Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），记进批量；从侧面看它在绿色前面，绿色透过它显出一点
+  * 绿色（中）：主通道的批量（同样在 Fabric 的 `BEFORE_ENTITIES`、NeoForge 的 `AfterOpaqueBlocks`），不透明、写深度
   * 黄色（中，绿色后方偏右上）：另一个通道上的绘制（关卡渲染结束时），不透明、写深度；与主通道按深度混合，重叠处绿色在前
-  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道；外面的青色线框是同一个 portal 里添加的 Gizmo
+  * 蓝色（左）：portal 里直接对主目标开 RenderPass 绘制（同样在关卡渲染结束时，不调用 `redirect`），由 portal 自动改道到一个透过世界显示的独立通道（1.21.10 没有 Gizmo，所以没有青色线框）
 
 ## 开发
 
@@ -248,13 +249,13 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
 
 * `./gradlew build`：构建两个加载器的 jar（`fabric/build/libs`、`neoforge/build/libs`）。
 * `./gradlew :fabric:runSmokeClient`、`./gradlew :neoforge:runSmokeClient`：创建世界，打开 `/emergency_exit debug shapes`
-  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric` 和 `run/neoforge`，要测试改道，需要在
+  的测试方块，截图后退出；日志最后是 `RESULT: OK`。运行目录分别是 `run/fabric-1.21.10` 和 `run/neoforge-1.21.10`，要测试改道，需要在
   其中的 `shaderpacks` 放入光影包并在 `config/iris.properties` 里启用。
 * `./gradlew :fabric:runAuditClient`：检查每个 mixin 都已生效（只有 Fabric 版）。
-* `./gradlew :fabric:runSmokeClient -Pexit.superResolution`：同上，但加载 Super Resolution 模组（只在开发运行时加入），
-  检查拉伸合并。需要支持 SR 的光影包（比如 Sundial Lite；BSL 下 SR 不启用）并在 `run/fabric/config/super_resolution/config.toml`
-  里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
-  即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
+* 冒烟测试另外保存 `*-presented.png`：窗口前缓冲，即玩家实际看到的画面。装了 Super Resolution 时 EXIT 仍按它的渲染尺寸工作，
+  但 SR 没有 1.21.10 的版本，开发运行不加载它。
+* NeoForge 的开发运行默认开着 Blaze3D 校验层，Iris 在它下面起不来：在 `run/neoforge-1.21.10/config/neoforge-client.toml`
+  里设 `enableB3DValidationLayer = false`。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
 
 ## 与 LitematicaPass 的关系（计划）

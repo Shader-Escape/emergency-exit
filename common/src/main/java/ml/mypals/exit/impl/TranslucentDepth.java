@@ -3,7 +3,7 @@ package ml.mypals.exit.impl;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -60,7 +60,7 @@ public final class TranslucentDepth {
 				original.getVertexFormatMode(), original.getDepthBiasScaleFactor(), original.getDepthBiasConstant(), original.getSortKey());
 		}
 
-		private static Identifier variantId(Identifier location) {
+		private static ResourceLocation variantId(ResourceLocation location) {
 			return ExitMod.id("translucent_depth/" + location.getNamespace() + "/" + location.getPath());
 		}
 

@@ -8,7 +8,7 @@ import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-/** In 1.21.11 the dispatcher empties its storage after drawing it. EXIT draws some storages twice. */
+/** Before 26.1 the dispatcher empties its storage after drawing it. EXIT draws some storages twice. */
 @Mixin(FeatureRenderDispatcher.class)
 public class FeatureRenderDispatcherMixin {
 	@WrapOperation(method = "renderAllFeatures", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SubmitNodeStorage;clear()V"))

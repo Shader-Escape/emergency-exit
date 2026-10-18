@@ -7,21 +7,25 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-Minecraft **26.3** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
-its own git branch with plain code for that version.
+This branch is for Minecraft **1.21.10** (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft
+version gets its own git branch with plain code for that version; `master` is 26.3.
 
 ### Loaders
 
 Both loaders share one API, with one jar each: `emergency_exit-fabric` and `emergency_exit-neoforge` (Maven
-`ml.mypals.exit:emergency_exit-<loader>:0.1.0+26.3`). Iris is optional. Without a shader pack nothing is routed.
+`ml.mypals.exit:emergency_exit-<loader>:0.1.0+1.21.10`). Iris is optional. Without a shader pack nothing is routed.
 
-Call EXIT while the level renders, inside `LevelRenderer.render`.
+Call EXIT while the level renders, inside `LevelRenderer.renderLevel`.
 
 | Purpose | Fabric | NeoForge |
 |---|---|---|
-| Submit to a batch | `LevelRenderEvents.COLLECT_SUBMITS` | `SubmitCustomGeometryEvent` |
-| Drawings (recorded into the batch) | `LevelRenderEvents.AFTER_SOLID_FEATURES`, `END_MAIN` and others | `RenderLevelStageEvent.AfterOpaqueFeatures` and others |
-| After the main pass, outside any pass (portals) | `LevelRenderEvents.END_MAIN` | no matching event |
+| Submit to a batch | `WorldRenderEvents.BEFORE_ENTITIES` (`context.commandQueue()`) | `RenderLevelStageEvent.AfterOpaqueBlocks` and others, without a collector to pass through: `Exit.batch()` |
+| Drawings (recorded into the batch) | `WorldRenderEvents.BEFORE_ENTITIES`, `AFTER_ENTITIES`, `END_MAIN` and others | `RenderLevelStageEvent.AfterOpaqueBlocks` and others |
+| After the main pass, outside any pass (portals) | `WorldRenderEvents.END_MAIN` | no matching event |
+
+NeoForge for 1.21.10 has no event that hands out the level's `SubmitNodeCollector`, so there is nothing to pass
+through: use `Exit.batch()` and `Exit.draw(null, ...)`. Without a shader pack the batch then renders into the main
+target at the end of the level rendering.
 
 NeoForge's `RenderLevelStageEvent.AfterLevel` fires after the level rendering has ended, when EXIT has already merged
 the frame, so drawings there are dropped.
@@ -37,17 +41,17 @@ the frame, so drawings there are dropped.
 
 ## Use
 
-Call EXIT on the render thread while the level renders, for example from Fabric's `LevelRenderEvents` or NeoForge's render events (see Loaders above).
+Call EXIT on the render thread while the level renders, for example from Fabric's `WorldRenderEvents` or NeoForge's render events (see Loaders above).
 
 ```java
 // 1. Drawing with a managed context: collector, camera-relative pose stack, camera. The submits are recorded into
 //    the channel's batch.
-LevelRenderEvents.AFTER_SOLID_FEATURES.register(context ->
-    Exit.draw(context.submitNodeCollector(), exit -> {   // the collector is used as-is when nothing is routed
+WorldRenderEvents.BEFORE_ENTITIES.register(context ->
+    Exit.draw(context.commandQueue(), exit -> {   // the collector is used as-is when nothing is routed
         PoseStack pose = exit.poseStack();
         Vec3 cam = exit.cameraPos();
         pose.translate(x - cam.x, y - cam.y, z - cam.z);
-        exit.collector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (p, buffer) -> { ... });
+        exit.collector().submitCustomGeometry(pose, RenderType.debugQuads(), (p, buffer) -> { ... });
     }));
 
 // 2. A portal, for code with its own render context: the shader pack's switches are set while the lambda
@@ -64,8 +68,8 @@ Exit.plainFormat(() -> buildMyVbo());
 
 // 3. Batch: collected during the frame, drawn all at once at the end of the level rendering, together with the
 //    drawings of 1: all solid submits first, then the translucent ones.
-LevelRenderEvents.COLLECT_SUBMITS.register(context ->
-    myRenderer.submit(Exit.batch(context.submitNodeCollector())));
+WorldRenderEvents.BEFORE_ENTITIES.register(context ->
+    myRenderer.submit(Exit.batch(context.commandQueue())));
 ```
 
 ### Channels
@@ -74,7 +78,7 @@ LevelRenderEvents.COLLECT_SUBMITS.register(context ->
 options declares its own:
 
 ```java
-ExitChannel xray = Exit.channel(Identifier.fromNamespaceAndPath("mymod", "xray"),
+ExitChannel xray = Exit.channel(ResourceLocation.fromNamespaceAndPath("mymod", "xray"),
     ExitOptions.builder()
         .occludedByWorld(false)          // show through the world
         .hideUnderHand(true)
@@ -101,20 +105,17 @@ D32 target once it draws translucent submits, and blending two or more costs two
 
 ### Rules
 
-* **Thread and time.** Render thread, between the start and the end of `LevelRenderer.render` (except `portal` off
+* **Thread and time.** Render thread, between the start and the end of `LevelRenderer.renderLevel` (except `portal` off
   the render thread and `plainFormat`, below). Outside it a drawing is dropped (logged once) and a portal does not
   route. A channel's target is seeded with the scene depth when it is first used in the frame, so route (portal or `redirect`) once the
   level's render passes run (as Litematica does), outside an open render pass, not before.
-* **Portals.** `portal(overrides, body)` sets Iris's `bypass` (default on), `skipExtension` (default on, per thread)
-  and `isRenderingLevel` (default left alone), each `KEEP`/`ON`/`OFF`, while `body` runs, and restores them after. It
+* **Portals.** `portal(overrides, body)` sets Iris's `bypass` (default on), `skipExtension` (default on, per thread; it does nothing on 1.21.10, see
+  `PortalOverrides`) and `isRenderingLevel` (default left alone), each `KEEP`/`ON`/`OFF`, while `body` runs, and restores them after. It
   routes with a shader pack in use, outside its shadow pass, while the level renders; the switches are set whenever a
-  pack is in use outside its shadow pass. While it routes, EXIT stands in for the output override of 1.21.6–26.2
-  (gone in 26.3) with a mixin: every render pass **opened** in the portal with the main target as its colour or depth
-  attachment draws into the channel's target instead (its render area kept within the channel, for Super Resolution),
-  for any mod. Not moved, so use `channel.redirect(yourTarget)` there: other targets, a pass already open when the
-  portal began (one handed to you by an event), and clears and copies of the main target. Gizmos added on the render
-  thread while the portal routes (vanilla `Gizmos.cuboid`, `Gizmos.line` and so on) go to the channel too and are
-  drawn with its batch, with their persistence, fading and always-on-top settings kept. `redirect` (also
+  pack is in use outside its shadow pass. While it routes, a mixin moves every render pass **opened** in the portal
+  with the main target as its colour or depth attachment into the channel's target, for any mod. (1.21.10 also has
+  `RenderSystem.outputColorTextureOverride`, which only moves render types; the mixin also moves passes opened directly.) Not moved, so use `channel.redirect(yourTarget)` there: other targets, a pass already open when the
+  portal began (one handed to you by an event), and clears and copies of the main target. `redirect` (also
   the static `Exit.redirect`) throws outside a portal (or a `draw` lambda), off the render thread and inside a portal
   of another channel, instead of quietly handing your target back; code that also runs outside portals checks
   `Exit.isRouting()` first.
@@ -125,7 +126,7 @@ D32 target once it draws translucent submits, and blending two or more costs two
   drawing shares its collector). Opening another channel inside one throws.
 * **Shadow pass.** EXIT draws nothing into the shader pack's shadow map, so its drawings cast no shadows: in the
   shadow pass a `draw` lambda and a `portal` body do not run, and a `batch` collector drops what it gets
-  (`plainFormat` is not affected). Fabric's `LevelRenderEvents` do not fire in Iris's shadow pass anyway.
+  (`plainFormat` is not affected). Fabric's `WorldRenderEvents` do not fire in Iris's shadow pass anyway.
 * **Order.** A `draw` lambda runs at once, but what it submits joins the channel's batch, wherever it is called (also
   inside an open render pass, or before the level's render passes start). The batch is rendered at the end of the
   level rendering, or earlier with `flushBatch()`, in one frame: solid submits first, then translucent ones, so a solid
@@ -154,7 +155,7 @@ D32 target once it draws translucent submits, and blending two or more costs two
 Debug: `/emergency_exit debug <color|target_depth|scene_depth|main_depth|translucent_depth|off> [channel]` shows a
 channel's buffers instead of the frame (with a shader pack in use). `/emergency_exit debug shapes` turns three test boxes
 on, 5 blocks in front of you, or off again: red = translucent drawing, green = batch (solid), yellow = a solid box on another channel behind the green one, blended by depth, blue = a pass on the main target in a
-portal, moved into a channel that shows through the world, with a cyan gizmo outline added in the same portal.
+portal, moved into a channel that shows through the world. 1.21.10 has no gizmos, so there is no cyan outline.
 
 ## Development
 
@@ -164,13 +165,14 @@ event hooks of the debug shapes. Loader-specific queries go through the `Platfor
 
 * `./gradlew build` builds both jars (`fabric/build/libs`, `neoforge/build/libs`).
 * `./gradlew :fabric:runSmokeClient` and `./gradlew :neoforge:runSmokeClient` create a world, turn on the test shapes,
-  take screenshots and quit. The log ends with `RESULT: OK`. They run in `run/fabric` and `run/neoforge`. To test
+  take screenshots and quit. The log ends with `RESULT: OK`. They run in `run/fabric-1.21.10` and `run/neoforge-1.21.10`. To test
   routing, put a shader pack into its `shaderpacks` folder and enable it in `config/iris.properties`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
-* `./gradlew :fabric:runSmokeClient -Pexit.superResolution` does the same with the Super Resolution mod loaded (in the
-  development runs only), to check the stretched merge. It needs a shader pack SR supports (for example Sundial Lite,
-  SR stays off with BSL) and `upscale_algo = "fsr2"` in `run/fabric/config/super_resolution/config.toml`. The smoke test
-  also saves `*-presented.png`, the window's front buffer, which is what the player sees.
+* The smoke test also saves `*-presented.png`, the window's front buffer, which is what the player sees. EXIT still
+  follows the render size of the Super Resolution mod when it is present, but SR has no build for 1.21.10, so the
+  development runs do not load it.
+* NeoForge's development runs turn on the Blaze3D validation layer, which Iris does not start with: set
+  `enableB3DValidationLayer = false` in `run/neoforge-1.21.10/config/neoforge-client.toml`.
 * `./gradlew publishToMavenLocal` publishes both jars for other mods' development setups.
 
 ## LitematicaPass on EXIT (plan)

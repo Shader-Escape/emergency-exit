@@ -2,7 +2,7 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Copies of the scene depth taken at two moments of the shader pack's frame. One is taken before the first-person hand

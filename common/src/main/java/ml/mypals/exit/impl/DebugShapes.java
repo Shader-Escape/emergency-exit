@@ -7,17 +7,14 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Test boxes for {@code /emergency_exit debug shapes}, placed 5 blocks in front of the player.
@@ -28,12 +25,12 @@ import org.jspecify.annotations.Nullable;
  *     <li>Yellow sits behind the green box on another channel. The channels blend by depth, so green covers it where
  *     they overlap.</li>
  *     <li>Blue, on the left, is a pass on the main target inside a portal. The portal moves it into a channel that
- *     shows through the world. The cyan outline around it is a gizmo added in the same portal.</li>
+ *     shows through the world.</li>
  * </ul>
  */
 public final class DebugShapes {
 	public static final double DISTANCE = 5;
-	private static final Identifier WHITE = ExitMod.id("textures/misc/white.png");
+	private static final ResourceLocation WHITE = ExitMod.id("textures/misc/white.png");
 	private static final int FULL_BRIGHT = 0xF000F0;
 
 	/** The centre of the middle box, or null while the shapes are off. */
@@ -126,9 +123,6 @@ public final class DebugShapes {
 			if (moved != routing) {
 				STATS.portalRoutingMismatches++;
 			}
-			// A gizmo added in the portal is drawn with the channel instead of by vanilla.
-			Vec3 blue = at.subtract(right.scale(2));
-			Gizmos.cuboid(new AABB(blue, blue).inflate(0.65), GizmoStyle.stroke(0xFF30FFFF, 3));
 		});
 	}
 
@@ -203,7 +197,7 @@ public final class DebugShapes {
 	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
-		collector.submitCustomGeometry(poseStack, solid ? RenderTypes.entitySolid(WHITE) : RenderTypes.debugQuads(), (pose, buffer) -> {
+		collector.submitCustomGeometry(poseStack, solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads(), (pose, buffer) -> {
 			quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
 			quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1);
 			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);

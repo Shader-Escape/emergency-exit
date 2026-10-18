@@ -2,8 +2,8 @@ package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.resources.Identifier;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.function.Consumer;
 
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * that nothing is routed.
  */
 public interface ExitChannel {
-	Identifier id();
+	ResourceLocation id();
 
 	ExitOptions options();
 

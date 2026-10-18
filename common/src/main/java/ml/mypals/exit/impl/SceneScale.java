@@ -11,20 +11,18 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderPipelines;
-import ml.mypals.exit.mixin.RenderTypeAccessor;
-import net.minecraft.client.renderer.rendertype.RenderSetup;
-import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.state.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -50,8 +48,8 @@ final class SceneScale {
 	/** The probe quad covers this much of clip space on each side of the centre. Its edges stay inside the screen. */
 	private static final float PROBE_HALF = 0.9F;
 	/**
-	 * The view distance of the probe quad. Only its screen position counts. 1.21.11 has no depth test that always passes
-	 * and still writes depth, so the quad is drawn with LEQUAL just beyond the near plane, in front of nearly everything.
+	 * The view distance of the probe quad. Only its screen position counts. Before 26.1 there is no depth test that always
+	 * passes and still writes depth, so the quad is drawn with LEQUAL just beyond the near plane, in front of nearly everything.
 	 */
 	private static final float PROBE_DISTANCE = 0.1F;
 	/** Below these the measured transform is the pack's sub-pixel jitter, not a scale. */
@@ -60,7 +58,7 @@ final class SceneScale {
 	/** Defines carry the transform as integers in this fixed point. */
 	private static final int FIXED = 100000;
 	private static final int MAX_TRIES = 3;
-	private static final Identifier WHITE = ExitMod.id("textures/misc/white.png");
+	private static final ResourceLocation WHITE = ExitMod.id("textures/misc/white.png");
 
 	private enum State { UNKNOWN, READING, KNOWN }
 
@@ -193,7 +191,7 @@ final class SceneScale {
 			points[i] = toModel.transform(view);
 		}
 
-		RenderType type = RenderTypes.entitySolid(WHITE);
+		RenderType type = RenderType.entitySolid(WHITE);
 		RenderPipeline pipeline = probePipeline();
 		try (ByteBufferBuilder bytes = new ByteBufferBuilder(1024)) {
 			// Built in the format Iris gives the entity pipeline while the level renders.
@@ -212,8 +210,9 @@ final class SceneScale {
 	}
 
 	private static void draw(RenderTarget main, RenderType type, RenderPipeline pipeline, MeshData mesh, Matrix4f modelView) {
-		// Getting the textures may load them, which cannot happen inside a pass.
-		Map<String, RenderSetup.TextureAndSampler> textures = ((RenderTypeAccessor) type).emergency_exit$state().getTextures();
+		// Before 1.21.11 a render type sets its textures as shader textures. Setting them up may load them, which cannot
+		// happen inside a pass.
+		type.setupRenderState();
 		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
 		// OpenGL masks the colour of every draw buffer at once before 26.2, so a pipeline that writes no colour masks all the
 		// buffers the pack's program writes to.
@@ -223,13 +222,18 @@ final class SceneScale {
 			pass.setPipeline(pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms()
-				.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f()));
-			for (Map.Entry<String, RenderSetup.TextureAndSampler> texture : textures.entrySet()) {
-				pass.bindTexture(texture.getKey(), texture.getValue().textureView(), texture.getValue().sampler());
+				.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f(), RenderSystem.getShaderLineWidth()));
+			for (int i = 0; i < 12; i++) {
+				GpuTextureView texture = RenderSystem.getShaderTexture(i);
+				if (texture != null) {
+					pass.bindSampler("Sampler" + i, texture);
+				}
 			}
 			pass.setVertexBuffer(0, vertices);
 			pass.setIndexBuffer(indices.getBuffer(6), indices.type());
 			pass.drawIndexed(0, 0, 6, 1);
+		} finally {
+			type.clearRenderState();
 		}
 	}
 
@@ -256,7 +260,7 @@ final class SceneScale {
 		int width = mask.width;
 		int height = mask.height;
 		GpuBuffer buffer = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe readback",
-			GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST, (long) width * height * 4);
+			GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST, width * height * 4);
 		RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(mask.getColorTexture(), buffer, 0, () -> {
 			try (GpuBuffer.MappedView view = RenderSystem.getDevice().createCommandEncoder().mapBuffer(buffer, true, false)) {
 				if (expected == generation) {
