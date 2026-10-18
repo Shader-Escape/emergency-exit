@@ -12,6 +12,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.11 | `port/1.21.11` | 21 | 混淆，Mojang 映射 | 1.10.8 |
 | 1.20.6 | `port/1.20.6` | 21 | 混淆，Mojang 映射 | 1.7.2 |
 | 1.20.4 | `port/1.20.4` | 17 | 混淆，Mojang 映射 | 1.7.2 |
+| 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
 
 ## 26.2（相对 26.3）
 
@@ -213,3 +214,21 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   视图旋转是第一个 `PoseStack` 参数，投影是最后一个 `Matrix4f`。
 
 其余同 1.20.6。
+
+## 1.20.2（相对 1.20.4）
+
+**构建**
+- NeoForm `1.20.2-20241215.201144`；Fabric API `0.91.6+1.20.2`；Iris 1.6.14、Sodium 见 `gradle.properties`。
+
+**包名和类（Iris 换回 net.coderbot）**
+- Iris 1.6.14 还在旧包名：`net.coderbot.iris.Iris`、`net.coderbot.iris.vertices.ImmediateState`、
+  `net.coderbot.iris.pipeline.WorldRenderingPhase`。
+- 管线类 `IrisRenderingPipeline` → `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`
+  （`shouldOverrideShaders` / `getPhase` 仍在）。
+- `IrisApi` 仍在 `net.irisshaders.iris.api.v0`（没有跟着搬）。
+
+**开发运行**
+- 冒烟测试的 Iris 阴影钩子目标改成 `net.coderbot.iris.pipeline.ShadowRenderer`（字段 `ACTIVE`、方法
+  `renderShadows`）。
+
+其余同 1.20.4。
