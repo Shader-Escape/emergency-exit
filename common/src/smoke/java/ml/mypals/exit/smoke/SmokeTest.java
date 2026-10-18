@@ -72,6 +72,8 @@ public final class SmokeTest {
 
 	private final List<String> phases = new ArrayList<>();
 	private final List<String> failedPhases = new ArrayList<>();
+	/** Whether the green batch box was seen at the centre of this phase's presented frame. */
+	private boolean greenSeen;
 	private int phase;
 	/** Where the player stood when the shapes were placed, as a teleport target. */
 	private String frontView = "";
@@ -179,7 +181,7 @@ public final class SmokeTest {
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				this.screenshot(mc, name, "normal");
 			}
-			case 102 -> this.presented(mc, name, "presented");
+			case 102 -> this.greenSeen = isGreen(this.presented(mc, name, "presented"));
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
 			case 115 -> this.screenshot(mc, name, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
@@ -253,8 +255,9 @@ public final class SmokeTest {
 		log("phase " + pack + ": shader pack in use: " + packInUse + ", frames composited by EXIT: " + d[0]
 			+ ", drawings: " + d[1] + " (routed: " + d[2] + "), batches: " + d[3] + ", portals: " + d[4]
 			+ " (passes moved into the channel: " + d[5] + "), portal/routing mismatches: " + d[6]
-			+ ", frames blending channels by depth: " + d[7] + ", Iris shadow callbacks: " + d[8]);
-		boolean ok = packInUse == wantPack && d[1] > 0 && d[3] > 0 && d[4] > 0 && d[6] == 0
+			+ ", frames blending channels by depth: " + d[7] + ", Iris shadow callbacks: " + d[8] + ", green box seen: " + this.greenSeen);
+		boolean shapes = !Boolean.getBoolean("emergency_exit.smoke.noShapes");
+		boolean ok = packInUse == wantPack && d[1] > 0 && d[3] > 0 && d[4] > 0 && d[6] == 0 && (this.greenSeen || !shapes)
 			&& (packInUse ? d[0] > 0 && d[2] > 0 && d[5] > 0 && d[7] > 0 && d[8] > 0 : d[0] == 0 && d[2] == 0 && d[5] == 0);
 		log("phase " + pack + ": " + (ok ? "OK" : "FAILED"));
 		if (!ok) {
@@ -334,7 +337,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc, String pack, String view) {
+	private BufferedImage presented(Minecraft mc, String pack, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -361,6 +364,20 @@ public final class SmokeTest {
 		} catch (IOException e) {
 			log("could not save " + name + ": " + e);
 		}
+		return image;
+	}
+
+	/**
+	 * Whether the green box, which the front view centres, is drawn: the counters only show that EXIT was called, not
+	 * that anything reached the screen. The pixel is a little off the centre, beside the crosshair.
+	 */
+	private static boolean isGreen(BufferedImage image) {
+		int rgb = image.getRGB(image.getWidth() / 2 + image.getWidth() / 60, image.getHeight() / 2 + image.getHeight() / 40);
+		int r = rgb >> 16 & 0xFF;
+		int g = rgb >> 8 & 0xFF;
+		int b = rgb & 0xFF;
+		log(String.format(Locale.ROOT, "centre pixel #%06x", rgb & 0xFFFFFF));
+		return g > 120 && g > r + 50 && g > b + 50;
 	}
 
 	private static void deleteOldWorld() {
