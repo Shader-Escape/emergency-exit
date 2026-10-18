@@ -77,8 +77,8 @@ public final class DebugView {
 			Gpu.draw(pipeline, main,
 				Gpu.color("ExitColor", target),
 				Gpu.depth("ExitDepth", target),
-				Gpu.depth("MainDepth", main),
-				Gpu.depth("OpaqueDepth", opaque != null ? opaque : main));
+				Gpu.depth("MainDepth", stretched ? main : SceneDepth.current(main)),
+				Gpu.depth("OpaqueDepth", opaque != null ? opaque : stretched ? main : SceneDepth.current(main)));
 		} finally {
 			Gpu.wholeOutput = false;
 		}
