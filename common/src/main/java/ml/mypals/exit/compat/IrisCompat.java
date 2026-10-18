@@ -1,6 +1,6 @@
 package ml.mypals.exit.compat;
 
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.exit.platform.Platform;
 import org.jspecify.annotations.Nullable;
 

@@ -70,7 +70,7 @@ final class Gpu {
 
 	/** A target with only a colour texture. */
 	static TextureTarget colorTarget(String label, int width, int height) {
-		return new TextureTarget(label, width, height, GpuFormat.RGBA8_UNORM, null);
+		return new TextureTarget(label, width, height, false);
 	}
 
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */

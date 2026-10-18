@@ -10,6 +10,7 @@
     "PortalPassMixin",
     "RenderPassMixin",
     "RenderPipelinesAccessor",
+    "RenderTypeAccessor",
     "StrictValidationMixin",
     "iris.IrisRenderingPipelineMixin"
   ],
