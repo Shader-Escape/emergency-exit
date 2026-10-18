@@ -14,6 +14,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.21.8 | `port/1.21.8` | 21 | 混淆，Mojang 映射 | 1.9.6 |
 | 1.21.5 | `port/1.21.5` | 21 | 混淆，Mojang 映射 | 1.8.11 |
 | 1.21.4 | `port/1.21.4` | 21 | 混淆，Mojang 映射 | 1.8.8 |
+| 1.21.3 | `port/1.21.3` | 21 | 混淆，Mojang 映射 | 1.8.1 |
 
 ## 26.2（相对 26.3）
 
@@ -297,3 +298,20 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **开发运行**
 - Super Resolution 只有 1.21.4 的 0.8.2-alpha.1：在开发运行里它让实体模型（含第一人称手）画不出来，不开光影也一样；
   配 Sundial Lite 1.2.0 时在它自己的配置里崩溃（`superresolution$config.sr` 为 null）。所以 1.21.4 不带 `-Pexit.superResolution`，没有测 SR。
+
+## 1.21.3（相对 1.21.4）
+
+**构建**
+- NeoForm `1.21.3-20241023.131943`，NeoForge `21.3.100`，Fabric API `0.114.1+1.21.3`，Iris 1.8.1、Sodium 0.6.8（同 LitematicaPass）。
+- NeoForm 1.21.3 把 ASM 钉死在 9.3：common 编译时用的 `asm-tree:9.6` 也不带传递依赖。
+
+**关卡钩子**
+- `LevelRenderer.renderLevel(allocator, DeltaTracker, renderOutline, Camera, GameRenderer, LightTexture, Matrix4f modelView, Matrix4f projection)`：
+  比 1.21.4 多一个 `LightTexture`。
+
+**Iris**
+- Iris 1.8.1 没有 `ImmediateState.bypass`。EXIT 自己记 bypass（`IrisHooks`），`IrisShaderOverrideMixin` 在它开着时让
+  `shouldOverrideShaders` 返回 false（同 LitematicaPass）。
+- 核实过：Iris 1.8.8 只在 `MixinShaderManager_Overrides` 里、和 `shouldOverrideShaders` 一起读 bypass（给原版着色器挑程序时）；
+  1.8.1 里没有混入调用 `getPhase`。所以移植说明里提到的 `getPhase` 返回 `NONE` 不需要。
+- 加宽规则同 1.8.8/1.8.11：`skipExtension` 管缓冲，`isRenderingLevel` 管格式。
