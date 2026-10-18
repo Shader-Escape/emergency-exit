@@ -16,7 +16,6 @@ import com.mojang.renderpearl.api.pipeline.DepthStencilState;
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
-import com.mojang.renderpearl.backend.opengl.GlStateManager;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
@@ -28,12 +27,16 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.LightCoordsUtil;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
+import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
 
 /**
@@ -59,6 +62,8 @@ final class SceneScale {
 	/** Defines carry the transform as integers in this fixed point. */
 	private static final int FIXED = 100000;
 	private static final int MAX_TRIES = 3;
+	/** The most draw buffers a pack's program writes to, as far as the probe masks them. */
+	private static final int DRAW_BUFFERS = 8;
 	private static final Identifier WHITE = ExitMod.id("textures/misc/white.png");
 
 	private enum State { UNKNOWN, READING, KNOWN }
@@ -145,7 +150,11 @@ final class SceneScale {
 		probeMask = ensure(probeMask, "emergency_exit_scale_mask", main.width, main.height, true);
 
 		Gpu.copyDepth(beforeProbe, main);
-		if (!drawProbe(main, camera)) {
+		boolean drawn = drawProbe(main, camera);
+		// On OpenGL the probe left the pack's other draw buffers masked, and the pack's own pipelines only set the masks
+		// of the buffers they know of. A clear makes every buffer writable again, as the rest of the game expects.
+		RenderSystem.getDevice().createCommandEncoder().clearColorTexture(probeMask.getColorTexture(), new Vector4f());
+		if (!drawn) {
 			ExitRuntime.warnOnce("scene_scale_camera", "EXIT: could not place the render scale probe; occlusion assumes full resolution");
 			state = State.KNOWN;
 			return;
@@ -209,14 +218,18 @@ final class SceneScale {
 	private static void draw(RenderTarget main, RenderType type, RenderPipeline pipeline, MeshData mesh, Matrix4f modelView) {
 		PreparedRenderType prepared = type.prepare();
 		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
-		// The pipeline masks only the draw buffer it knows of. The pack's program writes to several, so mask them all.
-		int[] masks = IrisCompat.colorMasks();
-		GlStateManager._colorMask(0);
+		// The pack's program writes to several draw buffers, and a pipeline masks only those it has colour targets for.
+		// So the pipeline has one for each, and the pass leaves all but the first empty.
+		int targets = pipeline.getColorTargetStates().size();
+		List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> colors = new ArrayList<>();
+		colors.add(new RenderPassDescriptor.Attachment<>(main.getColorTextureView(), Optional.empty()));
+		for (int i = 1; i < targets; i++) {
+			colors.add(null);
+		}
 		try (GpuBuffer vertices = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe", GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer())) {
-			RenderPassDescriptor descriptor = RenderPassDescriptor.builder(() -> "emergency_exit scale probe")
-				.withColorAttachment(main.getColorTextureView())
-				.withDepthAttachment(main.getDepthTextureView(), OptionalDouble.empty())
-				.build();
+			RenderPassDescriptor descriptor = new RenderPassDescriptor(() -> "emergency_exit scale probe", colors,
+				new RenderPassDescriptor.Attachment<>(main.getDepthTextureView(), OptionalDouble.empty()),
+				new RenderPass.RenderArea(0, 0, main.width, main.height));
 			try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
 				pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
 				RenderSystem.bindDefaultUniforms(pass);
@@ -227,10 +240,6 @@ final class SceneScale {
 				pass.setVertexBuffer(0, vertices.slice());
 				pass.setIndexBuffer(indices.getBuffer(6), indices.type());
 				pass.drawIndexed(6, 1, 0, 0, 0);
-			}
-		} finally {
-			for (int i = 0; i < masks.length; i++) {
-				GlStateManager._colorMask(i, masks[i]);
 			}
 		}
 	}
@@ -248,12 +257,19 @@ final class SceneScale {
 	private static final class Probe extends RenderPipeline {
 		Probe(RenderPipeline original) {
 			super(ExitMod.id("scale_probe"), original.getShaders(), original.getShaderDefines(), original.getBindGroupLayouts(),
-				original.getColorTargetStates().stream()
-					.map(state -> new ColorTargetState(state.blendFunction(), state.format(), ColorTargetState.WRITE_NONE))
-					.toArray(ColorTargetState[]::new),
+				noColor(original.getColorTargetStates().getFirst()),
 				new DepthStencilState(CompareOp.ALWAYS_PASS, true), original.getPolygonMode(), false,
 				original.getVertexFormatBindings().toArray(VertexFormat[]::new), original.getPrimitiveTopology(),
 				original.pushConstantSize(), original.getSortKey());
+		}
+
+		private static ColorTargetState[] noColor(ColorTargetState first) {
+			int count = Math.min(DRAW_BUFFERS, RenderSystem.getDevice().getDeviceInfo().limits().maxColorAttachments());
+			ColorTargetState[] states = new ColorTargetState[count];
+			for (int i = 0; i < count; i++) {
+				states[i] = new ColorTargetState(Optional.empty(), first.format(), ColorTargetState.WRITE_NONE);
+			}
+			return states;
 		}
 	}
 
