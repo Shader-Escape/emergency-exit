@@ -35,7 +35,7 @@
       "kind": "channel",
       "when": "throughout level rendering",
       "title": "Mod submits draws",
-      "text": "<code>Exit.batch</code>, <code>draw</code> and <code>portal</code> first collect what to draw, then draw it into EXIT's channels after the pack finishes.",
+      "text": "<code>Exit.batch</code>, <code>draw</code> and <code>portal</code> collect what they need to draw first. Once the pack finishes, the mod draws it into EXIT's channels.",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "Pack draws opaque world",
-      "text": "Super Resolution makes the pack draw only into 1/1.21 of the window: window 854×480, scene 705×396. The depth buffer is still 854×480, and only the lower-left corner (dashed box) is used.",
+      "text": "Super Resolution has the pack draw into only 1/1.21 of the window. The window is 854×480 and the scene is 705×396. The depth buffer is still 854×480, but only the lower-left corner (dashed box) is used.",
       "imgs": [
         {
           "src": "img/sr/01-pack-depth-before-hand.png",
@@ -70,7 +70,7 @@
       "kind": "depth",
       "when": "Iris beginHand",
       "title": "Copy: depth without hand",
-      "text": "EXIT reads the scene size 705×396 from SR and copies from the lower-left corner at that size. What it gets is exactly the whole scene, so no resampling is needed.",
+      "text": "EXIT reads the scene size, 705×396, from SR and copies from the lower-left corner at that size. The result is the whole scene, so no resampling is needed.",
       "imgs": [
         {
           "src": "img/sr/02-no-hand-copy.png",
@@ -89,7 +89,7 @@
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "Pack draws the hand",
-      "text": "The hand is also drawn in this lower-left block.",
+      "text": "The hand is drawn in this lower-left block too.",
       "imgs": [
         {
           "src": "img/sr/03-pack-depth-before-translucents.png",
@@ -114,7 +114,7 @@
       "kind": "probe",
       "when": "first beginHand",
       "title": "No scale measurement",
-      "text": "While SR is in use, EXIT does not draw the probe. SR's downscale is already handled by the scene size, and measuring again would shrink the scene twice.",
+      "text": "EXIT skips the probe while SR is in use. SR's downscale is already covered by the scene size, and measuring again would shrink the scene twice.",
       "imgs": []
     },
     {
@@ -149,7 +149,7 @@
       "kind": "depth",
       "when": "Iris beginTranslucents",
       "title": "Copy: depth without translucents",
-      "text": "Has the hand, no glass. Likewise copied at the scene size.",
+      "text": "It includes the hand but not the glass. It's copied at the scene size as well.",
       "imgs": [
         {
           "src": "img/sr/04-opaque-copy.png",
@@ -168,7 +168,7 @@
       "kind": "pack",
       "when": "deferred → composite → final → SR",
       "title": "Pack's finished frame",
-      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the whole window. There are no mod objects in the image yet.",
+      "text": "After the pack finishes, SR (FSR2 here) upscales 705×396 to the full window. The mod's blocks aren't in the image yet.",
       "imgs": [
         {
           "src": "img/sr/05-pack-frame.png",
@@ -187,7 +187,7 @@
       "kind": "depth",
       "when": "end of frame",
       "title": "Final depth, no alignment",
-      "text": "The final depth used to find the glass at merge time also reads only the lower-left 705×396 block, and its pixels line up one-to-one with the channels.",
+      "text": "The final depth used to find the glass at merge time also reads only the lower-left 705×396 block. Its pixels line up one-to-one with the channels.",
       "imgs": [
         {
           "src": "img/sr/06-main-depth-end.png",
@@ -212,7 +212,7 @@
       "kind": "channel",
       "when": "end of frame · first use of the channel",
       "title": "Seed the channel",
-      "text": "The channel is the same size as the scene (705×396). Seed it with \"depth without translucents\" and set the hand's position to nearest; the see-through channel only holds the hand.",
+      "text": "The channel is the same size as the scene, 705×396. Seed it with \"depth without translucents\" and set the hand's position to nearest. The see-through channel only holds the hand.",
       "imgs": [
         {
           "src": "img/sr/09-main-seeded.png",
@@ -239,7 +239,7 @@
       "kind": "channel",
       "when": "vanilla shaders",
       "title": "Draw into the channel",
-      "text": "Green writes color and depth. Red is translucent: the stone cuts off its lower-right corner, and it does not write depth.",
+      "text": "Green writes color and depth. Red is translucent: the stone cuts off its lower-right corner, and red doesn't write depth.",
       "imgs": [
         {
           "src": "img/sr/10-main-color.png",
@@ -299,7 +299,7 @@
       "kind": "channel",
       "when": "each channel",
       "title": "Other channels, same treatment",
-      "text": "The yellow block is in the mix channel; the blue block and the cyan wireframe are in the see-through channel.",
+      "text": "The yellow block is in the mix channel. The blue block and the cyan wireframe are in the see-through channel.",
       "imgs": [
         {
           "src": "img/sr/14-debug_mix-color.png",
@@ -338,7 +338,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "The pixels where the \"with hand\" and \"without hand\" depths differ are the hand (orange).",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
       "imgs": [
         {
           "src": "img/sr/22-hand-mask.png",
@@ -357,7 +357,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is nearer than \"depth without translucents\", there is glass (orange). Only the dashed box is checked.",
+      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). Only the dashed box is checked.",
       "imgs": [
         {
           "src": "img/sr/23-translucent-in-front.png",
@@ -421,7 +421,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "Blend the mix channel by depth",
-      "text": "The nearer one is in front: the green covers the overlapping part of the yellow.",
+      "text": "The nearer one is in front. The green covers the part of the yellow it overlaps.",
       "imgs": [
         {
           "src": "img/sr/26-layer-after-debug_mix.png",
@@ -499,7 +499,7 @@
       "kind": "merge",
       "when": "Composite (STRETCHED)",
       "title": "Stretch and composite onto the finished image",
-      "text": "The finished image has been upscaled by SR to 854×480, but the blend layer is still 705×396. When merging, each window pixel p reads the blend layer at p × 705/854, stretching it over the image.",
+      "text": "The finished image has been upscaled by SR to 854×480, but the blend layer is still 705×396. At merge time, each window pixel p reads the blend layer at p × 705/854 and stretches it over the image.",
       "imgs": [
         {
           "src": "img/sr/30-final.png",

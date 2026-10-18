@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里什么都不画。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西。",
       "imgs": []
     },
     {
@@ -35,7 +35,7 @@
       "kind": "channel",
       "when": "整个关卡渲染期间",
       "title": "模组提交绘制",
-      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先把要画的东西收集起来，等光影画完再画进 EXIT 的通道。",
+      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先收集要画的东西，等光影画完，再画进 EXIT 的通道。",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "Super Resolution 让光影只在窗口的 1/1.21 里画：窗口 854×480，场景 705×396。深度缓冲还是 854×480，只用了左下角（虚线框）。",
+      "text": "Super Resolution 让光影只在窗口的 1/1.21 里画：窗口 854×480，场景 705×396。深度缓冲仍是 854×480，只用到左下角（虚线框）。",
       "imgs": [
         {
           "src": "img/sr/01-pack-depth-before-hand.png",
@@ -70,7 +70,7 @@
       "kind": "depth",
       "when": "Iris beginHand",
       "title": "复制：没有手的深度",
-      "text": "EXIT 从 SR 那里读到场景尺寸 705×396，按这个尺寸从左下角复制，拿到的正好是整幅场景，不用重采样。",
+      "text": "EXIT 从 SR 那里读到场景尺寸 705×396，就按这个尺寸从左下角复制。拿到的正好是整幅场景，不需要重采样。",
       "imgs": [
         {
           "src": "img/sr/02-no-hand-copy.png",
@@ -89,7 +89,7 @@
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "光影画手",
-      "text": "手也画在左下角这块里。",
+      "text": "手也画在左下角这一块里。",
       "imgs": [
         {
           "src": "img/sr/03-pack-depth-before-translucents.png",
@@ -114,7 +114,7 @@
       "kind": "probe",
       "when": "第一次 beginHand",
       "title": "不测缩放",
-      "text": "SR 在用时 EXIT 不画探针：SR 的缩小已经由场景尺寸处理，再测一次会把场景缩小两次。",
+      "text": "SR 在用的时候，EXIT 不画探针。SR 的缩小已经由场景尺寸处理了，再测一次就会把场景缩小两次。",
       "imgs": []
     },
     {
@@ -124,7 +124,7 @@
       "kind": "pack",
       "when": "gbuffers_water 等",
       "title": "光影画半透明",
-      "text": "浅蓝玻璃写进深度。",
+      "text": "浅蓝色玻璃写进深度。",
       "imgs": [
         {
           "src": "img/sr/06-main-depth-end.png",
@@ -149,7 +149,7 @@
       "kind": "depth",
       "when": "Iris beginTranslucents",
       "title": "复制：没有半透明的深度",
-      "text": "有手、没有玻璃，同样按场景尺寸复制。",
+      "text": "有手，没有玻璃，同样按场景尺寸复制。",
       "imgs": [
         {
           "src": "img/sr/04-opaque-copy.png",
@@ -168,7 +168,7 @@
       "kind": "pack",
       "when": "deferred → composite → final → SR",
       "title": "光影的成品画面",
-      "text": "光影画完后，SR（这里用 FSR2）把 705×396 放大到整个窗口。这时画面里还没有模组的方块。",
+      "text": "光影画完后，SR（这里用 FSR2）把 705×396 放大到整个窗口。画面里还没有模组的方块。",
       "imgs": [
         {
           "src": "img/sr/05-pack-frame.png",
@@ -212,7 +212,7 @@
       "kind": "channel",
       "when": "帧末 · 通道第一次使用",
       "title": "通道打底",
-      "text": "通道和场景一样大（705×396）。用“没有半透明的深度”打底，手的位置设成最近；透视通道只放手。",
+      "text": "通道和场景一样大，都是 705×396。用“没有半透明的深度”打底，手的位置设为最近；透视通道只放手。",
       "imgs": [
         {
           "src": "img/sr/09-main-seeded.png",
@@ -239,7 +239,7 @@
       "kind": "channel",
       "when": "原版着色器",
       "title": "画进通道",
-      "text": "绿色写颜色和深度；红色是半透明，被石头挡掉右下角，不写深度。",
+      "text": "绿色写颜色和深度。红色是半透明的，被石头挡住右下角，而且不写深度。",
       "imgs": [
         {
           "src": "img/sr/10-main-color.png",
@@ -272,7 +272,7 @@
       "kind": "channel",
       "when": "合并前",
       "title": "补上半透明的深度",
-      "text": "半透明的东西再画一遍只写深度，再折进通道深度。",
+      "text": "半透明的东西再画一遍，只写深度，再折进通道的深度。",
       "imgs": [
         {
           "src": "img/sr/12-main-translucent-depth.png",
@@ -299,7 +299,7 @@
       "kind": "channel",
       "when": "每个通道",
       "title": "其他通道同样处理",
-      "text": "黄色方块在 mix 通道；蓝色方块和青色线框在透视通道。",
+      "text": "黄色方块在 mix 通道里；蓝色方块和青色线框在透视通道里。",
       "imgs": [
         {
           "src": "img/sr/14-debug_mix-color.png",
@@ -338,7 +338,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不一样的像素就是手（橙色）。",
+      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
       "imgs": [
         {
           "src": "img/sr/22-hand-mask.png",
@@ -357,7 +357,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方有玻璃（橙色），只看虚线框里。",
+      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色），只检查虚线框里的部分。",
       "imgs": [
         {
           "src": "img/sr/23-translucent-in-front.png",
@@ -382,7 +382,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "叠第一个通道",
-      "text": "主通道去掉手的像素，玻璃后面的绿色下半部变暗。",
+      "text": "主通道去掉手的像素，玻璃后面的绿色下半部分被压暗。",
       "imgs": [
         {
           "src": "img/sr/24-layer-after-main.png",
@@ -421,7 +421,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "按深度叠 mix 通道",
-      "text": "近的在前：绿色挡住黄色重叠的部分。",
+      "text": "近的在前：绿色挡住与黄色重叠的部分。",
       "imgs": [
         {
           "src": "img/sr/26-layer-after-debug_mix.png",
@@ -499,7 +499,7 @@
       "kind": "merge",
       "when": "Composite（STRETCHED）",
       "title": "拉伸叠回成品",
-      "text": "成品已被 SR 放大到 854×480，混合层还是 705×396。合并时窗口里每个像素 p 读混合层的 p × 705/854，把它拉伸盖上去。",
+      "text": "SR 已把成品放大到 854×480，但混合层仍是 705×396。合并时，窗口里的每个像素 p 读取混合层的 p × 705/854 处，拉伸后盖上去。",
       "imgs": [
         {
           "src": "img/sr/30-final.png",

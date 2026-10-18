@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里什么都不画，模组的东西不会投出光影的阴影。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西，所以模组的东西不会在光影里投出阴影。",
       "imgs": []
     },
     {
@@ -35,7 +35,7 @@
       "kind": "channel",
       "when": "整个关卡渲染期间",
       "title": "模组提交绘制",
-      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先把要画的东西收集起来，等光影画完再画进 EXIT 的通道。",
+      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先收集要画的东西，等光影画完，再画进 EXIT 的通道。",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "天空、地形、石头这些不透明的东西。顶点着色器把 xy × 0.75，所以深度缓冲里只有左下角（虚线框）有内容。",
+      "text": "天空、地形、石头这些不透明的东西。顶点着色器把 xy 乘以 0.75，所以深度缓冲只有左下角（虚线框）里有内容。",
       "imgs": [
         {
           "src": "img/frame/01-pack-depth-before-hand.png",
@@ -66,7 +66,7 @@
       "kind": "depth",
       "when": "Iris beginHand",
       "title": "复制：没有手的深度",
-      "text": "手还没画。复制时按 a、b 重采样，石头回到画面里的位置。",
+      "text": "手还没画出来。复制时按 a、b 重采样，石头就回到它在画面里的位置。",
       "imgs": [
         {
           "src": "img/frame/02-no-hand-aligned.png",
@@ -81,7 +81,7 @@
       "kind": "pack",
       "when": "gbuffers_hand",
       "title": "光影画手",
-      "text": "手也被缩放，出现在缓冲右下偏左的位置。",
+      "text": "手也被缩放了，出现在缓冲右下角偏左一点的位置。",
       "imgs": [
         {
           "src": "img/frame/03-pack-depth-before-translucents.png",
@@ -102,7 +102,7 @@
       "kind": "probe",
       "when": "第一次 beginHand",
       "title": "量缩放：探针",
-      "text": "用光影的程序画一个覆盖中间 90% 的四边形（不写颜色，画完复原深度），看深度哪里变了。测得 x 0.75、y 0.75，偏移约 0。",
+      "text": "用光影的程序画一个覆盖中间 90% 的四边形（不写颜色，画完恢复深度），然后看哪里的深度变了。测得 x 0.75、y 0.75，偏移约为 0。",
       "imgs": [
         {
           "src": "img/frame/05-probe-mask.png",
@@ -123,7 +123,7 @@
       "kind": "pack",
       "when": "gbuffers_water 等",
       "title": "光影画半透明",
-      "text": "浅蓝玻璃写进深度，但不在之前的两份复制里。",
+      "text": "浅蓝色玻璃写进了深度，但不在上面两份复制里。",
       "imgs": [
         {
           "src": "img/frame/07-main-depth-end.png",
@@ -144,7 +144,7 @@
       "kind": "depth",
       "when": "Iris beginTranslucents",
       "title": "复制：没有半透明的深度",
-      "text": "有手、没有玻璃。同样重采样对齐。",
+      "text": "有手，没有玻璃，同样做重采样对齐。",
       "imgs": [
         {
           "src": "img/frame/04-opaque-aligned.png",
@@ -159,7 +159,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "光影的成品画面",
-      "text": "光照、雾、TAAU 放大都做完了。这时画面里还没有模组的方块。",
+      "text": "光照、雾和 TAAU 放大都已经做完。画面里还没有模组的方块。",
       "imgs": [
         {
           "src": "img/frame/06-pack-frame.png",
@@ -174,7 +174,7 @@
       "kind": "depth",
       "when": "帧末",
       "title": "最终深度也对齐",
-      "text": "合并时要用最终深度找玻璃，同样先重采样。",
+      "text": "合并时用最终深度找玻璃，所以这一份要先重采样。",
       "imgs": [
         {
           "src": "img/frame/08-main-depth-end-aligned.png",
@@ -189,7 +189,7 @@
       "kind": "channel",
       "when": "帧末 · 通道第一次使用",
       "title": "通道打底",
-      "text": "清空通道，用“没有半透明的深度”打底，世界在前面就挡住通道；手的位置设成最近。透视通道（蓝）不让世界遮挡，只放手。",
+      "text": "清空通道，用“没有半透明的深度”打底，前面的世界就会挡住通道。手的位置设为最近。透视通道（蓝）不会被世界挡住，只用来放手。",
       "imgs": [
         {
           "src": "img/frame/11-main-seeded.png",
@@ -208,7 +208,7 @@
       "kind": "channel",
       "when": "原版着色器",
       "title": "画进通道",
-      "text": "绿色写颜色和深度；红色是半透明，被石头挡掉右下角，不写深度。",
+      "text": "绿色写颜色和深度。红色是半透明的，被石头挡住右下角，而且不写深度。",
       "imgs": [
         {
           "src": "img/frame/12-main-color.png",
@@ -233,7 +233,7 @@
       "kind": "channel",
       "when": "合并前",
       "title": "补上半透明的深度",
-      "text": "半透明的东西再画一遍，只写深度到单独的缓冲，再取较近的折进通道深度，这样多个通道才能按前后排序。",
+      "text": "把半透明的东西再画一遍，只把深度写进单独的缓冲，再取较近的值折进通道的深度。这样多个通道就能按前后顺序排序。",
       "imgs": [
         {
           "src": "img/frame/14-main-translucent-depth.png",
@@ -252,7 +252,7 @@
       "kind": "channel",
       "when": "每个通道",
       "title": "其他通道同样处理",
-      "text": "黄色方块在 mix 通道；蓝色方块和青色线框在透视通道。",
+      "text": "黄色方块在 mix 通道里；蓝色方块和青色线框在透视通道里。",
       "imgs": [
         {
           "src": "img/frame/16-debug_mix-color.png",
@@ -283,7 +283,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不一样的像素就是手（橙色）。通道在这里不画，手永远在最前。",
+      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
       "imgs": [
         {
           "src": "img/frame/24-hand-mask.png",
@@ -298,7 +298,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方有玻璃（橙色）。通道如果在玻璃后面，就变暗到 50%。",
+      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%。",
       "imgs": [
         {
           "src": "img/frame/25-translucent-in-front.png",
@@ -313,7 +313,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "叠第一个通道",
-      "text": "主通道去掉手的像素，玻璃后面的绿色下半部变暗。",
+      "text": "主通道去掉手的像素，玻璃后面的绿色下半部分被压暗。",
       "imgs": [
         {
           "src": "img/frame/26-layer-after-main.png",
@@ -344,7 +344,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "按深度叠 mix 通道",
-      "text": "每个像素比较深度，近的在前：绿色挡住黄色重叠的部分。",
+      "text": "逐像素比较深度，近的在前：绿色挡住与黄色重叠的部分。",
       "imgs": [
         {
           "src": "img/frame/28-layer-after-debug_mix.png",
@@ -406,7 +406,7 @@
       "kind": "merge",
       "when": "Composite",
       "title": "叠回光影画面",
-      "text": "混合层按透明度盖到光影成品上，得到最终画面。",
+      "text": "混合层按透明度盖到光影的成品画面上，得到最终的画面。",
       "imgs": [
         {
           "src": "img/frame/32-final.png",

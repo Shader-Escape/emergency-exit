@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "帧开始",
       "title": "阴影 pass",
-      "text": "光影画阴影贴图。EXIT 在这里什么都不画，模组的东西不会投出光影的阴影。",
+      "text": "光影画阴影贴图。EXIT 在这里不画任何东西，所以模组的东西不会在光影里投出阴影。",
       "imgs": []
     },
     {
@@ -35,7 +35,7 @@
       "kind": "channel",
       "when": "整个关卡渲染期间",
       "title": "模组提交绘制",
-      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先把要画的东西收集起来，等光影画完再画进 EXIT 的通道。",
+      "text": "<code>Exit.batch</code>、<code>draw</code>、<code>portal</code> 先收集要画的东西，等光影画完，再画进 EXIT 的通道。",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "BSL 不降分辨率：场景画满整个深度缓冲，只有 TAA 每帧不到一像素的抖动。",
+      "text": "BSL 不降分辨率：场景铺满整个深度缓冲，每帧只有不到一个像素的 TAA 抖动。",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -60,7 +60,7 @@
       "kind": "depth",
       "when": "Iris beginHand",
       "title": "复制：没有手的深度",
-      "text": "测得是全分辨率，直接复制，不重采样。",
+      "text": "测得的是全分辨率，直接复制，不用重采样。",
       "imgs": [
         {
           "src": "img/bsl/02-no-hand-copy.png",
@@ -90,7 +90,7 @@
       "kind": "probe",
       "when": "第一次 beginHand",
       "title": "量缩放：探针",
-      "text": "同样画一次探针。落点和应在的位置重合，测得 x 0.9992、偏移 0.33 像素，只是 TAA 抖动，按全分辨率处理。",
+      "text": "同样画一次探针。落点就在该在的位置，测得 x 0.9992、偏移 0.33 像素。这只是 TAA 抖动，按全分辨率处理即可。",
       "imgs": [
         {
           "src": "img/bsl/05-probe-mask.png",
@@ -111,7 +111,7 @@
       "kind": "pack",
       "when": "gbuffers_water 等",
       "title": "光影画半透明",
-      "text": "浅蓝玻璃写进深度，但不在之前的两份复制里。",
+      "text": "浅蓝色玻璃写进了深度，但不在上面两份复制里。",
       "imgs": [
         {
           "src": "img/bsl/07-main-depth-end.png",
@@ -126,7 +126,7 @@
       "kind": "depth",
       "when": "Iris beginTranslucents",
       "title": "复制：没有半透明的深度",
-      "text": "有手、没有玻璃，直接复制。",
+      "text": "有手，没有玻璃，直接复制。",
       "imgs": [
         {
           "src": "img/bsl/04-opaque-copy.png",
@@ -141,7 +141,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "光影的成品画面",
-      "text": "光照、雾、TAA 都做完了。这时画面里还没有模组的方块。",
+      "text": "光照、雾和 TAA 都已经做完。画面里还没有模组的方块。",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -156,7 +156,7 @@
       "kind": "depth",
       "when": "帧末",
       "title": "最终深度直接用",
-      "text": "合并时找玻璃用的最终深度不用处理，和通道的像素一一对应。",
+      "text": "合并时找玻璃用的最终深度不用处理，它的像素和通道一一对应。",
       "imgs": [
         {
           "src": "img/bsl/07-main-depth-end.png",
@@ -171,7 +171,7 @@
       "kind": "channel",
       "when": "帧末 · 通道第一次使用",
       "title": "通道打底",
-      "text": "清空通道，用“没有半透明的深度”打底，世界在前面就挡住通道；手的位置设成最近。透视通道（蓝）不让世界遮挡，只放手。",
+      "text": "清空通道，用“没有半透明的深度”打底，前面的世界就会挡住通道。手的位置设为最近。透视通道（蓝）不会被世界挡住，只用来放手。",
       "imgs": [
         {
           "src": "img/bsl/10-main-seeded.png",
@@ -190,7 +190,7 @@
       "kind": "channel",
       "when": "原版着色器",
       "title": "画进通道",
-      "text": "绿色写颜色和深度；红色是半透明，被石头挡掉右下角，不写深度。",
+      "text": "绿色写颜色和深度。红色是半透明的，被石头挡住右下角，而且不写深度。",
       "imgs": [
         {
           "src": "img/bsl/11-main-color.png",
@@ -215,7 +215,7 @@
       "kind": "channel",
       "when": "合并前",
       "title": "补上半透明的深度",
-      "text": "半透明的东西再画一遍，只写深度到单独的缓冲，再取较近的折进通道深度，这样多个通道才能按前后排序。",
+      "text": "把半透明的东西再画一遍，只把深度写进单独的缓冲，再取较近的值折进通道的深度。这样多个通道就能按前后顺序排序。",
       "imgs": [
         {
           "src": "img/bsl/13-main-translucent-depth.png",
@@ -234,7 +234,7 @@
       "kind": "channel",
       "when": "每个通道",
       "title": "其他通道同样处理",
-      "text": "黄色方块在 mix 通道；蓝色方块和青色线框在透视通道。",
+      "text": "黄色方块在 mix 通道里；蓝色方块和青色线框在透视通道里。",
       "imgs": [
         {
           "src": "img/bsl/15-debug_mix-color.png",
@@ -265,7 +265,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找手",
-      "text": "“有手”和“没手”两份深度不一样的像素就是手（橙色）。通道在这里不画，手永远在最前。",
+      "text": "“有手”和“没手”两份深度不同的像素就是手（橙色）。这里不画任何通道，所以手总在最前面。",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -280,7 +280,7 @@
       "kind": "depth",
       "when": "合并时",
       "title": "找半透明",
-      "text": "最终深度比“没有半透明的深度”更近的地方有玻璃（橙色）。通道如果在玻璃后面，就变暗到 50%。",
+      "text": "最终深度比“没有半透明的深度”更近的地方是玻璃（橙色）。如果通道在玻璃后面，就压暗到 50%。",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",
@@ -295,7 +295,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "叠第一个通道",
-      "text": "主通道去掉手的像素，玻璃后面的绿色下半部变暗。",
+      "text": "主通道去掉手的像素，玻璃后面的绿色下半部分被压暗。",
       "imgs": [
         {
           "src": "img/bsl/25-layer-after-main.png",
@@ -326,7 +326,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "按深度叠 mix 通道",
-      "text": "每个像素比较深度，近的在前：绿色挡住黄色重叠的部分。",
+      "text": "逐像素比较深度，近的在前：绿色挡住与黄色重叠的部分。",
       "imgs": [
         {
           "src": "img/bsl/27-layer-after-debug_mix.png",
@@ -388,7 +388,7 @@
       "kind": "merge",
       "when": "Composite",
       "title": "叠回光影画面",
-      "text": "混合层按透明度盖到光影成品上，得到最终画面。",
+      "text": "混合层按透明度盖到光影的成品画面上，得到最终的画面。",
       "imgs": [
         {
           "src": "img/bsl/31-final.png",

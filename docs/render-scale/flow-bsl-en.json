@@ -25,7 +25,7 @@
       "kind": "pack",
       "when": "frame start",
       "title": "Shadow pass",
-      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects do not cast shadows in the pack.",
+      "text": "The pack draws its shadow map. EXIT draws nothing here, so the mod's objects don't cast shadows in the pack.",
       "imgs": []
     },
     {
@@ -35,7 +35,7 @@
       "kind": "channel",
       "when": "throughout level rendering",
       "title": "Mod submits draws",
-      "text": "<code>Exit.batch</code>, <code>draw</code> and <code>portal</code> first collect what to draw, then draw it into EXIT's channels after the pack finishes.",
+      "text": "<code>Exit.batch</code>, <code>draw</code> and <code>portal</code> collect what they need to draw first. Once the pack finishes, the mod draws it into EXIT's channels.",
       "imgs": []
     },
     {
@@ -45,7 +45,7 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "Pack draws opaque world",
-      "text": "BSL does not reduce the resolution: the scene fills the whole depth buffer, with only TAA jitter of less than one pixel per frame.",
+      "text": "BSL doesn't reduce the resolution. The scene fills the whole depth buffer, with only TAA jitter of under one pixel per frame.",
       "imgs": [
         {
           "src": "img/bsl/01-pack-depth-before-hand.png",
@@ -60,7 +60,7 @@
       "kind": "depth",
       "when": "Iris beginHand",
       "title": "Copy: depth without hand",
-      "text": "The measured scale is full resolution, so it is copied directly without resampling.",
+      "text": "The measured scale is full resolution, so this copy goes straight across without resampling.",
       "imgs": [
         {
           "src": "img/bsl/02-no-hand-copy.png",
@@ -90,7 +90,7 @@
       "kind": "probe",
       "when": "first beginHand",
       "title": "Measure the scale: probe",
-      "text": "The probe is drawn here too. Its landing coincides with where it should be: measured x 0.9992, offset 0.33 pixels, which is just TAA jitter, so it is handled at full resolution.",
+      "text": "The probe is drawn here as well. It lands where it should, at x 0.9992 with an offset of 0.33 pixels. That's just TAA jitter, so the pipeline treats it as full resolution.",
       "imgs": [
         {
           "src": "img/bsl/05-probe-mask.png",
@@ -111,7 +111,7 @@
       "kind": "pack",
       "when": "gbuffers_water etc.",
       "title": "Pack draws translucents",
-      "text": "The pale blue glass is written to depth, but it is not in the two copies above.",
+      "text": "The pale blue glass is written to depth, but it isn't in the two copies above.",
       "imgs": [
         {
           "src": "img/bsl/07-main-depth-end.png",
@@ -126,7 +126,7 @@
       "kind": "depth",
       "when": "Iris beginTranslucents",
       "title": "Copy: depth without translucents",
-      "text": "Has the hand, no glass. Copied directly.",
+      "text": "It includes the hand but not the glass. It's copied directly.",
       "imgs": [
         {
           "src": "img/bsl/04-opaque-copy.png",
@@ -141,7 +141,7 @@
       "kind": "pack",
       "when": "deferred → composite → final",
       "title": "Pack's finished frame",
-      "text": "Lighting, fog and TAA are all done. There are no mod objects in the image yet.",
+      "text": "Lighting, fog and TAA are finished. The mod's blocks aren't in the image yet.",
       "imgs": [
         {
           "src": "img/bsl/06-pack-frame.png",
@@ -156,7 +156,7 @@
       "kind": "depth",
       "when": "end of frame",
       "title": "Use the final depth directly",
-      "text": "The final depth, used to find the glass at merge time, needs no processing; its pixels line up one-to-one with the channels.",
+      "text": "The final depth used to find the glass at merge time needs no processing. Its pixels line up one-to-one with the channels.",
       "imgs": [
         {
           "src": "img/bsl/07-main-depth-end.png",
@@ -171,7 +171,7 @@
       "kind": "channel",
       "when": "end of frame · first use of the channel",
       "title": "Seed the channel",
-      "text": "Clear the channel and seed it with \"depth without translucents\", so the world in front blocks the channel. The hand's position is set to nearest. The see-through channel (blue) is not blocked by the world; it only holds the hand.",
+      "text": "Clear the channel and seed it with \"depth without translucents\". The world in front then blocks the channel. The hand's position is set to nearest. The see-through channel (blue) isn't blocked by the world, and it only holds the hand.",
       "imgs": [
         {
           "src": "img/bsl/10-main-seeded.png",
@@ -190,7 +190,7 @@
       "kind": "channel",
       "when": "vanilla shaders",
       "title": "Draw into the channel",
-      "text": "Green writes color and depth. Red is translucent: the stone cuts off its lower-right corner, and it does not write depth.",
+      "text": "Green writes color and depth. Red is translucent: the stone cuts off its lower-right corner, and red doesn't write depth.",
       "imgs": [
         {
           "src": "img/bsl/11-main-color.png",
@@ -215,7 +215,7 @@
       "kind": "channel",
       "when": "before merging",
       "title": "Add the translucent depth",
-      "text": "The translucent objects are drawn again, writing only depth into a separate buffer. The nearer value is then folded into the channel's depth, so several channels can be sorted front to back.",
+      "text": "The translucent objects are drawn again, this time writing only depth into a separate buffer. The nearer value is folded into the channel's depth, so several channels can be sorted front to back.",
       "imgs": [
         {
           "src": "img/bsl/13-main-translucent-depth.png",
@@ -234,7 +234,7 @@
       "kind": "channel",
       "when": "each channel",
       "title": "Other channels, same treatment",
-      "text": "The yellow block is in the mix channel; the blue block and the cyan wireframe are in the see-through channel.",
+      "text": "The yellow block is in the mix channel. The blue block and the cyan wireframe are in the see-through channel.",
       "imgs": [
         {
           "src": "img/bsl/15-debug_mix-color.png",
@@ -265,7 +265,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the hand",
-      "text": "The pixels where the \"with hand\" and \"without hand\" depths differ are the hand (orange). No channel is drawn here, so the hand is always in front.",
+      "text": "Pixels where the \"with hand\" and \"without hand\" depths differ belong to the hand (orange). No channel is drawn here, so the hand always stays in front.",
       "imgs": [
         {
           "src": "img/bsl/23-hand-mask.png",
@@ -280,7 +280,7 @@
       "kind": "depth",
       "when": "at merge",
       "title": "Find the translucents",
-      "text": "Where the final depth is nearer than \"depth without translucents\", there is glass (orange). If a channel is behind the glass, it is darkened to 50%.",
+      "text": "Where the final depth is closer than \"depth without translucents\", there's glass (orange). If a channel sits behind the glass, it gets darkened to 50%.",
       "imgs": [
         {
           "src": "img/bsl/24-translucent-in-front.png",
@@ -326,7 +326,7 @@
       "kind": "merge",
       "when": "ChannelBlend",
       "title": "Blend the mix channel by depth",
-      "text": "Each pixel compares depths, and the nearer one is in front: the green covers the overlapping part of the yellow.",
+      "text": "Each pixel compares depths, and the closer one wins. The green covers the part of the yellow it overlaps.",
       "imgs": [
         {
           "src": "img/bsl/27-layer-after-debug_mix.png",
@@ -388,7 +388,7 @@
       "kind": "merge",
       "when": "Composite",
       "title": "Composite onto the pack's image",
-      "text": "The blend layer is laid over the pack's finished image by its transparency, giving the final frame.",
+      "text": "The blend layer goes over the pack's finished image, using its transparency, to produce the final frame.",
       "imgs": [
         {
           "src": "img/bsl/31-final.png",
