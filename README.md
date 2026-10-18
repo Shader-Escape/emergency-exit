@@ -7,16 +7,16 @@ independent render target and is merged onto the frame by depth after the shader
 neither replaces your pipelines nor swallows your drawing. It is the rendering core of
 [LitematicaPass](https://github.com/hotpad100c/litematicapass), taken out of it.
 
-Minecraft **1.20.2** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
+Minecraft **1.19.3** only for now (mod id `emergency_exit`, package `ml.mypals.exit.api`). Each Minecraft version gets
 its own git branch with plain code for that version.
 
 ### Loaders
 
-One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.20.2`). Iris is optional.
+One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.19.3`). Iris is optional.
 Without a shader pack nothing is routed. Iris has no NeoForge build for this Minecraft version, so this branch is
 Fabric only.
 
-Call EXIT while the level renders, inside `LevelRenderer.renderLevel`. 1.20.6 has no `SubmitNodeCollector`, so the
+Call EXIT while the level renders, inside `LevelRenderer.renderLevel`. 1.19.3 has no `SubmitNodeCollector`, so the
 drawings and the batch are a `MultiBufferSource` and are drawn at the end of the level rendering.
 
 | Purpose | Fabric |
@@ -39,7 +39,7 @@ framebuffer and by handing the channel's target out of `Minecraft.getMainRenderT
 
 ## Use
 
-Call EXIT on the render thread while the level renders, for example from Fabric's `LevelRenderEvents` or NeoForge's render events (see Loaders above).
+Call EXIT on the render thread while the level renders, for example from Fabric's `WorldRenderEvents` (see Loaders above).
 
 ```java
 // 1. Drawing with a managed context: buffer source, camera-relative pose stack, camera. The submits are recorded into
@@ -49,7 +49,8 @@ WorldRenderEvents.BEFORE_ENTITIES.register(context ->
         PoseStack pose = exit.poseStack();
         Vec3 cam = exit.cameraPos();
         pose.translate(x - cam.x, y - cam.y, z - cam.z);
-        VertexConsumer buffer = exit.bufferSource().getBuffer(RenderType.debugQuads());
+        // 1.19.3 has no RenderType.debugQuads; use a public translucent, unculled entity type.
+        VertexConsumer buffer = exit.bufferSource().getBuffer(RenderType.entityTranslucentEmissive(WHITE_TEXTURE));
         // ... write vertices with pose.last()
     }));
 
@@ -158,13 +159,13 @@ portal, moved into a channel that shows through the world, with a cyan gizmo out
 
 ## Development
 
-The project has three subprojects, laid out like MultiLoader-Template. `common` holds all loader-independent code
-(API, rendering, mixins). `fabric` and `neoforge` hold the entry points, metadata, command registration and the
-event hooks of the debug shapes. Loader-specific queries go through the `Platform` service.
+The project is a single `fabric` project. It holds all the code: the API, the rendering, the mixins, the entry point,
+the metadata, the command registration and the event hooks of the debug shapes. Iris has no NeoForge build for
+1.19.3, so there is no `neoforge` subproject and no `common` split.
 
 * `./gradlew build` builds the jar (`fabric/build/libs`).
 * `./gradlew :fabric:runSmokeClient` creates a world, turns on the test shapes, takes screenshots and quits. The log
-  ends with `RESULT: OK`. It runs in `run/fabric-1.20.2`. To test routing, put a shader pack into its `shaderpacks`
+  ends with `RESULT: OK`. It runs in `run/fabric-1.19.3`. To test routing, put a shader pack into its `shaderpacks`
   folder and enable it in `config/iris.properties`.
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * `./gradlew publishToMavenLocal` publishes the jar for other mods' development setups.
