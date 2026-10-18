@@ -6,11 +6,10 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexSorting;
+import com.mojang.math.Matrix4f;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import org.joml.Matrix4f;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 
@@ -19,12 +18,15 @@ import java.util.Map;
 
 /**
  * A channel's batch: a buffer source the caller records into, rendered into the channel's target at the end of the
- * level rendering. 1.20.6 has no {@code SubmitNodeCollector}, so the submits are collected as vanilla render types and
+ * level rendering. 1.18.2 has no {@code SubmitNodeCollector}, so the submits are collected as vanilla render types and
  * drawn here with plain OpenGL. The solid render types are drawn first, then the translucent ones; a translucent
  * submit is recorded into a second buffer as well, which is drawn colour off and depth on into the channel's
  * translucent-depth target, so the channel can be blended by depth.
  */
 public final class FeatureDrawer {
+	/** The capacity a builder of one render type starts with; it grows as the caller writes. */
+	private static final int INITIAL_BUFFER_SIZE = 786432;
+
 	private FeatureDrawer() {}
 
 	/** A new batch to record into this frame. Also used where a drawing must be dropped: it is simply never drawn. */
@@ -44,8 +46,6 @@ public final class FeatureDrawer {
 
 	/** Collects submits per render type and draws them in one go. */
 	static final class Batch implements MultiBufferSource {
-		private static final int INITIAL_BUFFER_SIZE = 786432;
-
 		private final Map<RenderType, Buffers> buffers = new LinkedHashMap<>();
 		private boolean closed;
 
@@ -56,7 +56,7 @@ public final class FeatureDrawer {
 				entry = new Buffers(type, isTranslucent(type));
 				this.buffers.put(type, entry);
 			}
-			return entry.consumer();
+			return entry;
 		}
 
 		void draw(RenderTarget target, @Nullable RenderTarget translucentDepth) {
@@ -67,44 +67,50 @@ public final class FeatureDrawer {
 			if (this.buffers.isEmpty()) {
 				return;
 			}
-			Map<RenderType, BufferBuilder.RenderedBuffer> solid = new LinkedHashMap<>();
-			Map<RenderType, BufferBuilder.RenderedBuffer> translucent = new LinkedHashMap<>();
-			Map<RenderType, BufferBuilder.RenderedBuffer> translucentDepthData = new LinkedHashMap<>();
+			// This version has no BufferBuilder.endOrDiscardIfEmpty, so the builders that were never written to are
+			// dropped instead of handed to BufferUploader (whose builder must have been ended first).
+			Map<RenderType, BufferBuilder> solid = new LinkedHashMap<>();
+			Map<RenderType, BufferBuilder> translucent = new LinkedHashMap<>();
+			Map<RenderType, BufferBuilder> translucentDepthData = new LinkedHashMap<>();
 			for (Map.Entry<RenderType, Buffers> entry : this.buffers.entrySet()) {
-				BufferBuilder.RenderedBuffer colour = entry.getValue().colour.endOrDiscardIfEmpty();
-				if (colour != null) {
-					(entry.getValue().translucent ? translucent : solid).put(entry.getKey(), colour);
-				}
-				if (entry.getValue().depth != null) {
-					BufferBuilder.RenderedBuffer depth = entry.getValue().depth.endOrDiscardIfEmpty();
-					if (depth != null) {
-						translucentDepthData.put(entry.getKey(), depth);
+				Buffers buffers = entry.getValue();
+				if (buffers.written()) {
+					buffers.colour.end();
+					(buffers.translucent ? translucent : solid).put(entry.getKey(), buffers.colour);
+					if (buffers.depth != null) {
+						buffers.depth.end();
+						translucentDepthData.put(entry.getKey(), buffers.depth);
+					}
+				} else {
+					buffers.colour.discard();
+					if (buffers.depth != null) {
+						buffers.depth.discard();
 					}
 				}
 			}
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().set(ExitRuntime.viewRotation());
+			modelView.last().pose().load(ExitRuntime.viewRotation());
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
-			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()), VertexSorting.DISTANCE_TO_ORIGIN);
+			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()));
 			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
 			IrisCompat.setRenderingLevel(false);
 			Runnable restore = Gpu.bindForDrawing(target);
 			try {
 				// Solid render types first, then the translucent ones, so a solid submit never covers a nearer translucent.
-				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : solid.entrySet()) {
+				for (Map.Entry<RenderType, BufferBuilder> entry : solid.entrySet()) {
 					draw(entry.getKey(), entry.getValue(), false);
 				}
-				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : translucent.entrySet()) {
+				for (Map.Entry<RenderType, BufferBuilder> entry : translucent.entrySet()) {
 					draw(entry.getKey(), entry.getValue(), false);
 				}
 				if (translucentDepth != null) {
 					Runnable restoreDepth = Gpu.bindForDrawing(translucentDepth);
 					try {
-						for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : translucentDepthData.entrySet()) {
+						for (Map.Entry<RenderType, BufferBuilder> entry : translucentDepthData.entrySet()) {
 							draw(entry.getKey(), entry.getValue(), true);
 						}
 					} finally {
@@ -114,7 +120,7 @@ public final class FeatureDrawer {
 			} finally {
 				restore.run();
 				IrisCompat.setRenderingLevel(renderingLevel);
-				RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
+				RenderSystem.setProjectionMatrix(projection);
 				modelView.popPose();
 				RenderSystem.applyModelViewMatrix();
 				this.buffers.clear();
@@ -132,14 +138,14 @@ public final class FeatureDrawer {
 		}
 
 		/** Draws one recorded buffer. With {@code depthOnly} nothing is written to colour. */
-		private static void draw(RenderType type, BufferBuilder.RenderedBuffer buffer, boolean depthOnly) {
+		private static void draw(RenderType type, BufferBuilder buffer, boolean depthOnly) {
 			type.setupRenderState();
 			try {
 				if (depthOnly) {
 					GL11.glColorMask(false, false, false, false);
 					GL11.glDepthMask(true);
 				}
-				BufferUploader.drawWithShader(buffer);
+				BufferUploader.end(buffer);
 			} finally {
 				if (depthOnly) {
 					GL11.glColorMask(true, true, true, true);
@@ -147,93 +153,112 @@ public final class FeatureDrawer {
 				type.clearRenderState();
 			}
 		}
-
-		/** The builders of one render type. Translucent types also get a depth-only copy. */
-		private static final class Buffers {
-			final BufferBuilder colour;
-			@Nullable final BufferBuilder depth;
-			final boolean translucent;
-			private final VertexConsumer consumer;
-
-			Buffers(RenderType type, boolean translucent) {
-				this.translucent = translucent;
-				this.colour = begin(type);
-				this.depth = translucent ? begin(type) : null;
-				this.consumer = this.depth == null ? this.colour : new DualConsumer(this.colour, this.depth);
-			}
-
-			VertexConsumer consumer() {
-				return this.consumer;
-			}
-
-			private static BufferBuilder begin(RenderType type) {
-				BufferBuilder builder = new BufferBuilder(INITIAL_BUFFER_SIZE);
-				builder.begin(type.mode(), type.format());
-				return builder;
-			}
-		}
 	}
 
-	/** Writes every vertex into two builders. */
-	private record DualConsumer(BufferBuilder first, BufferBuilder second) implements VertexConsumer {
+	/**
+	 * Writes one submit into the builder of one render type. A translucent render type also gets a second builder, so
+	 * the depth of what it draws can be recorded; every vertex goes into both. The vertex count tells the batch whether
+	 * anything was written at all.
+	 */
+	private static final class Buffers implements VertexConsumer {
+		final BufferBuilder colour;
+		@Nullable final BufferBuilder depth;
+		final boolean translucent;
+		private int vertices;
+
+		Buffers(RenderType type, boolean translucent) {
+			this.translucent = translucent;
+			this.colour = begin(type);
+			this.depth = translucent ? begin(type) : null;
+		}
+
+		boolean written() {
+			return this.vertices > 0;
+		}
+
+		private static BufferBuilder begin(RenderType type) {
+			BufferBuilder builder = new BufferBuilder(INITIAL_BUFFER_SIZE);
+			builder.begin(type.mode(), type.format());
+			return builder;
+		}
+
 		@Override
 		public VertexConsumer vertex(double x, double y, double z) {
-			this.first.vertex(x, y, z);
-			this.second.vertex(x, y, z);
+			this.colour.vertex(x, y, z);
+			if (this.depth != null) {
+				this.depth.vertex(x, y, z);
+			}
 			return this;
 		}
 
 		@Override
 		public VertexConsumer color(int red, int green, int blue, int alpha) {
-			this.first.color(red, green, blue, alpha);
-			this.second.color(red, green, blue, alpha);
+			this.colour.color(red, green, blue, alpha);
+			if (this.depth != null) {
+				this.depth.color(red, green, blue, alpha);
+			}
 			return this;
 		}
 
 		@Override
 		public VertexConsumer uv(float u, float v) {
-			this.first.uv(u, v);
-			this.second.uv(u, v);
+			this.colour.uv(u, v);
+			if (this.depth != null) {
+				this.depth.uv(u, v);
+			}
 			return this;
 		}
 
 		@Override
 		public VertexConsumer overlayCoords(int u, int v) {
-			this.first.overlayCoords(u, v);
-			this.second.overlayCoords(u, v);
+			this.colour.overlayCoords(u, v);
+			if (this.depth != null) {
+				this.depth.overlayCoords(u, v);
+			}
 			return this;
 		}
 
 		@Override
 		public VertexConsumer uv2(int u, int v) {
-			this.first.uv2(u, v);
-			this.second.uv2(u, v);
+			this.colour.uv2(u, v);
+			if (this.depth != null) {
+				this.depth.uv2(u, v);
+			}
 			return this;
 		}
 
 		@Override
 		public VertexConsumer normal(float x, float y, float z) {
-			this.first.normal(x, y, z);
-			this.second.normal(x, y, z);
+			this.colour.normal(x, y, z);
+			if (this.depth != null) {
+				this.depth.normal(x, y, z);
+			}
 			return this;
 		}
 
 		@Override
 		public void endVertex() {
-			this.first.endVertex();
-			this.second.endVertex();
+			this.colour.endVertex();
+			if (this.depth != null) {
+				this.depth.endVertex();
+			}
+			this.vertices++;
 		}
 
 		@Override
 		public void defaultColor(int red, int green, int blue, int alpha) {
-			this.first.defaultColor(red, green, blue, alpha);
-			this.second.defaultColor(red, green, blue, alpha);
+			this.colour.defaultColor(red, green, blue, alpha);
+			if (this.depth != null) {
+				this.depth.defaultColor(red, green, blue, alpha);
+			}
 		}
 
 		@Override
 		public void unsetDefaultColor() {
-			this.first.unsetDefaultColor();
-			this.second.unsetDefaultColor();
+			this.colour.unsetDefaultColor();
+			if (this.depth != null) {
+				this.depth.unsetDefaultColor();
+			}
 		}
 	}
 }

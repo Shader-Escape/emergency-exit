@@ -1,11 +1,11 @@
 package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Matrix4f;
 import ml.mypals.exit.api.ExitContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4fc;
 
 /** The context of one drawing. Nested drawings on the same channel share it. */
 final class DrawContext implements ExitContext {
@@ -48,7 +48,7 @@ final class DrawContext implements ExitContext {
 	}
 
 	@Override
-	public Matrix4fc modelView() {
+	public Matrix4f modelView() {
 		return ExitRuntime.viewRotation();
 	}
 

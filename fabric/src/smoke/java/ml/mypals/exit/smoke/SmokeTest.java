@@ -7,11 +7,13 @@ import ml.mypals.exit.impl.DebugView;
 import ml.mypals.exit.impl.ExitRuntime;
 import ml.mypals.exit.impl.SceneSize;
 import ml.mypals.exit.smoke.mixin.CreateWorldScreenAccessor;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
-import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -88,7 +90,14 @@ public final class SmokeTest {
 		if (mc.level != null && mc.player != null) {
 			this.ticksInWorld++;
 			if (this.ticksInWorld == 1) {
-				log("in the world after " + this.ticks + " ticks");
+				// 1.18 cannot create a world with cheats from its create-world screen, and a hosted world only gives
+				// the host commands when cheats are on, so make the host an operator here; the commands below would
+				// be refused otherwise. Every run deletes the world folder first, so this does not outlive the run.
+				GameProfile profile = mc.player.getGameProfile();
+				if (mc.getSingleplayerServer() != null) {
+					mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getPlayerList().op(profile));
+				}
+				log("in the world after " + this.ticks + " ticks, creative: " + mc.player.isCreative());
 			}
 			this.showcase(mc);
 			if (this.ticksInWorld >= TICKS_IN_WORLD) {
@@ -124,19 +133,24 @@ public final class SmokeTest {
 			return;
 		}
 		if (mc.screen instanceof CreateWorldScreen screen) {
-			WorldCreationUiState state = screen.getUiState();
-			state.setName(WORLD);
-			state.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE);
+			// 1.18 has no WorldCreationUiState: the screen keeps the name and the game mode itself, so they are set
+			// through its own widgets.
+			CreateWorldScreenAccessor legacy = (CreateWorldScreenAccessor) screen;
+			legacy.emergency_exit$nameEdit().setValue(WORLD);
+			CycleButton<?> mode = legacy.emergency_exit$modeButton();
+			for (int i = 0; i < 4 && !"CREATIVE".equals(String.valueOf(mode.getValue())); i++) {
+				mode.onPress();
+			}
 			log("creating the world");
 			this.created = true;
-			((CreateWorldScreenAccessor) screen).emergency_exit$onCreate();
+			legacy.emergency_exit$onCreate();
 			return;
 		}
 		// Wait for the title screen to settle, then open the create world screen.
 		if (!this.requestedScreen && mc.getOverlay() == null && this.ticks > 40) {
 			this.requestedScreen = true;
 			log("opening the create-world screen");
-			CreateWorldScreen.openFresh(mc, null);
+			mc.setScreen(CreateWorldScreen.createFresh(null));
 		}
 	}
 
@@ -146,7 +160,7 @@ public final class SmokeTest {
 	 */
 	private void showcase(Minecraft mc) {
 		if (this.ticksInWorld == 20) {
-			mc.player.connection.sendCommand("tp @s ~ 200 ~ 0 10");
+			command(mc, "tp @s ~ 200 ~ 0 10");
 		}
 		if (this.placedAt < 0 && this.ticksInWorld > 20 && mc.player.getY() > 190) {
 			// Fly in place so the view stays on the boxes.
@@ -196,8 +210,22 @@ public final class SmokeTest {
 		Vec3 look = mc.player.getLookAngle();
 		Vec3 right = new Vec3(-look.z, 0, look.x).normalize();
 		Vec3 eye = center.add(right.scale(7)).add(look.x * -1.5, 0.6, look.z * -1.5);
-		mc.player.connection.sendCommand(String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f facing %.3f %.3f %.3f",
-			eye.x, eye.y - mc.player.getEyeHeight(), eye.z, center.x, center.y, center.z));
+		// 1.18's tp takes a yaw and a pitch, not a point to face.
+		double dx = center.x - eye.x;
+		double dy = center.y - (eye.y - mc.player.getEyeHeight());
+		double dz = center.z - eye.z;
+		float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90);
+		float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
+		command(mc, String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f %.3f %.3f",
+			eye.x, eye.y - mc.player.getEyeHeight(), eye.z, yaw, pitch));
+	}
+
+	/**
+	 * Runs one command as the operator made when the player joined. 1.18 has no {@code ClientPacketListener.sendCommand}
+	 * yet, so the command leaves as a chat message.
+	 */
+	private static void command(Minecraft mc, String command) {
+		mc.player.connection.send(new ServerboundChatPacket("/" + command));
 	}
 
 	private void screenshot(Minecraft mc, String view) {

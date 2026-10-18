@@ -1,10 +1,10 @@
 package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Matrix4f;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4fc;
 
 /**
  * What a drawing gets. Positions are relative to the camera, so translate the pose by
@@ -25,7 +25,7 @@ public interface ExitContext {
 	float partialTick();
 
 	/** The view rotation, the model-view matrix EXIT renders the submits with. */
-	Matrix4fc modelView();
+	Matrix4f modelView();
 
 	/** Whether this drawing is routed past the shader pack. */
 	boolean routed();

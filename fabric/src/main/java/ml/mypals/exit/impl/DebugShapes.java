@@ -192,7 +192,9 @@ public final class DebugShapes {
 
 	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
 	private static void box(MultiBufferSource source, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
-		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads());
+		// 1.19 added debugQuads(); before it there is no untextured quad render type, so the translucent box uses the
+		// entity one with EXIT's own white texture (see the ChangeLog).
+		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.entityTranslucent(WHITE));
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
 		PoseStack.Pose pose = poseStack.last();
@@ -207,21 +209,20 @@ public final class DebugShapes {
 
 	private static void quad(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float... corners) {
 		for (int i = 0; i < 12; i += 3) {
-			vertex(buffer, pose, argb, solid, corners, i);
+			vertex(buffer, pose, argb, corners, i);
 		}
 		if (solid) {
 			// The solid render type culls back faces, so draw the other side too.
 			for (int i = 9; i >= 0; i -= 3) {
-				vertex(buffer, pose, argb, true, corners, i);
+				vertex(buffer, pose, argb, corners, i);
 			}
 		}
 	}
 
-	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
-		VertexConsumer vertex = buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb);
-		if (solid) {
-			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0);
-		}
-		vertex.endVertex();
+	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, float[] corners, int i) {
+		// Both render types use the entity format here, so every element is written.
+		buffer.vertex(pose.pose(), corners[i], corners[i + 1], corners[i + 2]).color(argb)
+			.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose.normal(), 0, 1, 0)
+			.endVertex();
 	}
 }
