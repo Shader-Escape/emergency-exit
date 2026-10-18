@@ -12,7 +12,7 @@ import java.util.function.Consumer;
  * Lets custom world rendering bypass the shader pack (Iris). Drawings go into a separate render target, which is
  * merged onto the frame by depth after the shader pack has finished it.
  * <ul>
- *     <li>{@link #draw} draws at once with a managed context.</li>
+ *     <li>{@link #draw} records drawings with a managed context. They are rendered with the batch.</li>
  *     <li>{@link #portal} runs code that has its own render context with the shader pack bypassed.</li>
  *     <li>{@link #batch} collects drawings and renders them at the end of the level rendering.</li>
  * </ul>
@@ -87,7 +87,7 @@ public final class Exit {
 		return ExitRuntime.isRouting();
 	}
 
-	/** Whether a portal or an immediate drawing is open now. Always false off the render thread. */
+	/** Whether a portal or a drawing is open now. Always false off the render thread. */
 	public static boolean inPortal() {
 		return ExitRuntime.inPortal();
 	}

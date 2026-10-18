@@ -21,13 +21,10 @@ public interface ExitChannel {
 	ExitOptions options();
 
 	/**
-	 * Runs {@code drawing} now with a collector, a camera-relative pose stack and the camera, then renders what it
-	 * submitted into the channel's target. Without a shader pack it renders into the main target. Nested calls share
-	 * the outer collector.
-	 * <p>
-	 * Inside an open render pass, or before the level's render passes start, the drawing still runs now. What it
-	 * submits then goes to the channel's batch, and {@link ExitContext#target()} is not available. No pass can be
-	 * opened inside another, and the scene depth is not ready before the passes start.
+	 * Runs {@code drawing} now with a collector, a camera-relative pose stack and the camera. What it submits goes to
+	 * the channel's {@link #batch() batch}, so all of a channel's drawings are rendered together: the solid ones before
+	 * the translucent ones, wherever they were submitted. Without a shader pack the batch renders into the main target.
+	 * Nested calls share the outer collector. To draw with passes of your own, use a {@link #portal}.
 	 */
 	default void draw(Consumer<ExitContext> drawing) {
 		this.draw(null, drawing);
@@ -47,6 +44,9 @@ public interface ExitChannel {
 	/**
 	 * Runs {@code body} now with the shader pack's switches set as {@code overrides} say, and puts them back
 	 * afterwards. This is for code that has its own render context. Portals nest, but only on one channel at a time.
+	 * <p>
+	 * A portal draws at once, so the channel's batch comes after it and its solid drawings would cover translucent
+	 * ones drawn in the portal. Call {@link #flushBatch()} in the portal before you draw translucent things.
 	 * <p>
 	 * While the portal routes, render passes opened in it on the main target draw into the channel's target instead.
 	 * Use {@link #redirect} for anything else, such as other targets or a pass that was already open.
@@ -68,7 +68,8 @@ public interface ExitChannel {
 
 	/**
 	 * A collector for this frame's batch. What is submitted to it is rendered into the channel's target at the end of
-	 * the level rendering, after the immediate drawings. Use camera-relative positions, and get it again each frame.
+	 * the level rendering, in one frame with the channel's {@link #draw drawings}: solid first, then translucent. Use
+	 * camera-relative positions, and get it again each frame.
 	 */
 	default SubmitNodeCollector batch() {
 		return this.batch(null);
@@ -78,8 +79,8 @@ public interface ExitChannel {
 	SubmitNodeCollector batch(@Nullable SubmitNodeCollector passThrough);
 
 	/**
-	 * Renders the batch now instead of at the end of the level rendering, for drawings that must come first. Does
-	 * nothing inside an open render pass.
+	 * Renders the batch now instead of at the end of the level rendering, for drawings that must come first, such as
+	 * solid ones before the translucent ones of a {@link #portal}. Does nothing inside an open render pass.
 	 */
 	void flushBatch();
 }

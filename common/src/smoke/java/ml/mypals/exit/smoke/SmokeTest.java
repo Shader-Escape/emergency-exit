@@ -94,13 +94,13 @@ public final class SmokeTest {
 				this.done = true;
 				log("shader pack in use: " + IrisCompat.isPackInUse() + ", frames composited by EXIT: " + ExitRuntime.compositedFrames());
 				DebugShapes.Stats stats = DebugShapes.stats();
-				log("immediate drawings: " + stats.immediateDraws + " (deferred: " + stats.deferredDraws + ", routed: " + stats.routedDraws + "), batches: "
+				log("drawings: " + stats.draws + " (routed: " + stats.routedDraws + "), batches: "
 					+ stats.batchDraws + ", portals: " + stats.portalDraws + " (passes moved into the channel: " + stats.portalRedirectedPasses + "), portal/routing mismatches: "
 					+ stats.portalRoutingMismatches + ", redirects outside a portal that did not throw: " + stats.unguardedRedirects
 					+ ", off-thread portal ok: " + stats.offThreadOk);
 				log("frames blending channels by depth: " + ExitRuntime.blendedFrames() + ", gizmos moved into channels: " + ExitRuntime.redirectedGizmos());
 				log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
-				boolean drew = stats.immediateDraws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
+				boolean drew = stats.draws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
 					&& (stats.portalRedirectedPasses > 0 || !IrisCompat.isPackInUse())
 					&& stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk)
 					&& (shadowCallbacks > 0 || !IrisCompat.isPackInUse()) && shadowPassRuns == 0
