@@ -4,7 +4,7 @@
 
 EXIT is a library for Fabric and NeoForge that lets custom world rendering bypass shader packs (Iris). What you draw through EXIT goes into an independent render target, and after the shader pack has shaded the whole frame it is merged back by depth. The shader pack neither replaces your render pipeline nor swallows your drawing.
 
-It was split out of the rendering core of [LitematicaPass](https://github.com/hotpad100c/litematicapass) with the help of AI. I know some people object to AI, but this was the only migration I could use to reach my goal quickly. I know what I'm doing, I use this library myself, and I can make sure it won't eat your pet's stone. This is not AI slop, and it is not wish coding. If you run into any trouble, I'm glad to help.
+It was split out of the rendering core of [LitematicaPass](https://github.com/hotpad100c/litematicapass) with the help of AI. I know some people object to AI, but this was the only migration I could use to reach my goal quickly. I know what I'm doing, I use this library myself, and I can make sure it won't eat your pet's rock. This is not AI slop, and it is not wish coding. If you run into any trouble, I'm glad to help.
 
 Mod id `emergency_exit`, API package `ml.mypals.exit.api`. Each Minecraft version has its own git branch, and each branch holds only that version's code. This README is maintained only on `master`. It covers what all versions share, and the examples use 26.3. Where another version differs (events, API types, missing features), it is written in that version's section of [ChangeLog.md](ChangeLog.md), under **Use**. Each branch carries only a short README that points here.
 
