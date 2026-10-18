@@ -36,7 +36,7 @@ import java.util.stream.Stream;
 public final class SmokeTest {
 	private static final String TAG = "[emergency_exit-smoke] ";
 	private static final String WORLD = "EXIT Smoke";
-	private static final String VERSION = SharedConstants.getCurrentVersion().name();
+	private static final String VERSION = SharedConstants.getCurrentVersion().getName();
 	/** Client ticks to stay in the world, 20 per second. */
 	private static final int TICKS_IN_WORLD = 400;
 	/** Give up after this many client ticks without a world. */
@@ -99,14 +99,13 @@ public final class SmokeTest {
 					+ stats.batchDraws + ", portals: " + stats.portalDraws + " (passes moved into the channel: " + stats.portalRedirectedPasses + "), portal/routing mismatches: "
 					+ stats.portalRoutingMismatches + ", redirects outside a portal that did not throw: " + stats.unguardedRedirects
 					+ ", off-thread portal ok: " + stats.offThreadOk);
-				log("frames blending channels by depth: " + ExitRuntime.blendedFrames() + ", gizmos moved into channels: " + ExitRuntime.redirectedGizmos());
+				log("frames blending channels by depth: " + ExitRuntime.blendedFrames());
 				log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
 				boolean drew = stats.draws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
 					&& (stats.portalRedirectedPasses > 0 || !IrisCompat.isPackInUse())
 					&& stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk)
 					&& (shadowCallbacks > 0 || !IrisCompat.isPackInUse()) && shadowPassRuns == 0
-					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse())
-					&& (ExitRuntime.redirectedGizmos() > 0 || !IrisCompat.isPackInUse());
+					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse());
 				log(drew ? "RESULT: OK (entered the world and rendered " + TICKS_IN_WORLD + " ticks through EXIT)"
 					: "RESULT: FAILED (the EXIT drawings did not all run)");
 				if (!drew) {
@@ -137,7 +136,7 @@ public final class SmokeTest {
 		if (!this.requestedScreen && mc.getOverlay() == null && this.ticks > 40) {
 			this.requestedScreen = true;
 			log("opening the create-world screen");
-			CreateWorldScreen.openFresh(mc, () -> {});
+			CreateWorldScreen.openFresh(mc, null);
 		}
 	}
 
@@ -203,7 +202,7 @@ public final class SmokeTest {
 
 	private void screenshot(Minecraft mc, String view) {
 		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
-		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), 1, message -> log("screenshot " + name));
+		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), message -> log("screenshot " + name));
 	}
 
 	/**

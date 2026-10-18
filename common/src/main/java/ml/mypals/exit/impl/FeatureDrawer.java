@@ -2,254 +2,146 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexSorting;
 import ml.mypals.exit.compat.IrisCompat;
-import net.minecraft.client.Minecraft;
-import ml.mypals.exit.mixin.FeatureRenderDispatcherAccessor;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderBuffers;
-import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
-import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.RenderType;
+import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
 
 import java.util.LinkedHashMap;
-import java.util.Objects;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
-import java.util.function.Consumer;
+import java.util.Map;
 
 /**
- * Renders submit storages into a target with our own feature dispatcher. It sets this frame's camera rotation and
- * projection itself, because the level renderer may have reset them by the time EXIT renders. Before 26.2 the features
- * are drawn into a buffer source, and each batch opens its own pass on the output target when it ends, so the output
- * is pointed at the target while the features are drawn. In 1.21.11 the dispatcher draws all features at once and then
- * empties the storage; {@link #keepSubmits} keeps them, so they are drawn twice: the solid render types first, then
- * the translucent ones (its custom geometry is kept in a hash map, so the order of render types is not fixed). The
- * translucent depth draws the translucent ones a third time.
+ * A channel's batch: a buffer source the caller records into, rendered into the channel's target at the end of the
+ * level rendering. 1.20.6 has no {@code SubmitNodeCollector}, so the submits are collected as vanilla render types and
+ * drawn here with plain OpenGL. The solid render types are drawn first, then the translucent ones; the translucent
+ * ones are drawn a second time, colour off and depth on, into the channel's translucent-depth target.
  */
 public final class FeatureDrawer {
-	private static RenderBuffers buffers;
-	private static FeatureRenderDispatcher dispatcher;
-	private static PhasedBufferSource bufferSource;
-	/** While true, the dispatcher keeps the submits after drawing them, see FeatureRenderDispatcherMixin. */
-	public static boolean keepSubmits;
-
 	private FeatureDrawer() {}
 
-	static SubmitNodeStorage newStorage() {
-		return new SubmitNodeStorage();
+	/** A new batch to record into this frame. Also used where a drawing must be dropped: it is simply never drawn. */
+	static Batch newBatch() {
+		return new Batch();
 	}
 
-	/** Renders {@code storage} into {@code target} and empties it. */
-	static void draw(SubmitNodeStorage storage, RenderTarget target) {
-		draw(storage, target, null);
-	}
-
-	/**
-	 * Renders {@code storage} into {@code target} and empties it. {@code direct} draws into the buffer source after the
-	 * translucent features, for what cannot be submitted before 26.2, such as gizmos.
-	 */
-	static void draw(SubmitNodeStorage storage, RenderTarget target, @Nullable Consumer<MultiBufferSource> direct) {
-		FeatureRenderDispatcher dispatcher = dispatcher();
-		((FeatureRenderDispatcherAccessor) dispatcher).emergency_exit$setSubmitNodeStorage(storage);
-		// The vertices are written while the features are drawn. Iris would widen their format while the level renders,
-		// but the vanilla pipelines expect the vanilla format.
-		boolean renderingLevel = IrisCompat.isRenderingLevel();
-		IrisCompat.setRenderingLevel(false);
-		Matrix4fStack modelView = RenderSystem.getModelViewStack();
-		modelView.pushMatrix();
-		modelView.set(ExitRuntime.viewRotation());
-		try {
-			long opened = ExitRuntime.openedPasses();
-			executeInto(Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView(), () -> {
-				render(dispatcher, false);
-				render(dispatcher, true);
-				buffers.outlineBufferSource().endOutlineBatch();
-				if (direct != null) {
-					direct.accept(bufferSource);
-					bufferSource.endBatch();
-				}
-			});
-			// Inside a portal a pass on the main target was moved into the channel's target.
-			Channel channel = ExitRuntime.routingChannel();
-			if (ExitRuntime.openedPasses() != opened && channel != null && (target == Gpu.mainTarget() || target == channel.drawnTarget())) {
-				TranslucentDepth.record(() -> render(dispatcher, true), channel.prepareForDraw(), channel.translucentDepth());
-			}
-		} finally {
-			modelView.popMatrix();
-			IrisCompat.setRenderingLevel(renderingLevel);
-			storage.clear();
+	/** Renders {@code batch} into {@code target}; the translucent submits also write {@code translucentDepth}. */
+	static void draw(MultiBufferSource batch, RenderTarget target, @Nullable RenderTarget translucentDepth) {
+		if (batch instanceof Batch recording) {
+			recording.draw(target, translucentDepth);
 		}
-	}
-
-	/** Draws the submits of the solid or of the translucent render types and keeps the submits. */
-	private static void render(FeatureRenderDispatcher dispatcher, boolean translucent) {
-		keepSubmits = true;
-		bufferSource.translucent = translucent;
-		try {
-			dispatcher.renderAllFeatures();
-		} finally {
-			keepSubmits = false;
-			bufferSource.translucent = null;
-		}
-		bufferSource.endBatch();
-		buffers.crumblingBufferSource().endBatch();
-	}
-
-	/**
-	 * Runs {@code execute} with the output of the features pointed at the given colour and depth, and with the level
-	 * projection set, since each feature binds the default uniforms itself.
-	 */
-	static void executeInto(GpuTextureView color, @Nullable GpuTextureView depth, Runnable execute) {
-		GpuTextureView savedColor = RenderSystem.outputColorTextureOverride;
-		GpuTextureView savedDepth = RenderSystem.outputDepthTextureOverride;
-		GpuBufferSlice projection = ExitRuntime.levelProjection();
-		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
-		var type = RenderSystem.getProjectionType();
-		RenderSystem.outputColorTextureOverride = color;
-		RenderSystem.outputDepthTextureOverride = depth;
-		if (projection != null && projection != current) {
-			RenderSystem.setProjectionMatrix(projection, type);
-		}
-		try {
-			execute.run();
-		} finally {
-			RenderSystem.outputColorTextureOverride = savedColor;
-			RenderSystem.outputDepthTextureOverride = savedDepth;
-			if (projection != null && projection != current && current != null) {
-				RenderSystem.setProjectionMatrix(current, type);
-			}
-		}
-	}
-
-	/** Opens a pass on {@code target} with the default uniforms and the level projection bound. */
-	static RenderPass openPass(String label, RenderTarget target) {
-		return openPass(label, Objects.requireNonNull(target.getColorTextureView(), "target without colour"), target.getDepthTextureView());
-	}
-
-	/** Opens a pass on the given colour and depth with the default uniforms and the level projection bound. */
-	static RenderPass openPass(String label, GpuTextureView color, @Nullable GpuTextureView depth) {
-		RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-			() -> label, color, OptionalInt.empty(), depth, OptionalDouble.empty());
-		GpuBufferSlice projection = ExitRuntime.levelProjection();
-		GpuBufferSlice current = RenderSystem.getProjectionMatrixBuffer();
-		if (projection != null && projection != current) {
-			var type = RenderSystem.getProjectionType();
-			RenderSystem.setProjectionMatrix(projection, type);
-			try {
-				RenderSystem.bindDefaultUniforms(pass);
-			} finally {
-				if (current != null) {
-					RenderSystem.setProjectionMatrix(current, type);
-				}
-			}
-		} else {
-			RenderSystem.bindDefaultUniforms(pass);
-		}
-		return pass;
-	}
-
-	private static FeatureRenderDispatcher dispatcher() {
-		if (dispatcher == null) {
-			Minecraft mc = Minecraft.getInstance();
-			buffers = new RenderBuffers(1);
-			bufferSource = new PhasedBufferSource();
-			// The dispatcher renders the storage it was created with. FeatureRenderDispatcherAccessor swaps it.
-			dispatcher = new FeatureRenderDispatcher(new SubmitNodeStorage(), mc.getBlockRenderer(), bufferSource, mc.getAtlasManager(),
-				buffers.outlineBufferSource(), buffers.crumblingBufferSource(), mc.font);
-		}
-		return dispatcher;
 	}
 
 	static void close() {
-		if (dispatcher != null) {
-			dispatcher.close();
-			dispatcher = null;
-		}
-		buffers = null;
-		if (bufferSource != null) {
-			bufferSource.close();
-			bufferSource = null;
-		}
 	}
 
-	/**
-	 * A buffer source that takes only the solid or only the translucent render types and drops the others. It takes
-	 * all of them while {@link #translucent} is null.
-	 */
-	private static final class PhasedBufferSource extends MultiBufferSource.BufferSource {
-		@Nullable Boolean translucent;
-		private final ByteBufferBuilder buffer;
+	/** Collects submits per render type and draws them in one go. */
+	static final class Batch implements MultiBufferSource {
+		private static final int INITIAL_BUFFER_SIZE = 786432;
 
-		PhasedBufferSource() {
-			this(new ByteBufferBuilder(786432));
-		}
-
-		private PhasedBufferSource(ByteBufferBuilder buffer) {
-			super(buffer, new LinkedHashMap<>());
-			this.buffer = buffer;
-		}
-
-		void close() {
-			this.buffer.close();
-		}
+		private final Map<RenderType, BufferBuilder> builders = new LinkedHashMap<>();
+		private boolean closed;
 
 		@Override
 		public VertexConsumer getBuffer(RenderType type) {
-			if (this.translucent != null && type.pipeline().getBlendFunction().isPresent() != this.translucent) {
-				return Discard.INSTANCE;
+			return this.builders.computeIfAbsent(type, t -> new BufferBuilder(INITIAL_BUFFER_SIZE));
+		}
+
+		void draw(RenderTarget target, @Nullable RenderTarget translucentDepth) {
+			if (this.closed) {
+				return;
 			}
-			return super.getBuffer(type);
+			this.closed = true;
+			if (this.builders.isEmpty()) {
+				this.close();
+				return;
+			}
+			Map<RenderType, BufferBuilder.RenderedBuffer> rendered = new LinkedHashMap<>();
+			for (Map.Entry<RenderType, BufferBuilder> entry : this.builders.entrySet()) {
+				BufferBuilder.RenderedBuffer buffer = entry.getValue().endOrDiscardIfEmpty();
+				if (buffer != null) {
+					rendered.put(entry.getKey(), buffer);
+				}
+			}
+
+			Matrix4fStack modelView = RenderSystem.getModelViewStack();
+			modelView.pushMatrix();
+			modelView.set(ExitRuntime.viewRotation());
+			RenderSystem.applyModelViewMatrix();
+			Matrix4f projection = RenderSystem.getProjectionMatrix();
+			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()), VertexSorting.DISTANCE_TO_ORIGIN);
+			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
+			boolean renderingLevel = IrisCompat.isRenderingLevel();
+			IrisCompat.setRenderingLevel(false);
+			Runnable restore = Gpu.bindForDrawing(target);
+			try {
+				// Solid render types first, then the translucent ones, so a solid submit never covers a nearer translucent.
+				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : rendered.entrySet()) {
+					boolean translucent = isTranslucent(entry.getKey());
+					if (!translucent) {
+						draw(entry.getKey(), entry.getValue());
+					}
+				}
+				for (Map.Entry<RenderType, BufferBuilder.RenderedBuffer> entry : rendered.entrySet()) {
+					if (!isTranslucent(entry.getKey())) {
+						continue;
+					}
+					draw(entry.getKey(), entry.getValue());
+					if (translucentDepth != null) {
+						// The translucent submits write no depth; draw them again, colour off and depth on, into the
+						// channel's translucent-depth target, so the channel can be blended by depth.
+						Runnable restoreDepth = Gpu.bindForDrawing(translucentDepth);
+						try {
+							GL11.glColorMask(false, false, false, false);
+							GL11.glDepthMask(true);
+							draw(entry.getKey(), entry.getValue());
+						} finally {
+							GL11.glColorMask(true, true, true, true);
+							restoreDepth.run();
+						}
+					}
+				}
+			} finally {
+				restore.run();
+				IrisCompat.setRenderingLevel(renderingLevel);
+				RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
+				modelView.popMatrix();
+				RenderSystem.applyModelViewMatrix();
+				for (BufferBuilder.RenderedBuffer buffer : rendered.values()) {
+					buffer.release();
+				}
+				this.close();
+			}
 		}
-	}
 
-	private enum Discard implements VertexConsumer {
-		INSTANCE;
-
-		@Override
-		public VertexConsumer addVertex(float x, float y, float z) {
-			return this;
+		/** Whether the render type blends, found from the state it sets up (there is no pipeline to ask here). */
+		private static boolean isTranslucent(RenderType type) {
+			type.setupRenderState();
+			try {
+				return GL11.glIsEnabled(GL11.GL_BLEND);
+			} finally {
+				type.clearRenderState();
+			}
 		}
 
-		@Override
-		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-			return this;
+		/** Draws one render type's recorded buffer. */
+		private static void draw(RenderType type, BufferBuilder.RenderedBuffer buffer) {
+			type.setupRenderState();
+			try {
+				BufferUploader.drawWithShader(buffer);
+			} finally {
+				type.clearRenderState();
+			}
 		}
 
-		@Override
-		public VertexConsumer setColor(int argb) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv(float u, float v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv1(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv2(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setNormal(float x, float y, float z) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setLineWidth(float width) {
-			return this;
+		private void close() {
+			this.builders.clear();
 		}
 	}
 }

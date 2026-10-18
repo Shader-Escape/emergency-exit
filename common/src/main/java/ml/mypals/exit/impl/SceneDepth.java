@@ -2,17 +2,16 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Copies of the scene depth taken at two moments of the shader pack's frame. One is taken before the first-person hand
- * is drawn, the other before translucent surfaces are drawn. All channels share them. When the pack renders at a lower
- * resolution, the copies are resampled to full resolution (see {@link SceneScale}), so they line up with the channels.
+ * is drawn, the other before translucent surfaces are drawn. All channels share them. On this version the pack always
+ * renders at the scene resolution, so the copies need no resampling (no Super Resolution here).
  */
 public final class SceneDepth {
 	private static TextureTarget noHand;
 	private static TextureTarget opaque;
-	private static TextureTarget current;
 	private static boolean noHandReady;
 	private static boolean opaqueReady;
 
@@ -23,7 +22,6 @@ public final class SceneDepth {
 		if (ExitRuntime.wantsSceneDepth()) {
 			noHand = copy(noHand, "emergency_exit_depth_no_hand");
 			noHandReady = true;
-			SceneScale.measureIfNeeded();
 		}
 	}
 
@@ -32,29 +30,19 @@ public final class SceneDepth {
 		if (ExitRuntime.wantsSceneDepth()) {
 			opaque = copy(opaque, "emergency_exit_depth_opaque");
 			opaqueReady = true;
-			// Without a first-person hand there is no beginHand.
-			SceneScale.measureIfNeeded();
 		}
 	}
 
 	private static TextureTarget copy(@Nullable TextureTarget target, String label) {
-		return copy(target, label, Gpu.mainTarget());
-	}
-
-	private static TextureTarget copy(@Nullable TextureTarget target, String label, RenderTarget main) {
+		RenderTarget main = Gpu.mainTarget();
 		int width = Gpu.sceneWidth();
 		int height = Gpu.sceneHeight();
-
 		if (target == null) {
 			target = Gpu.depthTarget(label, width, height);
 		} else if (target.width != width || target.height != height) {
 			Gpu.resize(target, width, height);
 		}
-		if (SceneScale.scaled()) {
-			SceneScale.resample(target, main);
-		} else {
-			Gpu.copyDepth(target, main);
-		}
+		Gpu.copyDepth(target, main);
 		return target;
 	}
 
@@ -70,22 +58,14 @@ public final class SceneDepth {
 		return noHandReady ? noHand : null;
 	}
 
-	/**
-	 * The depth of {@code main} now, lined up with the channels. It is {@code main} itself unless the pack renders at a
-	 * lower resolution; then it is a copy, valid until the next call.
-	 */
+	/** The depth of {@code main} now. The pack renders at the scene resolution, so it is {@code main} itself. */
 	static RenderTarget current(RenderTarget main) {
-		if (!SceneScale.scaled()) {
-			return main;
-		}
-		current = copy(current, "emergency_exit_depth_current", main);
-		return current;
+		return main;
 	}
 
 	static void endFrame() {
 		noHandReady = false;
 		opaqueReady = false;
-		SceneScale.endFrame();
 	}
 
 	static void close() {
@@ -97,11 +77,6 @@ public final class SceneDepth {
 			opaque.destroyBuffers();
 			opaque = null;
 		}
-		if (current != null) {
-			current.destroyBuffers();
-			current = null;
-		}
-		SceneScale.close();
 		endFrame();
 	}
 }

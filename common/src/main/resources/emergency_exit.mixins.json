@@ -4,16 +4,12 @@
   "plugin": "ml.mypals.exit.plugin.ExitMixinPlugin",
   "compatibilityLevel": "${mixin_java}",
   "client": [
-    "CompiledPipelineMixin",
-    "FeatureRenderDispatcherAccessor",
-    "FeatureRenderDispatcherMixin",
+    "GlStateManagerMixin",
     "LevelRendererMixin",
-    "PortalPassMixin",
-    "RenderPassMixin",
-    "RenderPipelinesAccessor",
-    "RenderTypeAccessor",
-    "StrictValidationMixin",
-    "iris.IrisRenderingPipelineMixin"
+    "MinecraftAccessor",
+    "MinecraftMixin",
+    "iris.IrisRenderingPipelineMixin",
+    "iris.IrisShaderOverrideMixin"
   ],
   "injectors": {
     "defaultRequire": 1

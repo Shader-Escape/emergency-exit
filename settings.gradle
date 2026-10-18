@@ -24,4 +24,3 @@ rootProject.name = 'emergency-exit'
 includeBuild('build-logic')
 include('common')
 include('fabric')
-include('neoforge')

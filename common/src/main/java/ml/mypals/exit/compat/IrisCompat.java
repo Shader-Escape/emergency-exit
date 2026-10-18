@@ -1,8 +1,7 @@
 package ml.mypals.exit.compat;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.exit.platform.Platform;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public final class IrisCompat {
 	public static final boolean LOADED = Platform.INSTANCE.isModLoaded("iris");
@@ -44,15 +43,16 @@ public final class IrisCompat {
 		}
 	}
 
+	/**
+	 * The id of the shader pack's own scene-depth texture, or 0 when the pack keeps it in the main depth. Iris 1.2 and
+	 * older for 1.18.1 and below keep their own; the others use the main depth.
+	 */
+	public static int sceneDepthTexture() {
+		return LOADED ? IrisHooks.sceneDepthTexture() : 0;
+	}
+
 	/** The shader pack's rendering pipeline, or null. A new one is made whenever the pack or its options change. */
 	public static @Nullable Object pipeline() {
 		return LOADED ? IrisHooks.pipeline() : null;
-	}
-
-	/** Makes Iris draw {@code copy} with the shader pack's program for {@code original}. */
-	public static void usePackProgramOf(RenderPipeline original, RenderPipeline copy) {
-		if (LOADED) {
-			IrisHooks.usePackProgramOf(original, copy);
-		}
 	}
 }

@@ -8,7 +8,7 @@ import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +53,7 @@ public final class ExitMod {
 						return builder.buildFuture();
 					})
 					.executes(context -> {
-						Identifier channel = Identifier.tryParse(StringArgumentType.getString(context, "channel"));
+						ResourceLocation channel = ResourceLocation.tryParse(StringArgumentType.getString(context, "channel"));
 						if (channel == null || ExitRuntime.find(channel) == null) {
 							output.error(context.getSource(), Component.literal("No such EXIT channel. Channels: " + ExitRuntime.channelIds()));
 							return 0;
@@ -76,7 +76,7 @@ public final class ExitMod {
 		return LiteralArgumentBuilder.<S>literal(MOD_ID).then(debug);
 	}
 
-	private static <S> int setView(Output<S> output, CommandContext<S> context, DebugView.Mode mode, Identifier channel) {
+	private static <S> int setView(Output<S> output, CommandContext<S> context, DebugView.Mode mode, ResourceLocation channel) {
 		DebugView.set(mode, channel);
 		output.feedback(context.getSource(), Component.literal("EXIT debug view: " + mode.id() + " of " + channel + " (" + mode.description + ")"));
 		if (mode != DebugView.Mode.OFF && !IrisCompat.isPackInUse()) {
@@ -85,7 +85,7 @@ public final class ExitMod {
 		return 1;
 	}
 
-	public static Identifier id(String path) {
-		return Identifier.fromNamespaceAndPath(MOD_ID, path);
+	public static ResourceLocation id(String path) {
+		return new ResourceLocation(MOD_ID, path);
 	}
 }

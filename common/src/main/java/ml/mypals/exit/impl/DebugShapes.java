@@ -1,5 +1,6 @@
 package ml.mypals.exit.impl;
 
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import ml.mypals.exit.api.Exit;
@@ -7,17 +8,13 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Test boxes for {@code /emergency_exit debug shapes}, placed 5 blocks in front of the player.
@@ -27,14 +24,16 @@ import org.jspecify.annotations.Nullable;
  *     <li>Green, in the middle, is drawn with the main channel's batch.</li>
  *     <li>Yellow sits behind the green box on another channel. The channels blend by depth, so green covers it where
  *     they overlap.</li>
- *     <li>Blue, on the left, is a pass on the main target inside a portal. The portal moves it into a channel that
- *     shows through the world. The cyan outline around it is a gizmo added in the same portal.</li>
+ *     <li>Blue, on the left, is a drawing on the main target inside a portal. The portal moves the frame into a channel
+ *     that shows through the world.</li>
  * </ul>
  */
 public final class DebugShapes {
 	public static final double DISTANCE = 5;
-	private static final Identifier WHITE = ExitMod.id("textures/misc/white.png");
+	private static final ResourceLocation WHITE = ExitMod.id("textures/misc/white.png");
 	private static final int FULL_BRIGHT = 0xF000F0;
+	/** Reused buffer for the box drawn straight into the portal's target. */
+	private static final BufferBuilder PORTAL_BUFFER = new BufferBuilder(1536);
 
 	/** The centre of the middle box, or null while the shapes are off. */
 	private static @Nullable Vec3 center;
@@ -52,7 +51,7 @@ public final class DebugShapes {
 		public int routedDraws;
 		public int batchDraws;
 		public int portalDraws;
-		/** Portals whose pass on the main target was moved into the channel. */
+		/** Portals whose drawing on the main target landed in the channel. */
 		public int portalRedirectedPasses;
 		public int portalRoutingMismatches;
 		/** Redirects outside a portal that did not throw. Should stay 0. */
@@ -64,9 +63,9 @@ public final class DebugShapes {
 	private DebugShapes() {}
 
 	/**
-	 * Called after the solid features. {@code passThrough} is the level's collector, used when nothing is routed.
+	 * Called after the solid features. {@code passThrough} is the level's buffer source, used when nothing is routed.
 	 */
-	public static void inMainPass(SubmitNodeCollector passThrough) {
+	public static void inMainPass(@Nullable MultiBufferSource passThrough) {
 		Vec3 at = center;
 		if (at == null) {
 			return;
@@ -76,21 +75,21 @@ public final class DebugShapes {
 			if (exit.routed()) {
 				STATS.routedDraws++;
 			}
-			box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(right.scale(2)), 0xC0FF3030);
+			box(exit.bufferSource(), exit.poseStack(), exit.cameraPos(), at.add(right.scale(2)), 0xC0FF3030, false);
 		});
 	}
 
 	/** Called while the level collects its submits. The green box goes to the main channel's batch. */
-	public static void collectSubmits(@Nullable SubmitNodeCollector collector, Vec3 camera) {
+	public static void collectSubmits(@Nullable MultiBufferSource source, Vec3 camera) {
 		Vec3 at = center;
 		if (at == null) {
 			return;
 		}
 		STATS.batchDraws++;
-		box(Exit.batch(collector), new PoseStack(), camera, at, 0xFF30FF30, true);
+		box(Exit.batch(source), new PoseStack(), camera, at, 0xFF30FF30, true);
 	}
 
-	/** Called at the end of the level rendering, outside any pass, before the batches are drawn. */
+	/** Called at the end of the level rendering, before the batches are drawn. */
 	static void atLevelEnd() {
 		Vec3 at = center;
 		if (at == null) {
@@ -100,7 +99,8 @@ public final class DebugShapes {
 		if (mix == null) {
 			mix = Exit.channel(ExitMod.id("debug_mix"), ExitOptions.DEFAULT);
 		}
-		mix.draw(exit -> box(exit.collector(), exit.poseStack(), exit.cameraPos(), at.add(forward.scale(0.5)).add(right.scale(0.5)).add(0, 0.3, 0), 0xFFFFE030, true));
+		mix.draw(exit -> box(exit.bufferSource(), exit.poseStack(), exit.cameraPos(),
+			at.add(forward.scale(0.5)).add(right.scale(0.5)).add(0, 0.3, 0), 0xFFFFE030, true));
 
 		// A portal around code with its own render context.
 		if (xray == null) {
@@ -111,24 +111,17 @@ public final class DebugShapes {
 		xray.portal(() -> {
 			STATS.portalDraws++;
 			boolean routing = Exit.isRouting();
-			if ((xray.redirect(Gpu.mainTarget()) == Gpu.mainTarget()) == routing) {
+			boolean redirected = xray.redirect(Gpu.mainTarget()) != Gpu.mainTarget();
+			if (redirected != routing) {
 				STATS.portalRoutingMismatches++;
 			}
-			// Rendered into the main target without redirect. The portal moves the pass into the channel.
-			long redirectedBefore = ExitRuntime.redirectedPasses();
-			SubmitNodeStorage storage = FeatureDrawer.newStorage();
-			box(storage, new PoseStack(), ExitRuntime.camera().pos, at.subtract(right.scale(2)), 0xC03030FF);
-			FeatureDrawer.draw(storage, Gpu.mainTarget());
-			boolean moved = ExitRuntime.redirectedPasses() > redirectedBefore;
-			if (moved) {
+			if (redirected) {
 				STATS.portalRedirectedPasses++;
 			}
-			if (moved != routing) {
-				STATS.portalRoutingMismatches++;
-			}
-			// A gizmo added in the portal is drawn with the channel instead of by vanilla.
-			Vec3 blue = at.subtract(right.scale(2));
-			Gizmos.cuboid(new AABB(blue, blue).inflate(0.65), GizmoStyle.stroke(0xFF30FFFF, 3));
+			// Drawn into the main target without redirect. The portal bound the channel's framebuffer, so it lands there.
+			MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(PORTAL_BUFFER);
+			box(immediate, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
+			immediate.endBatch();
 		});
 	}
 
@@ -195,22 +188,22 @@ public final class DebugShapes {
 	}
 
 	/** A translucent box of one block centred at {@code at}. It writes no depth. */
-	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb) {
-		box(collector, poseStack, camera, at, argb, false);
+	private static void box(MultiBufferSource source, PoseStack poseStack, Vec3 camera, Vec3 at, int argb) {
+		box(source, poseStack, camera, at, argb, false);
 	}
 
 	/** A box of one block centred at {@code at}. A solid box is opaque and writes depth. */
-	private static void box(SubmitNodeCollector collector, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
+	private static void box(MultiBufferSource source, PoseStack poseStack, Vec3 camera, Vec3 at, int argb, boolean solid) {
+		VertexConsumer buffer = source.getBuffer(solid ? RenderType.entitySolid(WHITE) : RenderType.debugQuads());
 		poseStack.pushPose();
 		poseStack.translate(at.x - 0.5 - camera.x, at.y - 0.5 - camera.y, at.z - 0.5 - camera.z);
-		collector.submitCustomGeometry(poseStack, solid ? RenderTypes.entitySolid(WHITE) : RenderTypes.debugQuads(), (pose, buffer) -> {
-			quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
-			quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1);
-			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);
-			quad(buffer, pose, argb, solid, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1);
-			quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0);
-			quad(buffer, pose, argb, solid, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
-		});
+		PoseStack.Pose pose = poseStack.last();
+		quad(buffer, pose, argb, solid, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
+		quad(buffer, pose, argb, solid, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0);
+		quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0);
+		quad(buffer, pose, argb, solid, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1);
+		quad(buffer, pose, argb, solid, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0);
+		quad(buffer, pose, argb, solid, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
 		poseStack.popPose();
 	}
 
@@ -227,9 +220,10 @@ public final class DebugShapes {
 	}
 
 	private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, int argb, boolean solid, float[] corners, int i) {
-		VertexConsumer vertex = buffer.addVertex(pose, corners[i], corners[i + 1], corners[i + 2]).setColor(argb);
+		VertexConsumer vertex = buffer.vertex(pose, corners[i], corners[i + 1], corners[i + 2]).color(argb);
 		if (solid) {
-			vertex.setUv(0, 0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(FULL_BRIGHT).setNormal(pose, 0, 1, 0);
+			vertex.uv(0, 0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(FULL_BRIGHT).normal(pose, 0, 1, 0);
 		}
+		vertex.endVertex();
 	}
 }

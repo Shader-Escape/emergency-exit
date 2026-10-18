@@ -1,7 +1,26 @@
 plugins {
     id 'multiloader-loader'
-    // Minecraft 1.21.11 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
+    // Minecraft 1.20.6 is obfuscated: the mod is compiled against Mojang's names and remapped to intermediary.
     id 'net.fabricmc.fabric-loom-remap'
+}
+
+// The libraries nested in the Iris and Sodium jars (their Fabric API modules aside), for the development runtime.
+def nestingJars = configurations.detachedConfiguration(
+    dependencies.create("maven.modrinth:${iris_fabric}"),
+    dependencies.create("maven.modrinth:${sodium_fabric}")
+)
+nestingJars.transitive = false
+def nestedLibraries = tasks.register('nestedLibraries', Sync) {
+    from({ nestingJars.files.collect { zipTree(it) } }) {
+        include 'META-INF/jars/*.jar'
+        exclude 'META-INF/jars/fabric-*'
+        // Older Iris nests slf4j as a generated mod, which on the classpath hides every mod from Fabric Loader.
+        exclude 'META-INF/jars/slf4j-*'
+        eachFile { path = name }
+    }
+    includeEmptyDirs = false
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into layout.buildDirectory.dir('nestedLibraries')
 }
 
 dependencies {
@@ -15,14 +34,10 @@ dependencies {
         modCompileOnly("maven.modrinth:${mod}")
         modLocalRuntime("maven.modrinth:${mod}")
     }
-    // Iris nests these libraries in its jar, but the development runs do not load nested jars.
-    for (library in ['org.anarres:jcpp:1.4.14', 'org.antlr:antlr4-runtime:4.13.1', "io.github.douira:glsl-transformer:${glsl_transformer_version}"]) {
-        localRuntime(library) { transitive = false }
-    }
-    // -Pexit.superResolution adds the Super Resolution mod to the development runs.
-    if (project.hasProperty('exit.superResolution')) {
-        modLocalRuntime("maven.modrinth:${super_resolution_fabric}")
-    }
+    // Iris and Sodium nest libraries (jcpp, ANTLR, glsl-transformer, JOML before 1.19.3; versions differ per build) in
+    // their jars, but the development runtime does not load the nested jars of dependencies; without them Iris fails as
+    // soon as it reads a shader pack. Put the copies from those jars themselves on the runtime classpath.
+    localRuntime(fileTree(nestedLibraries.map { it.destinationDir }) { include '*.jar' }.builtBy(nestedLibraries))
 }
 
 // Development mod that checks every mixin applies. Run it with runAuditClient.

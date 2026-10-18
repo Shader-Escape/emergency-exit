@@ -2,9 +2,9 @@ package ml.mypals.exit.api;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import ml.mypals.exit.impl.ExitRuntime;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.resources.Identifier;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.function.Consumer;
 
@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  */
 public final class Exit {
 	/** The id of the main channel. */
-	public static final Identifier MAIN = Identifier.fromNamespaceAndPath("emergency_exit", "main");
+	public static final ResourceLocation MAIN = new ResourceLocation("emergency_exit", "main");
 
 	private Exit() {}
 
@@ -34,7 +34,7 @@ public final class Exit {
 	 * Your own channel. The first call creates it, and later calls with the same id return it. Asking again with other
 	 * options throws.
 	 */
-	public static ExitChannel channel(Identifier id, ExitOptions options) {
+	public static ExitChannel channel(ResourceLocation id, ExitOptions options) {
 		return ExitRuntime.channel(id, options);
 	}
 
@@ -43,8 +43,8 @@ public final class Exit {
 		main().draw(drawing);
 	}
 
-	/** {@link ExitChannel#draw(SubmitNodeCollector, Consumer)} on the main channel. */
-	public static void draw(@Nullable SubmitNodeCollector passThrough, Consumer<ExitContext> drawing) {
+	/** {@link ExitChannel#draw(MultiBufferSource, Consumer)} on the main channel. */
+	public static void draw(@Nullable MultiBufferSource passThrough, Consumer<ExitContext> drawing) {
 		main().draw(passThrough, drawing);
 	}
 
@@ -59,12 +59,12 @@ public final class Exit {
 	}
 
 	/** {@link ExitChannel#batch()} on the main channel. */
-	public static SubmitNodeCollector batch() {
+	public static MultiBufferSource batch() {
 		return main().batch();
 	}
 
-	/** {@link ExitChannel#batch(SubmitNodeCollector)} on the main channel. */
-	public static SubmitNodeCollector batch(@Nullable SubmitNodeCollector passThrough) {
+	/** {@link ExitChannel#batch(MultiBufferSource)} on the main channel. */
+	public static MultiBufferSource batch(@Nullable MultiBufferSource passThrough) {
 		return main().batch(passThrough);
 	}
 

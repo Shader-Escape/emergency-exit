@@ -2,19 +2,17 @@ package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.exit.api.Exit;
 import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
 import ml.mypals.exit.compat.IrisCompat;
-import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.state.CameraRenderState;
-import net.minecraft.resources.Identifier;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -30,18 +28,17 @@ import java.util.Set;
  * portals. Everything runs on the render thread, except {@link #plainFormat} and portals opened on other threads.
  */
 public final class ExitRuntime {
-	private static final Map<Identifier, Channel> CHANNELS = new LinkedHashMap<>();
+	private static final Map<ResourceLocation, Channel> CHANNELS = new LinkedHashMap<>();
 	/** The channels sorted by priority, then by creation. */
 	private static List<Channel> mergeOrder = List.of();
 	private static @Nullable Channel main;
 
 	private static boolean inLevel;
-	/** Set once the level's frame graph runs. From then on the main target holds this frame's depth. */
+	/** Set once the level's frame graph runs. From then on the main depth holds this frame's depth. */
 	private static boolean passesRunning;
-	private static @Nullable CameraRenderState camera;
+	private static @Nullable Camera camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
 	private static final Matrix4f PROJECTION = new Matrix4f();
-	private static @Nullable GpuBufferSlice levelProjection;
 	private static float partialTick;
 
 	/** The portals open on the render thread, innermost last. They all belong to {@link #portalChannel}. */
@@ -49,10 +46,13 @@ public final class ExitRuntime {
 	private static @Nullable Channel portalChannel;
 	/** Whether the outermost portal routes. Nested portals follow it. */
 	private static boolean portalRouted;
+	/** Binds the channel's framebuffer while a portal routes; run to bind back. */
+	private static Runnable restoreOutput;
+	/** True while the channel target is being prepared, so it can ask for the real main target (MinecraftMixin). */
+	private static boolean preparing;
 
 	/** The drawing running now, or null. */
 	static @Nullable DrawContext drawing;
-	private static @Nullable SubmitNodeStorage discard;
 	private static long compositedFrames;
 	private static final Set<String> WARNED = new HashSet<>();
 
@@ -65,7 +65,7 @@ public final class ExitRuntime {
 		return main;
 	}
 
-	public static ExitChannel channel(Identifier id, ExitOptions options) {
+	public static ExitChannel channel(ResourceLocation id, ExitOptions options) {
 		RenderSystem.assertOnRenderThread();
 		Channel existing = CHANNELS.get(id);
 		if (existing != null) {
@@ -82,11 +82,11 @@ public final class ExitRuntime {
 		return channel;
 	}
 
-	static @Nullable Channel find(Identifier id) {
+	static @Nullable Channel find(ResourceLocation id) {
 		return CHANNELS.get(id);
 	}
 
-	static Set<Identifier> channelIds() {
+	static Set<ResourceLocation> channelIds() {
 		return CHANNELS.keySet();
 	}
 
@@ -124,6 +124,22 @@ public final class ExitRuntime {
 		return RenderSystem.isOnRenderThread() && !PORTALS.isEmpty();
 	}
 
+	/**
+	 * Before 1.21.6 draws go to {@code Minecraft.getMainRenderTarget()}; while routing the MinecraftMixin makes it hand
+	 * out the channel's target. Preparing the target itself must get the real one, hence {@link #preparing}.
+	 */
+	public static RenderTarget routeMainTarget(RenderTarget original) {
+		if (!isRouting() || preparing || portalChannel == null) {
+			return original;
+		}
+		preparing = true;
+		try {
+			return portalChannel.prepareForDraw();
+		} finally {
+			preparing = false;
+		}
+	}
+
 	/** Redirects for {@code channel}, or for the channel of the open portal when it is null. */
 	static RenderTarget redirect(@Nullable Channel channel, RenderTarget original) {
 		if (!RenderSystem.isOnRenderThread()) {
@@ -145,66 +161,16 @@ public final class ExitRuntime {
 		return redirect(null, original);
 	}
 
-	/** Counts render passes that a portal moved from the main target into a channel. Used by the checks. */
-	private static long redirectedPasses;
-	/** The render passes open now, on any command encoder. */
-	private static int openPasses;
-	/** Counts every render pass opened. */
-	private static long openedPasses;
-
-	/** Called when a command encoder opened a render pass. */
-	public static void passOpened() {
-		openPasses++;
-		openedPasses++;
-	}
-
-	/** Called when a command encoder submits an open render pass. */
-	public static void passClosed() {
-		if (openPasses > 0) {
-			openPasses--;
-		}
-	}
-
-	static int openPasses() {
-		return openPasses;
-	}
-
-	static long openedPasses() {
-		return openedPasses;
-	}
-
-	public static long redirectedPasses() {
-		return redirectedPasses;
-	}
-
-	/**
-	 * Called before a render pass is opened. While a portal routes, attachments on the main target are swapped for the
-	 * channel's: the returned target is the one to draw into, or null to keep the pass as it is. Passes that are
-	 * already open, and clears and copies, are not moved.
-	 */
-	public static @Nullable RenderTarget redirectPass(GpuTextureView color, @Nullable GpuTextureView depth) {
-		if (!isRouting() || Gpu.isInRenderPass()) {
-			return null;
-		}
-		RenderTarget main = Gpu.mainTarget();
-		if (color != main.getColorTextureView() && (depth == null || depth != main.getDepthTextureView())) {
-			return null;
-		}
-		redirectedPasses++;
-		// No pass is open yet, so the target may be cleared and seeded here.
-		return portalChannel.prepareForDraw();
-	}
-
 	/** The main render target. */
 	public static RenderTarget mainTarget() {
 		return Gpu.mainTarget();
 	}
 
-	static CameraRenderState camera() {
+	static Camera camera() {
 		return camera;
 	}
 
-	/** The level's projection. The camera state of 1.21.11 does not hold it. */
+	/** The level's projection. */
 	static Matrix4fc projectionMatrix() {
 		return PROJECTION;
 	}
@@ -213,22 +179,12 @@ public final class ExitRuntime {
 		return VIEW_ROTATION;
 	}
 
-	/** The partial tick the level renders with. The camera state of 26.2 does not hold it. */
+	/** The partial tick the level renders with. */
 	static float partialTick() {
 		return partialTick;
 	}
 
-	static @Nullable GpuBufferSlice levelProjection() {
-		return levelProjection;
-	}
-
 	private static long blendedFrames;
-	private static long redirectedGizmos;
-
-	/** Counts gizmos that portals moved into channels. Used by the checks. */
-	public static long redirectedGizmos() {
-		return redirectedGizmos;
-	}
 
 	/** Counts frames that blended two or more channels by depth. Used by the checks. */
 	public static long blendedFrames() {
@@ -269,6 +225,10 @@ public final class ExitRuntime {
 			IrisCompat.setSkipExtension(overrides.skipExtension().apply(saved.skipExtension()));
 			IrisCompat.setRenderingLevel(overrides.renderingLevel().apply(saved.renderingLevel()));
 		}
+		if (PORTALS.size() == 1 && portalRouted) {
+			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal.
+			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
+		}
 		return portalRouted;
 	}
 
@@ -283,6 +243,10 @@ public final class ExitRuntime {
 			IrisCompat.setRenderingLevel(saved.renderingLevel());
 		}
 		if (PORTALS.isEmpty()) {
+			if (portalRouted && restoreOutput != null) {
+				restoreOutput.run();
+			}
+			restoreOutput = null;
 			portalRouted = false;
 			portalChannel = null;
 		}
@@ -316,12 +280,9 @@ public final class ExitRuntime {
 		return false;
 	}
 
-	/** A collector whose content is thrown away at the end of the frame. */
-	static SubmitNodeStorage discard() {
-		if (discard == null) {
-			discard = new SubmitNodeStorage();
-		}
-		return discard;
+	/** A buffer source whose content is thrown away at the end of the frame. */
+	static MultiBufferSource discard() {
+		return FeatureDrawer.newBatch();
 	}
 
 	public static void plainFormat(Runnable build) {
@@ -341,16 +302,15 @@ public final class ExitRuntime {
 	}
 
 	/** Called when the level rendering starts. */
-	public static void beginLevel(CameraRenderState cameraState, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
+	public static void beginLevel(Camera camera, Matrix4fc viewRotation, Matrix4fc projection, float levelPartialTick) {
 		if (inShadowPass()) {
 			return;
 		}
 		inLevel = true;
-		camera = cameraState;
+		ExitRuntime.camera = camera;
 		partialTick = levelPartialTick;
 		VIEW_ROTATION.set(viewRotation);
 		PROJECTION.set(projection);
-		levelProjection = RenderSystem.getProjectionMatrixBuffer();
 	}
 
 	/**
@@ -373,7 +333,6 @@ public final class ExitRuntime {
 				DebugShapes.atLevelEnd();
 			}
 			for (Channel channel : mergeOrder) {
-				redirectedGizmos += channel.submitGizmos();
 				channel.drawBatch();
 			}
 			for (Channel channel : mergeOrder) {
@@ -420,8 +379,6 @@ public final class ExitRuntime {
 			inLevel = false;
 			passesRunning = false;
 			camera = null;
-			levelProjection = null;
-			discard = null;
 			SceneDepth.endFrame();
 		}
 	}
@@ -433,6 +390,5 @@ public final class ExitRuntime {
 		SceneDepth.close();
 		ChannelBlend.close();
 		FeatureDrawer.close();
-		discard = null;
 	}
 }

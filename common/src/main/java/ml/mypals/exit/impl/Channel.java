@@ -7,20 +7,10 @@ import ml.mypals.exit.api.ExitChannel;
 import ml.mypals.exit.api.ExitContext;
 import ml.mypals.exit.api.ExitOptions;
 import ml.mypals.exit.api.PortalOverrides;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.gizmos.DrawableGizmoPrimitives;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.gizmos.SimpleGizmoCollector;
-import net.minecraft.util.Util;
-import net.minecraft.resources.Identifier;
-import org.joml.Matrix4f;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -29,7 +19,7 @@ import java.util.function.Consumer;
  * the scene, so the world still hides the drawings. At the end of the level rendering the target is merged back.
  */
 final class Channel implements ExitChannel {
-	private final Identifier id;
+	private final ResourceLocation id;
 	private final ExitOptions options;
 	final int order;
 
@@ -40,19 +30,16 @@ final class Channel implements ExitChannel {
 	private boolean preparedThisFrame;
 	private boolean usedThisFrame;
 	private boolean usedLastFrame;
-	private @Nullable SubmitNodeStorage batch;
-	private final SimpleGizmoCollector gizmos = new SimpleGizmoCollector();
-	/** The gizmos to draw with this frame's batch. Before 26.2 they cannot be submitted to a storage. */
-	private final List<DrawableGizmoPrimitives> gizmoPrimitives = new ArrayList<>();
+	private @Nullable FeatureDrawer.Batch batch;
 
-	Channel(Identifier id, ExitOptions options, int order) {
+	Channel(ResourceLocation id, ExitOptions options, int order) {
 		this.id = id;
 		this.options = options;
 		this.order = order;
 	}
 
 	@Override
-	public Identifier id() {
+	public ResourceLocation id() {
 		return this.id;
 	}
 
@@ -62,7 +49,7 @@ final class Channel implements ExitChannel {
 	}
 
 	@Override
-	public void draw(@Nullable SubmitNodeCollector passThrough, Consumer<ExitContext> drawing) {
+	public void draw(@Nullable MultiBufferSource passThrough, Consumer<ExitContext> drawing) {
 		RenderSystem.assertOnRenderThread();
 		DrawContext outer = ExitRuntime.drawing;
 		if (outer != null) {
@@ -84,8 +71,8 @@ final class Channel implements ExitChannel {
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
 			// Recorded into the batch, so the whole channel is drawn in one frame: solid before translucent.
-			SubmitNodeCollector collector = !routed && passThrough != null ? passThrough : this.batchStorage();
-			this.run(new DrawContext(this, collector, routed, ExitRuntime.camera()), drawing);
+			MultiBufferSource source = !routed && passThrough != null ? passThrough : this.batch();
+			this.run(new DrawContext(this, source, routed, ExitRuntime.camera()), drawing);
 		} finally {
 			ExitRuntime.end();
 		}
@@ -109,15 +96,9 @@ final class Channel implements ExitChannel {
 		if (ExitRuntime.inShadowPass()) {
 			return;
 		}
-		boolean routed = ExitRuntime.begin(this, overrides);
+		ExitRuntime.begin(this, overrides);
 		try {
-			if (routed) {
-				try (Gizmos.TemporaryCollection ignored = Gizmos.withCollector(this.gizmos)) {
-					body.run();
-				}
-			} else {
-				body.run();
-			}
+			body.run();
 		} finally {
 			ExitRuntime.end();
 		}
@@ -129,7 +110,7 @@ final class Channel implements ExitChannel {
 	}
 
 	@Override
-	public SubmitNodeCollector batch(@Nullable SubmitNodeCollector passThrough) {
+	public MultiBufferSource batch(@Nullable MultiBufferSource passThrough) {
 		RenderSystem.assertOnRenderThread();
 		if (!ExitRuntime.inLevel()) {
 			ExitRuntime.warnOnce("batch-outside-level", "EXIT: " + this.id + " asked for its batch outside the level rendering; it is dropped");
@@ -144,9 +125,9 @@ final class Channel implements ExitChannel {
 		return this.batchStorage();
 	}
 
-	private SubmitNodeStorage batchStorage() {
+	private FeatureDrawer.Batch batchStorage() {
 		if (this.batch == null) {
-			this.batch = FeatureDrawer.newStorage();
+			this.batch = FeatureDrawer.newBatch();
 		}
 		return this.batch;
 	}
@@ -159,53 +140,24 @@ final class Channel implements ExitChannel {
 		return this.usedLastFrame || this.usedThisFrame || this.batch != null;
 	}
 
-	/**
-	 * Adds the gizmos collected in portals to the batch. Gizmos that persist stay for later frames. Gizmos that are always
-	 * on top are drawn with the others, after the channel's features, and the depth still hides them.
-	 */
-	int submitGizmos() {
-		List<SimpleGizmoCollector.GizmoInstance> collected = this.gizmos.drainGizmos();
-		if (collected.isEmpty()) {
-			return 0;
-		}
-		long now = Util.getMillis();
-		DrawableGizmoPrimitives standard = new DrawableGizmoPrimitives();
-		DrawableGizmoPrimitives onTop = new DrawableGizmoPrimitives();
-		for (SimpleGizmoCollector.GizmoInstance gizmo : collected) {
-			gizmo.gizmo().emit(gizmo.isAlwaysOnTop() ? onTop : standard, gizmo.getAlphaMultiplier(now));
-		}
-		// The batch is drawn only when it exists.
-		this.batchStorage();
-		this.gizmoPrimitives.add(standard);
-		this.gizmoPrimitives.add(onTop);
-		return collected.size();
-	}
-
 	@Override
 	public void flushBatch() {
 		RenderSystem.assertOnRenderThread();
-		if (ExitRuntime.passesRunning() && !ExitRuntime.inShadowPass() && !Gpu.isInRenderPass()) {
+		if (ExitRuntime.passesRunning() && !ExitRuntime.inShadowPass()) {
 			this.drawBatch();
 		}
 	}
 
 	/** Renders this frame's batch into the channel's target, or into the main target when not routed. */
 	void drawBatch() {
-		SubmitNodeStorage submitted = this.batch;
+		FeatureDrawer.Batch submitted = this.batch;
 		this.batch = null;
-		List<DrawableGizmoPrimitives> primitives = List.copyOf(this.gizmoPrimitives);
-		this.gizmoPrimitives.clear();
 		if (submitted == null) {
 			return;
 		}
-		Consumer<MultiBufferSource> gizmos = primitives.isEmpty() ? null : bufferSource -> {
-			for (DrawableGizmoPrimitives gizmo : primitives) {
-				gizmo.render(new PoseStack(), bufferSource, ExitRuntime.camera(), new Matrix4f(ExitRuntime.viewRotation()));
-			}
-		};
 		boolean routed = ExitRuntime.begin(this, null);
 		try {
-			FeatureDrawer.draw(submitted, routed ? this.prepareForDraw() : Gpu.mainTarget(), gizmos);
+			FeatureDrawer.draw(submitted, routed ? this.prepareForDraw() : Gpu.mainTarget(), routed ? this.translucentDepth() : null);
 		} finally {
 			ExitRuntime.end();
 		}
@@ -294,7 +246,6 @@ final class Channel implements ExitChannel {
 		this.usedThisFrame = false;
 		this.translucentDrawn = false;
 		this.batch = null;
-		this.gizmoPrimitives.clear();
 	}
 
 	void close() {

@@ -1,39 +1,27 @@
 package ml.mypals.exit.mixin;
 
-import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderSystem;
 import ml.mypals.exit.impl.ExitRuntime;
-import net.minecraft.client.Camera;
-import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.state.LevelRenderState;
 import org.joml.Matrix4f;
-import org.joml.Vector4f;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+/**
+ * Marks the level rendering for {@link ExitRuntime} and merges the channels at its end. The render signature changed
+ * across versions, so nothing is captured; the camera, view rotation and projection are read from the game and
+ * {@link RenderSystem} instead.
+ */
 @Mixin(value = LevelRenderer.class, priority = 2000)
 public class LevelRendererMixin {
-	/** One camera state, filled in during the level rendering. */
-	@Shadow
-	@Final
-	private LevelRenderState levelRenderState;
-
 	@Inject(method = "renderLevel", at = @At("HEAD"))
-	private void emergency_exit$beginLevel(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline,
-		Camera camera, Matrix4f modelViewMatrix, Matrix4f projection, Matrix4f cullingProjection, GpuBufferSlice terrainFog, Vector4f fogColor,
-		boolean shouldRenderSky, CallbackInfo ci) {
-		ExitRuntime.beginLevel(this.levelRenderState.cameraRenderState, modelViewMatrix, projection, deltaTracker.getGameTimeDeltaPartialTick(false));
-	}
-
-	@Inject(method = "renderLevel", at = @At(value = "INVOKE",
-		target = "Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;execute(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder$Inspector;)V"))
-	private void emergency_exit$beginPasses(CallbackInfo ci) {
-		ExitRuntime.beginPasses();
+	private void emergency_exit$beginLevel(CallbackInfo ci) {
+		Minecraft client = Minecraft.getInstance();
+		ExitRuntime.beginLevel(client.gameRenderer.getMainCamera(), new Matrix4f(RenderSystem.getModelViewMatrix()),
+			new Matrix4f(RenderSystem.getProjectionMatrix()), client.getFrameTime());
 	}
 
 	@Inject(method = "renderLevel", at = @At("RETURN"))

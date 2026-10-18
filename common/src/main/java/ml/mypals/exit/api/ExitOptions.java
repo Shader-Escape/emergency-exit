@@ -1,6 +1,6 @@
 package ml.mypals.exit.api;
 
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.function.BooleanSupplier;
 
