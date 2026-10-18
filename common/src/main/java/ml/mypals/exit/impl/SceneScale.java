@@ -6,16 +6,15 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.CompareOp;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.exit.compat.IrisCompat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
@@ -27,14 +26,11 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.LightCoordsUtil;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
-import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -220,22 +216,21 @@ final class SceneScale {
 		RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
 		// The pack's program writes to several draw buffers, and a pipeline masks only those it has colour targets for.
 		// So the pipeline has one for each, and the pass leaves all but the first empty.
-		int targets = pipeline.getColorTargetStates().size();
-		List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> colors = new ArrayList<>();
-		colors.add(new RenderPassDescriptor.Attachment<>(main.getColorTextureView(), Optional.empty()));
-		for (int i = 1; i < targets; i++) {
-			colors.add(null);
-		}
+		int targets = pipeline.getColorTargetStates().length;
 		try (GpuBuffer vertices = RenderSystem.getDevice().createBuffer(() -> "emergency_exit scale probe", GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer())) {
-			RenderPassDescriptor descriptor = new RenderPassDescriptor(() -> "emergency_exit scale probe", colors,
-				new RenderPassDescriptor.Attachment<>(main.getDepthTextureView(), OptionalDouble.empty()),
-				new RenderPass.RenderArea(0, 0, main.width, main.height));
+			RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> "emergency_exit scale probe")
+				.withColorAttachment(main.getColorTextureView());
+			for (int i = 1; i < targets; i++) {
+				descriptor.withUnusedColorAttachment();
+			}
+			descriptor.withDepthAttachment(main.getDepthTextureView(), OptionalDouble.empty())
+				.withRenderArea(new RenderPass.RenderArea(0, 0, main.width, main.height));
 			try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
-				pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
+				pass.setPipeline(pipeline);
 				RenderSystem.bindDefaultUniforms(pass);
 				pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms().writeTransform(modelView));
 				for (PreparedRenderType.Texture texture : prepared.textures()) {
-					pass.setUniform(texture.name(), texture.textureView(), texture.sampler());
+					pass.bindTexture(texture.name(), texture.textureView(), texture.sampler());
 				}
 				pass.setVertexBuffer(0, vertices.slice());
 				pass.setIndexBuffer(indices.getBuffer(6), indices.type());
@@ -256,11 +251,10 @@ final class SceneScale {
 
 	private static final class Probe extends RenderPipeline {
 		Probe(RenderPipeline original) {
-			super(ExitMod.id("scale_probe"), original.getShaders(), original.getShaderDefines(), original.getBindGroupLayouts(),
-				noColor(original.getColorTargetStates().getFirst()),
+			super(ExitMod.id("scale_probe"), original.getVertexShader(), original.getFragmentShader(), original.getShaderDefines(),
+				original.getBindGroupLayouts(), noColor(original.getColorTargetStates()[0]),
 				new DepthStencilState(CompareOp.ALWAYS_PASS, true), original.getPolygonMode(), false,
-				original.getVertexFormatBindings().toArray(VertexFormat[]::new), original.getPrimitiveTopology(),
-				original.pushConstantSize(), original.getSortKey());
+				original.getVertexFormatBindings(), original.getPrimitiveTopology(), original.getSortKey());
 		}
 
 		private static ColorTargetState[] noColor(ColorTargetState first) {
