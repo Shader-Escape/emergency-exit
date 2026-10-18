@@ -23,9 +23,7 @@ public final class SceneDepth {
 		if (ExitRuntime.wantsSceneDepth()) {
 			FrameDump.depth("pack-depth-before-hand", Gpu.mainTarget());
 			noHand = copy(noHand, "emergency_exit_depth_no_hand");
-			if (SceneScale.scaled()) {
-				FrameDump.depth("no-hand-aligned", noHand);
-			}
+			FrameDump.depth(SceneScale.scaled() ? "no-hand-aligned" : "no-hand-copy", noHand);
 			noHandReady = true;
 			SceneScale.measureIfNeeded();
 		}
@@ -36,9 +34,7 @@ public final class SceneDepth {
 		if (ExitRuntime.wantsSceneDepth()) {
 			FrameDump.depth("pack-depth-before-translucents", Gpu.mainTarget());
 			opaque = copy(opaque, "emergency_exit_depth_opaque");
-			if (SceneScale.scaled()) {
-				FrameDump.depth("opaque-aligned", opaque);
-			}
+			FrameDump.depth(SceneScale.scaled() ? "opaque-aligned" : "opaque-copy", opaque);
 			opaqueReady = true;
 			// Without a first-person hand there is no beginHand.
 			SceneScale.measureIfNeeded();

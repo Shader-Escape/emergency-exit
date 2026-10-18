@@ -165,6 +165,8 @@ public final class SmokeTest {
 			return;
 		}
 		switch (this.ticksInWorld - this.placedAt) {
+			// The command feedback would cover the screenshots.
+			case 85, 190 -> mc.gui.hud.getChat().clearMessages(false);
 			// Pictures of EXIT's buffers in one frame, in screenshots/exit-frame-dump.
 			case 90 -> FrameDump.arm();
 			case 100 -> {

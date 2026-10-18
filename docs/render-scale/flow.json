@@ -45,11 +45,17 @@
       "kind": "pack",
       "when": "gbuffers",
       "title": "光影画不透明世界",
-      "text": "天空、地形、石头这些不透明的东西。顶点着色器把 xy × 0.75，所以深度缓冲里的东西缩在左下角。",
+      "text": "天空、地形、石头这些不透明的东西。顶点着色器把 xy × 0.75，所以深度缓冲里只有左下角（虚线框）有内容。",
       "imgs": [
         {
           "src": "img/frame/01-pack-depth-before-hand.png",
-          "caption": "光影的深度（缩放空间）"
+          "caption": "光影的深度（缩放空间）",
+          "box": [
+            0,
+            120,
+            640.5,
+            360
+          ]
         }
       ]
     },
@@ -79,7 +85,13 @@
       "imgs": [
         {
           "src": "img/frame/03-pack-depth-before-translucents.png",
-          "caption": "加上手的深度（缩放空间）"
+          "caption": "加上手的深度（缩放空间）",
+          "box": [
+            0,
+            120,
+            640.5,
+            360
+          ]
         }
       ]
     },
@@ -109,7 +121,13 @@
       "imgs": [
         {
           "src": "img/frame/07-main-depth-end.png",
-          "caption": "带玻璃的深度（缩放空间）"
+          "caption": "带玻璃的深度（缩放空间）",
+          "box": [
+            0,
+            120,
+            640.5,
+            360
+          ]
         }
       ]
     },

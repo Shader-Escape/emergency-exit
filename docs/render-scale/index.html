@@ -93,7 +93,7 @@ svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-eve
 svg.edges text { font-family: var(--font-body); font-size: 12px; }
 .node {
   position: relative; z-index: 2; background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px;
-  padding: 0.6rem 0.7rem 0.7rem; display: grid; gap: 0.45rem; align-content: start; min-width: 0;
+  padding: 0.6rem 0.7rem 0.7rem; display: grid; gap: 0.45rem; align-content: start; align-self: start; min-width: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .node[data-kind="pack"] { border-color: var(--pack); }
@@ -131,6 +131,12 @@ dialog.zoom button { justify-self: end; font: inherit; font-size: 0.85rem; backg
 .toolbar button#btn-save { border-color: var(--merge); color: var(--merge); font-weight: 500; }
 .toolbar button:disabled { opacity: 0.5; cursor: default; }
 .toolbar .status { font-size: 0.85rem; color: var(--muted); }
+.variants { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.toolbar .variants button { border: none; border-radius: 0; }
+.toolbar .variants button + button { border-left: 1px solid var(--line); }
+.toolbar .variants button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+.node .boxed { position: relative; }
+.node .region { position: absolute; border: 2px dashed var(--probe); pointer-events: none; box-sizing: border-box; }
 .flow.editing [data-field] { outline: 1px dashed var(--probe); outline-offset: 2px; border-radius: 2px; cursor: text; }
 .flow.editing [data-field]:focus { outline-style: solid; background: var(--code-bg); }
 .flow.editing .imgs img { cursor: default; }
@@ -155,8 +161,9 @@ td.num { font-family: var(--font-mono); }
       要叠得对，EXIT 得知道世界、手、玻璃在哪里，这些信息来自它在光影画到一半时复制下来的深度。
     </p>
     <p class="prose">
-      Kappa 这类光影会把整个场景缩到缓冲左下角 75% 去画（TAAU），所以 EXIT 先量出这个缩放，再把复制的深度放大回全分辨率。
-      下面的流程图就是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
+      场景不一定画满整个缓冲，有两种情况：Kappa 这类光影自己把场景缩到左下角 75% 去画（TAAU），EXIT 先量出这个缩放，再把复制的深度放大回全分辨率；
+      Super Resolution 模组让光影在更小的区域里画、最后再放大，EXIT 直接从 SR 读到场景尺寸，通道和场景一样大，最后拉伸合并。
+      下面的流程图可以在这两种情况之间切换，都是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
     </p>
     <div class="pair">
       <figure>
@@ -177,9 +184,10 @@ td.num { font-family: var(--font-mono); }
       <span><i class="swatch" style="border-color: var(--depth)"></i>深度的复制和使用</span>
       <span><i class="swatch dash" style="border-color: var(--probe)"></i>缩放测量（换光影或改窗口后一次）</span>
       <span><i class="swatch" style="border-color: var(--merge)"></i>合并</span>
-      <span>深度图：越近越白，远处是深蓝；<span style="color: var(--probe)">橙色</span>是标出的区域；棋盘格是透明</span>
+      <span>深度图：越近越白，远处是深蓝；<span style="color: var(--probe)">橙色</span>是标出的区域；橙色虚线框是光影实际画到的区域；棋盘格是透明</span>
     </div>
     <div class="toolbar" role="toolbar" aria-label="流程图操作">
+      <div class="variants" id="variants" role="group" aria-label="场景"></div>
       <button type="button" id="btn-edit" aria-pressed="false">编辑文字</button>
       <button type="button" id="btn-save" hidden>保存</button>
       <button type="button" id="btn-export">导出图片</button>
@@ -190,7 +198,7 @@ td.num { font-family: var(--font-mono); }
         <svg class="edges" id="edges" aria-hidden="true"></svg>
       </div>
     </div>
-    <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出：<code>./gradlew :fabric:runSmokeClient</code>，854×480，光影 Kappa v5.3。</p>
+    <p class="note">点图片可以放大（编辑时不放大）。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出，窗口 854×480：Kappa 用 <code>./gradlew :fabric:runSmokeClient</code> 和 Kappa v5.3；Super Resolution 用 <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code>、Sundial Lite 1.2 和 FSR2（放大倍数 1.21）。</p>
   </section>
 
   <section class="stack" aria-labelledby="scale-title">
@@ -212,6 +220,19 @@ td.num { font-family: var(--font-mono); }
     <p class="prose">
       之后每次复制深度，对全分辨率的每个像素 p，都去光影深度里读第 <code>floor(a·p + b)</code> 个像素。
       BSL、Sundial 测得的 a 约等于 1、偏移不到 1 像素（只是 TAA 抖动），这时不重采样，和以前一样直接复制。
+    </p>
+  </section>
+
+  <section class="stack" aria-labelledby="sr-title">
+    <h2 id="sr-title">Super Resolution 怎么处理</h2>
+    <p class="prose">
+      Super Resolution 也是“场景只画在缓冲的一角”，但它的缩小比例是已知的：EXIT 通过 SR 的接口读到渲染尺寸（这里 854×480 ÷ 1.21 = 705×396）。
+      所以 EXIT 的深度副本和通道都按这个尺寸建，复制时取左下角这一块，像素一一对应，不需要测量，也不需要重采样。
+    </p>
+    <p class="prose">
+      区别在最后一步：光影的成品已经被 SR 放大到整个窗口，而 EXIT 的混合层还是 705×396。
+      合并时（<code>STRETCHED</code>）窗口里每个像素 p 去读混合层的 p × 705/854，把混合层拉伸后盖上去。
+      SR 在用时 EXIT 不画探针，因为探针也会落在这块小区域里，测出来的 0.825 会让场景被缩小两次。
     </p>
   </section>
 
@@ -254,6 +275,14 @@ td.num { font-family: var(--font-mono); }
   const artifactP = use("artifact");
   const downloadsP = use("downloads");
 
+  // 两套流程图：各自一个数据文件。
+  const VARIANTS = [
+    { id: "kappa", file: "flow.json", label: "Kappa（降分辨率光影）" },
+    { id: "sr", file: "flow-sr.json", label: "Super Resolution" },
+  ];
+  const loaded = {};     // id → 数据
+  const changed = {};    // id → 有没保存的修改
+  let current = VARIANTS[0];
   let data = null;
   let editing = false;
   let dirty = false;
@@ -329,15 +358,27 @@ td.num { font-family: var(--font-mono); }
           img.tabIndex = 0;
           img.dataset.cap = n.title + " · " + im.caption;
           let holder = img;
+          const [iw, ih] = im.size || [854, 480];
           if (im.crop) {
             const [x, y, w, h] = im.crop;
             holder = document.createElement("div");
             holder.className = "crop";
             holder.style.aspectRatio = w + " / " + h;
-            img.style.width = (854 / w * 100) + "%";
+            img.style.width = (iw / w * 100) + "%";
             img.style.left = (-x / w * 100) + "%";
             img.style.top = (-y / h * 100) + "%";
             holder.appendChild(img);
+          } else if (im.box) {
+            const [x, y, w, h] = im.box;
+            holder = document.createElement("div");
+            holder.className = "boxed";
+            const region = document.createElement("div");
+            region.className = "region";
+            region.style.left = (x / iw * 100) + "%";
+            region.style.top = (y / ih * 100) + "%";
+            region.style.width = (w / iw * 100) + "%";
+            region.style.height = (h / ih * 100) + "%";
+            holder.append(img, region);
           }
           const cap = document.createElement("figcaption");
           cap.appendChild(el("span", "", base + "imgs." + k + ".caption", im.caption));
@@ -440,6 +481,7 @@ td.num { font-family: var(--font-mono); }
 
   // 把页面上改过的文字写回 data。
   function collect() {
+    if (!data) return;
     flow.querySelectorAll("[data-field]").forEach((e) => {
       const path = e.dataset.field.split(".");
       let target = data;
@@ -451,6 +493,7 @@ td.num { font-family: var(--font-mono); }
 
   flow.addEventListener("input", () => {
     dirty = true;
+    changed[current.id] = true;
     btnSave.hidden = false;
     btnSave.disabled = false;
     setStatus("有没保存的修改");
@@ -490,19 +533,28 @@ td.num { font-family: var(--font-mono); }
 
   btnSave.addEventListener("click", async () => {
     collect();
-    const json = JSON.stringify(data, null, 2) + "\n";
+    const files = {};
+    VARIANTS.forEach((v) => {
+      if (changed[v.id] && loaded[v.id]) files[v.file] = JSON.stringify(loaded[v.id], null, 2) + "\n";
+    });
+    const names = Object.keys(files);
+    if (!names.length) { setStatus("没有要保存的修改"); return; }
     btnSave.disabled = true;
     const artifact = await artifactP;
     if (!artifact) {
-      // 本地打开：下载改好的 flow.json，替换同目录的文件即可。
-      downloadLocally("flow.json", new Blob([json], { type: "application/json" }));
+      // 本地打开：下载改好的文件，替换 docs/render-scale/ 里的同名文件即可。
+      names.forEach((name) => downloadLocally(name, new Blob([files[name]], { type: "application/json" })));
+      VARIANTS.forEach((v) => { changed[v.id] = false; });
       dirty = false;
-      setStatus("已下载 flow.json，用它替换 docs/render-scale/flow.json");
+      setStatus("已下载 " + names.join("、") + "，用它替换 docs/render-scale/ 里的同名文件");
       return;
     }
     setStatus("正在保存…");
     try {
-      await artifact.publish({ "flow.json": { content: json, contentType: "application/json" } });
+      const payload = {};
+      names.forEach((name) => { payload[name] = { content: files[name], contentType: "application/json" }; });
+      await artifact.publish(payload);
+      VARIANTS.forEach((v) => { changed[v.id] = false; });
       dirty = false;
       setStatus("已保存为新版本");
     } catch (e) {
@@ -589,17 +641,40 @@ td.num { font-family: var(--font-mono); }
   document.getElementById("zoom-close").addEventListener("click", () => dialog.close());
   dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
 
-  // ---------- 读数据 ----------
-  fetch("flow.json", { cache: "no-store" })
-    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-    .then((json) => { data = json; render(); })
-    .catch(() => {
-      const msg = document.createElement("p");
-      msg.className = "flow-empty";
-      msg.textContent = "读不到 flow.json。本地查看请用 http 打开这个目录：python -m http.server --directory docs/render-scale，再访问 http://localhost:8000。";
-      flow.appendChild(msg);
-      btnEdit.disabled = true;
-      btnExport.disabled = true;
-    });
+  // ---------- 读数据、切换场景 ----------
+  const variantBox = document.getElementById("variants");
+  VARIANTS.forEach((v) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = v.label;
+    b.dataset.variant = v.id;
+    b.addEventListener("click", () => show(v));
+    variantBox.appendChild(b);
+  });
+
+  function show(v) {
+    if (data) collect();
+    current = v;
+    variantBox.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.variant === v.id)));
+    try { history.replaceState(null, "", "#" + v.id); } catch (e) { /* 有的查看器不让改地址 */ }
+    if (loaded[v.id]) { data = loaded[v.id]; render(); return; }
+    fetch(v.file, { cache: "no-store" })
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((json) => { loaded[v.id] = json; if (current === v) { data = json; render(); } })
+      .catch(() => {
+        flow.querySelectorAll(".lane-bg, .lane-head, .node, .flow-empty").forEach((e) => e.remove());
+        svg.innerHTML = "";
+        data = null;
+        const msg = document.createElement("p");
+        msg.className = "flow-empty";
+        msg.textContent = "读不到 " + v.file + "。本地查看请用 http 打开这个目录：python -m http.server --directory docs/render-scale，再访问 http://localhost:8000。";
+        flow.appendChild(msg);
+      });
+  }
+  show(VARIANTS.find((v) => "#" + v.id === location.hash) || VARIANTS[0]);
+  window.addEventListener("hashchange", () => {
+    const v = VARIANTS.find((x) => "#" + x.id === location.hash);
+    if (v && v !== current) show(v);
+  });
 })();
 </script>
