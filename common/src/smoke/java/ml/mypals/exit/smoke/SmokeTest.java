@@ -178,6 +178,9 @@ public final class SmokeTest {
 		}
 		// The command feedback and the teleport messages of the scenes would cover the middle of every screenshot.
 		mc.gui.getChat().clearMessages(true);
+		// Toasts (tutorial steps, unlocked recipes) sit in the top right corner of the shots otherwise. Clearing them
+		// every tick and not only in screenshot() catches the ones raised while the frame is being drawn.
+		mc.getToasts().clear();
 		switch (this.ticksInWorld - this.placedAt) {
 			case 100 -> {
 				log("scene " + SceneSize.width() + "x" + SceneSize.height() + ", window " + mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight()
@@ -217,7 +220,7 @@ public final class SmokeTest {
 			case 270 -> log("scene water: shapes " + (DebugShapes.toggle(mc.player) ? "on" : "off") + " at " + DebugShapes.center());
 			// Water flows, so it is placed only a few ticks before the screenshot; placed earlier it has spread over
 			// the whole view and the boxes it is meant to cover cannot be told apart from the rest.
-			case 293 -> this.waterWall = fillBetween(mc, 1, -2.5, 0.5, 1, "minecraft:water", "water");
+			case 293 -> this.waterWall = fillBetween(mc, 1, -0.5, 0.5, 0, "minecraft:water", "water");
 			// The translucent-only depth is only worth a screenshot where there are translucent surfaces, so it is
 			// taken here, with the water up, instead of earlier from the side view, which holds none and came out blank.
 			case 294 -> {
@@ -231,38 +234,37 @@ public final class SmokeTest {
 			}
 			case 300 -> screenshot(mc, "water");
 			case 301 -> clearBetween(mc, this.waterWall, "water");
-			case 302 -> {
-				// Hold a block and look left of and above the boxes, so they sit at the bottom right of the view,
-				// where the arm and the held item are.
-				mc.player.connection.sendCommand("give @s minecraft:stone 1");
-				lookAt(mc, DebugShapes.center().subtract(rightOf(mc).scale(2)).add(0, 1.1, 0));
-				log("scene hand: looking past the boxes, holding a block");
-			}
-			case 320 -> screenshot(mc, "hand");
-			case 321 -> {
-				lookAt(mc, DebugShapes.center());
-				log("scene hand: looking at the boxes again");
-			}
-			case 323 -> this.stoneWall = fillBetween(mc, 1, -2.5, 0.5, 1, "minecraft:stone", "wall");
-			case 350 -> screenshot(mc, "wall");
-			case 351 -> clearBetween(mc, this.stoneWall, "wall");
-			case 352 -> {
+			case 302 -> this.stoneWall = fillBetween(mc, 1, -3.0, 3.0, 1, "minecraft:stone", "wall");
+			case 305 -> screenshot(mc, "wall");
+			case 306 -> clearBetween(mc, this.stoneWall, "wall");
+			case 307 -> {
 				this.windowWidth = mc.getWindow().getWidth();
 				this.windowHeight = mc.getWindow().getHeight();
 				GLFW.glfwSetWindowSize(mc.getWindow().getWindow(), 640, 360);
 				log("scene resized: window " + this.windowWidth + "x" + this.windowHeight + " to 640x360");
 			}
-			case 372 -> presented(mc, "resized");
-			case 373 -> {
+			case 327 -> presented(mc, "resized");
+			case 328 -> {
 				GLFW.glfwSetWindowSize(mc.getWindow().getWindow(), this.windowWidth, this.windowHeight);
 				log("scene resized: window back to " + this.windowWidth + "x" + this.windowHeight);
 			}
-			case 374 -> reloadShaderPack();
-			case 393 -> {
+			case 329 -> reloadShaderPack();
+			case 348 -> {
 				if (this.packReloaded) {
 					screenshot(mc, "pack_reloaded");
 				}
 			}
+			// The hand scene comes last: the held block then sits in the corner of this shot only, not of every shot
+			// taken after it. It cannot be put away again reliably (the server owns the inventory), so it is simply
+			// the last thing the suite does.
+			// An empty hand still draws the arm over the bottom right corner, and unlike a given item it brings no
+			// hotbar name label and no "new recipes" toast with it: the server owns the inventory, so a given stack is
+			// re-sent every tick and the label never fades.
+			case 340 -> {
+				lookAt(mc, DebugShapes.center().subtract(rightOf(mc).scale(2)).add(0, 1.1, 0));
+				log("scene hand: looking past the boxes, the arm over the bottom right corner");
+			}
+			case 395 -> screenshot(mc, "hand");
 			default -> {
 			}
 		}
@@ -271,8 +273,9 @@ public final class SmokeTest {
 	/**
 	 * Fills a wall of one block in front of the boxes and returns its block coordinates, or null when it could not be
 	 * placed. The wall is {@code distance} blocks in front of the middle box, runs from {@code fromRight} to
-	 * {@code toRight} blocks along the player's right and {@code halfHeight} blocks up and down. It is kept narrower
-	 * than the row of boxes, so the screenshots show the boxes it covers next to the ones it does not.
+	 * {@code toRight} blocks along the player's right and {@code halfHeight} blocks up and down. The wall scene covers
+	 * every box on purpose: as the blue channel is drawn without a depth test, a wall over the blue box alone looks the
+	 * same as a blue box standing in front of a wall. With all of them behind it, only the blue one is left on screen.
 	 */
 	@Nullable
 	private int[] fillBetween(Minecraft mc, double distance, double fromRight, double toRight, double halfHeight, String block, String scene) {
@@ -358,6 +361,8 @@ public final class SmokeTest {
 	}
 
 	private void screenshot(Minecraft mc, String view) {
+		// The tutorial and recipe toasts sit in the top right corner of every shot otherwise.
+		mc.getToasts().clear();
 		String name = "emergency_exit-smoke-" + VERSION + "-" + loader + "-" + view + ".png";
 		Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(), message -> log("screenshot " + name));
 	}
