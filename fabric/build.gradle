@@ -25,6 +25,12 @@ dependencies {
     }
 }
 
+// Loom publishes the remapped sources jar with the 'sources' classifier. The Mojang-named one it is made from would
+// clash with it in the publication, so it gets a classifier of its own, like the dev jar.
+tasks.named('sourcesJar', Jar) {
+    archiveClassifier = 'dev-sources'
+}
+
 // Development mod that checks every mixin applies. Run it with runAuditClient.
 sourceSets.create('audit') {
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
