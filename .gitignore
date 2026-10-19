@@ -43,3 +43,6 @@ replay_*.log
 .allomos/
 /AGENTS.md
 /CLAUDE.md
+
+# per-version worktrees (scripts/publish-all.sh)
+/worktrees/
