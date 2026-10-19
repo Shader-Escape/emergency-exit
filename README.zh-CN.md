@@ -278,3 +278,8 @@ xray.draw(...); xray.portal(...); xray.redirect(fb); xray.batch(); xray.flushBat
   里设 `upscale_algo = "fsr2"`（其它算法在这个环境下不能正常放大）。冒烟测试另外保存 `*-presented.png`：窗口前缓冲，
   即玩家实际看到的画面（用 SR 时主目标不是最终呈现的画面）。
 * `./gradlew publishToMavenLocal`：发布到本地 Maven，供其它 mod 的开发环境使用。
+
+## 贡献者
+
+* [hotpad100c](https://github.com/hotpad100c)（Ryan100C）：作者。
+* [wwwzzzxxx](https://github.com/wwwzzzxxx)：移植到 Minecraft 1.16.5 至 1.20.6。

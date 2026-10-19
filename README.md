@@ -228,3 +228,8 @@ The project has three subprojects. `common` holds all loader-independent code (A
 * `./gradlew :fabric:runAuditClient` checks that every mixin applies (Fabric only).
 * `./gradlew :fabric:runSmokeClient -Pexit.superResolution` (on the versions where development runs can load SR, see ChangeLog) does the same with the Super Resolution mod loaded (only in development runs). It checks the stretched merge in the passes for packs SR supports (for example Sundial Lite; SR stays off with BSL), and sets `upscale_algo = "fsr2"` in `run/fabric/config/super_resolution/config.toml` (the other algorithms don't upscale properly in this environment). The smoke test also saves `*-presented.png`, the window's front buffer, which is what the player actually sees. When SR is in use, the main target is not the final picture.
 * `./gradlew publishToMavenLocal` publishes both jars to the local Maven repository for other mods' development setups.
+
+## Contributors
+
+* [hotpad100c](https://github.com/hotpad100c) (Ryan100C): author.
+* [wwwzzzxxx](https://github.com/wwwzzzxxx): ports to Minecraft 1.16.5 through 1.20.6.
