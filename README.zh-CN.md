@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-Emergency Exit（应急c出口） 是一个渲染类库。它旨在提供便捷的方式，协助模组的自定义渲染逃离由Iris模组加载的ShaderPack（光影包）的魔爪。
+Emergency Exit（应急出口） 是一个渲染类库。它旨在提供便捷的方式，协助模组的自定义渲染逃离由Iris模组加载的ShaderPack（光影包）的魔爪。
 
 该库以Minecraft26.3为原点向下移植，支持直到1.16.5的主要常见版本，支持Fabric与Neoforge。
 
