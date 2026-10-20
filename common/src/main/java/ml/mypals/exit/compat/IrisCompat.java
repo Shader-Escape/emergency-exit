@@ -32,6 +32,20 @@ public final class IrisCompat {
 		}
 	}
 
+	/**
+	 * Whether vertex formats set up their layout in Iris's widened format, as a vertex buffer does when it is uploaded.
+	 * Global, not per thread.
+	 */
+	public static boolean renderWithExtendedVertexFormat() {
+		return LOADED && IrisHooks.renderWithExtendedVertexFormat();
+	}
+
+	public static void setRenderWithExtendedVertexFormat(boolean extended) {
+		if (LOADED) {
+			IrisHooks.setRenderWithExtendedVertexFormat(extended);
+		}
+	}
+
 	/** Iris only widens vertex formats while the level is being rendered. */
 	public static boolean isRenderingLevel() {
 		return LOADED && IrisHooks.isRenderingLevel();
