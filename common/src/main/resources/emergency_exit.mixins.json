@@ -9,7 +9,9 @@
     "PortalPassMixin",
     "RenderPipelinesAccessor",
     "StrictValidationMixin",
-    "iris.IrisRenderingPipelineMixin"
+    "iris.IrisRenderingPipelineMixin",
+    "iris.PlainFormatPipelineMixin",
+    "iris.PlainFormatRenderTypeMixin"
   ],
   "injectors": {
     "defaultRequire": 1
