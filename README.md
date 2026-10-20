@@ -1,6 +1,7 @@
 > Please note that AI was indeed involved in the development of this library. It was used to:
 >
-> - Assist with extracting the core rendering logic from LitematicaPass
+> - Write documentation comments for the API interfaces
+> - Assist with extracting the core rendering logic from mod LitematicaPass
 > - Port the implementation to older versions
 > 
 > However, this does **not** mean that:
