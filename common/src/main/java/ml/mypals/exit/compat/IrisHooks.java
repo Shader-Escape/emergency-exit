@@ -33,6 +33,14 @@ final class IrisHooks {
 		return ImmediateState.isRenderingLevel;
 	}
 
+	static boolean extendedVertexFormat() {
+		return ImmediateState.renderWithExtendedVertexFormat;
+	}
+
+	static void setExtendedVertexFormat(boolean extended) {
+		ImmediateState.renderWithExtendedVertexFormat = extended;
+	}
+
 	static void setRenderingLevel(boolean renderingLevel) {
 		ImmediateState.isRenderingLevel = renderingLevel;
 	}

@@ -43,6 +43,17 @@ public final class IrisCompat {
 		}
 	}
 
+	/** Iris 1.8 also changes VAO attribute strides through a separate render-thread switch. */
+	public static boolean extendedVertexFormat() {
+		return LOADED && IrisHooks.extendedVertexFormat();
+	}
+
+	public static void setExtendedVertexFormat(boolean extended) {
+		if (LOADED) {
+			IrisHooks.setExtendedVertexFormat(extended);
+		}
+	}
+
 	/** The shader pack's rendering pipeline, or null. A new one is made whenever the pack or its options change. */
 	public static @Nullable Object pipeline() {
 		return LOADED ? IrisHooks.pipeline() : null;
