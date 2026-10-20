@@ -70,6 +70,12 @@ dependencies {
 }
 
 // Development mod that checks every mixin applies. Run it with runAuditClient.
+// The resource loader of this Fabric API reads a mod's assets from one root path only, so in the development runs the
+// resources go next to the classes.
+sourceSets.configureEach {
+    output.resourcesDir = java.destinationDirectory
+}
+
 sourceSets.create('audit') {
     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
     runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
