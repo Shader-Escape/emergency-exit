@@ -7,20 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* 布局：正文一列；中间是一张四泳道的大流程图（可横向滚动），节点里嵌截图。
-   这是一个纯静态页面：双击文件就能打开，不需要 http 服务器。
-   编辑说明：
-   - 三张流程图的数据以同目录的 flow-bsl.json、flow.json（Kappa）、flow-sr.json 为准，
-     英文版的数据在 flow-bsl-en.json、flow-en.json、flow-sr-en.json，对应 id 为 flow-<id>-en 的 JSON 块，
-     和中文一样由 inline-flow.py 写进页面；
-     复制在本文件末尾的 <script type="application/json"> 里（id 为 flow-bsl、flow-kappa、flow-sr），页面只读这里。
-   - 改数据：改 JSON 文件，或用 edit.html 在页面上改（要 http 打开，见它的顶部注释），
-     然后运行 python docs/render-scale/inline-flow.py 把 JSON 写进本文件。不要直接改这里的 JSON 块，下次运行会被覆盖。
-   - 图片在 img/ 下（img/frame/ 是 Kappa，img/sr/、img/bsl/ 是另两种），用相对路径引用，
-     由冒烟测试的 FrameDump 生成（run/fabric/screenshots/exit-frame-dump）。
-   - 字体从 Google Fonts 加载，离线时退回系统字体。
-   - 以前的“导出图片”去掉了：file:// 下浏览器不让脚本读取本地截图（CORS），画到 canvas 上也会被污染，导不出 PNG。
-     要一张流程图的整图，用浏览器自带的截图功能（如 Edge/Chrome 开发者工具的“截取节点屏幕截图”）。 */
+
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -81,14 +68,12 @@ figcaption { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
 .tag.bad { color: var(--bad); }
 .tag.good { color: var(--merge); }
 
-/* 图例 */
 .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.88rem; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
 .swatch { width: 1.6rem; height: 0; border-top: 2.5px solid; display: inline-block; }
 .swatch.dash { border-top-style: dashed; }
 .chip { width: 0.9rem; height: 0.9rem; border-radius: 3px; display: inline-block; border: 1px solid var(--line); }
 
-/* ===== 流程图 ===== */
 .flow-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .flow {
   position: relative; min-width: 84rem; padding: 0.75rem;
@@ -165,41 +150,6 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     <div class="toolbar">
       <div class="variants" id="langs" role="group" aria-label="Language"><button type="button" data-lang="en">English</button><button type="button" data-lang="zh">中文</button></div>
     </div>
-    <p class="eyebrow">EXIT · Minecraft 26.3 · Iris · Kappa v5.3</p>
-    <h1 lang="en">One frame of EXIT around a shader pack</h1>
-    <h1 lang="zh-CN">EXIT 绕过光影的一帧</h1>
-    <p class="prose" lang="en">
-      With shaders on, what the mod draws itself (here, four coloured blocks) would be lit, fogged and smeared by TAA if it were handed to the pack to draw.
-      EXIT's approach: let the pack draw the whole world as usual, draw the mod's objects with vanilla shaders into EXIT's own "channels", and finally lay them back over the pack's finished image by depth.
-      To lay them in the right place, EXIT needs to know where the world, the hand and the glass are. That comes from a copy of the depth it takes while the pack is halfway through the frame.
-    </p>
-    <p class="prose" lang="zh-CN">
-      开着光影时，模组自己画的东西（这里是四个彩色方块）如果交给光影去画，会被光影的光照、雾、TAA 改得面目全非。
-      EXIT 的做法是：让光影照常画完整个世界，模组的东西则用原版着色器画进 EXIT 自己的“通道”，最后再按深度叠回光影的成品画面上。
-      要叠得对，EXIT 得知道世界、手、玻璃在哪里，这些信息来自它在光影画到一半时复制下来的深度。
-    </p>
-    <p class="prose" lang="en">
-      The scene does not always fill the whole buffer, and there are two cases. Packs like Kappa shrink the scene into the lower-left 75% and draw it there (TAAU); EXIT measures that scale first, then scales the copied depth back to full resolution.
-      Super Resolution mods have the pack draw into a smaller area and upscale at the end; EXIT reads the scene size straight from SR, and its channels are the same size as the scene, so they are stretched when merged.
-      The flowchart below switches between a normal shader pack (BSL, which fills the whole buffer) and these two cases. Every picture is a real frame from the smoke test, and each picture in a node is what the buffer held at that moment.
-    </p>
-    <p class="prose" lang="zh-CN">
-      场景不一定画满整个缓冲，有两种情况：Kappa 这类光影自己把场景缩到左下角 75% 去画（TAAU），EXIT 先量出这个缩放，再把复制的深度放大回全分辨率；
-      Super Resolution 模组让光影在更小的区域里画、最后再放大，EXIT 直接从 SR 读到场景尺寸，通道和场景一样大，最后拉伸合并。
-      下面的流程图可以在普通光影（BSL，画满整个缓冲）和这两种情况之间切换，都是冒烟测试里真实的一帧，每个节点里的图都是那一刻缓冲里的内容。
-    </p>
-    <div class="pair">
-      <figure>
-        <img src="img/before-normal.png" alt="" data-alt-zh="不做缩放对齐：红色方块画在右边石头上面，绿色方块在玻璃后面没有变暗" data-alt-en="Without scale alignment: the red block is drawn over the right stone, and the green block behind the glass is not darkened">
-        <figcaption lang="en"><span class="tag bad">no alignment</span>The right stone does not hide the red block; the green block behind the pale blue glass is not darkened.</figcaption>
-        <figcaption lang="zh-CN"><span class="tag bad">不对齐缩放</span>右边石头挡不住红色方块；绿色方块在浅蓝玻璃后面也没有变暗。</figcaption>
-      </figure>
-      <figure>
-        <img src="img/frame/32-final.png" alt="" data-alt-zh="对齐后：石头挡住红色方块的右下角，绿色方块在玻璃后面的部分变暗" data-alt-en="After alignment: the stone hides the lower-right corner of the red block, and the part of the green block behind the glass is darkened">
-        <figcaption lang="en"><span class="tag good">aligned</span>The stone hides the lower-right corner of the red block; the part of the green block covered by glass is darkened to 50%; the blue block uses the see-through channel and shows through the stone as usual; the hand is in front.</figcaption>
-        <figcaption lang="zh-CN"><span class="tag good">对齐后</span>石头挡住红色方块的右下角；绿色方块被玻璃盖住的部分变暗到 50%；蓝色方块走透视通道，穿过石头照常显示；手在最前面。</figcaption>
-      </figure>
-    </div>
   </header>
 
   <section class="stack" aria-labelledby="flow-title">
@@ -224,84 +174,6 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     <p class="note" lang="zh-CN">点图片可以放大。窄屏上流程图可以左右滑动。图片由冒烟测试里的 <code>FrameDump</code> 从同一帧导出，窗口 854×480：普通光影用 <code>./gradlew :fabric:runSmokeClient</code> 和 BSL v8.4；Kappa 用 <code>./gradlew :fabric:runSmokeClient</code> 和 Kappa v5.3；Super Resolution 用 <code>./gradlew :fabric:runSmokeClient -Pexit.superResolution</code>、Sundial Lite 1.2 和 FSR2（放大倍数 1.21）。</p>
   </section>
 
-  <section class="stack" aria-labelledby="scale-title">
-    <h2 id="scale-title"><span lang="en">How the scale is measured</span><span lang="zh-CN">缩放是怎么量出来的</span></h2>
-    <p class="prose" lang="en">
-      EXIT does not know how the pack transforms vertices, so it has the pack draw a quad whose position EXIT does know: computed with the vanilla projection, it covers the middle 90% of the screen (clip coordinates ±0.9).
-      It draws with a copy of vanilla's <code>ENTITY_SOLID</code> pipeline. Iris swaps in the pack's own program, so the vertices are still scaled.
-      The copy writes no colour and restores the depth right after drawing, so the pack never sees it. Comparing the depth before and after drawing shows where the quad actually landed (the probe mask in the flowchart).
-    </p>
-    <p class="prose" lang="zh-CN">
-      EXIT 不知道光影怎么变换顶点，所以让光影自己画一个 EXIT 知道位置的四边形：按原版投影算好，正好覆盖屏幕中间 90%（裁剪坐标 ±0.9）。
-      它用原版 <code>ENTITY_SOLID</code> 管线的副本去画，Iris 会换成光影自己的程序，所以顶点照样被缩放。
-      这个副本不写任何颜色，画完立刻把深度复原，光影看不到它。比较画前画后的深度，变了的地方就是四边形实际落在哪里（流程图里的探针掩码）。
-    </p>
-    <div class="table-wrap" lang="en">
-      <table>
-        <thead><tr><th>Axis</th><th>Expected (px)</th><th>Measured (px)</th><th>Scale a</th><th>Offset b</th></tr></thead>
-        <tbody>
-          <tr><td>x</td><td class="num">42.7 – 811.3</td><td class="num">32 – 609</td><td class="num">577 ÷ 768.6 = 0.7507</td><td class="num">≈ −0.06</td></tr>
-          <tr><td>y</td><td class="num">24 – 456</td><td class="num">18 – 342</td><td class="num">324 ÷ 432 = 0.75</td><td class="num">0</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="table-wrap" lang="zh-CN">
-      <table>
-        <thead><tr><th>轴</th><th>应在（像素）</th><th>测到（像素）</th><th>缩放 a</th><th>偏移 b</th></tr></thead>
-        <tbody>
-          <tr><td>x</td><td class="num">42.7 – 811.3</td><td class="num">32 – 609</td><td class="num">577 ÷ 768.6 = 0.7507</td><td class="num">≈ −0.06</td></tr>
-          <tr><td>y</td><td class="num">24 – 456</td><td class="num">18 – 342</td><td class="num">324 ÷ 432 = 0.75</td><td class="num">0</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="prose" lang="en">
-      After that, each depth copy reads, for every full-resolution pixel p, pixel <code>floor(a·p + b)</code> of the pack's depth.
-      For BSL and Sundial, a is about 1 and the offset is under one pixel (only TAA jitter), so no resampling is done and the copy is direct, as before.
-    </p>
-    <p class="prose" lang="zh-CN">
-      之后每次复制深度，对全分辨率的每个像素 p，都去光影深度里读第 <code>floor(a·p + b)</code> 个像素。
-      BSL、Sundial 测得的 a 约等于 1、偏移不到 1 像素（只是 TAA 抖动），这时不重采样，和以前一样直接复制。
-    </p>
-  </section>
-
-  <section class="stack" aria-labelledby="sr-title">
-    <h2 id="sr-title"><span lang="en">How Super Resolution is handled</span><span lang="zh-CN">Super Resolution 怎么处理</span></h2>
-    <p class="prose" lang="en">
-      Super Resolution also has the scene drawn into one corner of the buffer, but its downscale ratio is known: EXIT reads the render size from SR's interface (here 854×480 ÷ 1.21 = 705×396).
-      So EXIT's depth copy and channels are both allocated at that size, and the copy takes the lower-left block. Pixels map one-to-one, so no measurement or resampling is needed.
-    </p>
-    <p class="prose" lang="zh-CN">
-      Super Resolution 也是“场景只画在缓冲的一角”，但它的缩小比例是已知的：EXIT 通过 SR 的接口读到渲染尺寸（这里 854×480 ÷ 1.21 = 705×396）。
-      所以 EXIT 的深度副本和通道都按这个尺寸建，复制时取左下角这一块，像素一一对应，不需要测量，也不需要重采样。
-    </p>
-    <p class="prose" lang="en">
-      The difference is in the last step: the pack's finished image has been upscaled by SR to the whole window, but EXIT's blend layer is still 705×396.
-      When merging (<code>STRETCHED</code>), each window pixel p reads the blend layer at p × 705/854, stretching the layer over the image.
-      While SR is in use, EXIT does not draw the probe: it would land in this small area too, and the measured 0.825 would shrink the scene twice.
-    </p>
-    <p class="prose" lang="zh-CN">
-      区别在最后一步：光影的成品已经被 SR 放大到整个窗口，而 EXIT 的混合层还是 705×396。
-      合并时（<code>STRETCHED</code>）窗口里每个像素 p 去读混合层的 p × 705/854，把混合层拉伸后盖上去。
-      SR 在用时 EXIT 不画探针，因为探针也会落在这块小区域里，测出来的 0.825 会让场景被缩小两次。
-    </p>
-  </section>
-
-  <section class="stack prose" aria-labelledby="limits-title">
-    <h2 id="limits-title"><span lang="en">Limitations</span><span lang="zh-CN">限制</span></h2>
-    <ul class="plain" lang="en">
-      <li>Only handles "scale + offset" vertex transforms; arbitrary transforms, such as curved worlds, are not handled.</li>
-      <li>Measured once, after the pipeline or window size changes; a resolution change inside the same pipeline is not detected.</li>
-      <li>No measurement while Super Resolution is installed; using SR and a TAAU pack together is not handled.</li>
-      <li>Aerixium SFA PTGI has not been verified locally; NeoForge has only been compiled; Vulkan can only be verified once Iris supports it.</li>
-    </ul>
-    <ul class="plain" lang="zh-CN">
-      <li>只能处理“缩放 + 平移”这一类顶点变换；弯曲世界之类的任意变换处理不了。</li>
-      <li>只在光影管线或窗口尺寸变化后测一次；同一个管线里动态改分辨率不会被发现。</li>
-      <li>装了 Super Resolution 时不测量；SR 和 TAAU 光影同时用没有处理。</li>
-      <li>Aerixium SFA PTGI 没有本地验证；NeoForge 只编译过；Vulkan 要等 Iris 支持后才能实际验证。</li>
-    </ul>
-  </section>
-
   <dialog class="zoom" id="zoom">
     <figure>
       <button type="button" id="zoom-close">关闭</button>
@@ -311,11 +183,6 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
   </dialog>
 </main>
 
-<!-- 流程图数据：每张图一个 JSON 块，lanes（泳道）、nodes（节点）、edges（连线）。
-     节点：lane 1–4，row 从 2 开始往下，kind 决定边框颜色（pack / depth / probe / channel / merge），
-     imgs 里每张图可带 crop: [x, y, 宽, 高]（截图像素，854×480，原点左上角），只影响节点里的小图；
-     box: [x, y, 宽, 高] 在图上画橙色虚线框；size: [宽, 高] 是截图尺寸（默认 854×480）。
-     text 里可以用 <code>…</code>，其他标签会被去掉。JSON 里不能出现 "</script"。 -->
 <script type="application/json" id="flow-bsl-en">
 {
   "lanes": [
@@ -3880,7 +3747,6 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
   const COLOR = { pack: "var(--pack)", depth: "var(--depth)", probe: "var(--probe)", merge: "var(--merge)" };
   const NS = "http://www.w3.org/2000/svg";
 
-  // 三套流程图：数据在上面对应 id 的 JSON 块里（中文是 flow-<id>，英文是 flow-<id>-en）。
   const VARIANTS = [
     { id: "bsl", label: { en: "Normal shader pack (BSL)", zh: "普通光影（BSL）" } },
     { id: "kappa", label: { en: "Render-scaled pack (Kappa)", zh: "降分辨率光影（Kappa）" } },
@@ -3891,7 +3757,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     en: { title: "One frame of EXIT around a shader pack", zoomClose: "Close", invalid: " data is not valid JSON: ", detail: " (detail)", flowAria: "Flowchart controls", sceneAria: "Scene", langAria: "Language" },
     zh: { title: "EXIT 绕过光影的一帧", zoomClose: "关闭", invalid: " 的数据不是合法的 JSON：", detail: "（局部）", flowAria: "流程图操作", sceneAria: "场景", langAria: "语言" },
   };
-  const loaded = {};     // 数据块 id → 数据
+  const loaded = {}; 
   let current = null;
   let data = null;
   let lang = "zh";
@@ -3901,7 +3767,6 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // 只保留文字和 <code>，其他标签只留文字。
   function cleanRich(source) {
     let out = "";
     source.childNodes.forEach((n) => {
@@ -4030,14 +3895,14 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
       const B = { l: rb.left - box.left, r: rb.right - box.left, t: rb.top - box.top, b: rb.bottom - box.top };
       let x1, y1, x2, y2, d;
       if (A.b > B.t && B.b > A.t) {
-        // 同一行：从侧面连到侧面
+
         const right = B.l >= A.r;
         x1 = right ? A.r : A.l; y1 = Math.min(A.t + 40, A.b - 10);
         x2 = right ? B.l : B.r; y2 = Math.min(B.t + 40, B.b - 10);
         const k = (x2 - x1) / 2;
         d = "M" + x1 + "," + y1 + " C" + (x1 + k) + "," + y1 + " " + (x2 - k) + "," + y2 + " " + x2 + "," + y2;
       } else if (B.t >= A.b) {
-        // 往下：从底边连到顶边，跨泳道时从靠近目标的一侧出发
+
         x2 = (B.l + B.r) / 2; y2 = B.t; y1 = A.b;
         x1 = (A.l + A.r) / 2;
         if (Math.abs(x1 - x2) > 20) x1 = x2 > x1 ? A.r - 24 : A.l + 24;
@@ -4075,7 +3940,7 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
   window.addEventListener("resize", schedule);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
 
-  // ---------- 点图放大 ----------
+
   const dialog = document.getElementById("zoom");
   const zImg = document.getElementById("zoom-img");
   const zCap = document.getElementById("zoom-cap");
@@ -4137,13 +4002,12 @@ html[data-lang="en"] [lang="zh-CN"], html[data-lang="zh"] [lang="en"] { display:
 
   langBox.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
     lang = b.dataset.lang;
-    try { localStorage.setItem("exit-docs-lang", lang); } catch (e) { /* 私密窗口里可能写不了 */ }
+    try { localStorage.setItem("exit-docs-lang", lang); } catch (e) {  }
     Object.keys(loaded).forEach((k) => delete loaded[k]);
     applyLang();
     if (current) show(current);
   }));
 
-  // 语言：记住的选择优先；否则看浏览器语言是不是中文。
   try { lang = localStorage.getItem("exit-docs-lang") || ""; } catch (e) { lang = ""; }
   if (lang !== "en" && lang !== "zh") lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
   applyLang();
