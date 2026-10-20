@@ -17,6 +17,7 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -71,6 +72,12 @@ public final class SmokeTest {
 
 	private final List<String> phases = new ArrayList<>();
 	private final List<String> failedPhases = new ArrayList<>();
+	/**
+	 * Whether the magenta block and the cyan pig, built in vanilla formats on a worker thread and uploaded outside a
+	 * portal, showed where they belong in this phase's presented frame. With a mismatched vertex format they become
+	 * scattered triangles.
+	 */
+	private boolean meshesSeen;
 	private int phase;
 	/** Where the player stood when the shapes were placed, as a teleport target. */
 	private String frontView = "";
@@ -181,7 +188,7 @@ public final class SmokeTest {
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				this.screenshot(mc, name, "normal");
 			}
-			case 102 -> this.presented(mc, name, "presented");
+			case 102 -> this.meshesSeen = meshesSeen(this.presented(mc, name, "presented"));
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
 			case 115 -> this.screenshot(mc, name, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
@@ -255,8 +262,11 @@ public final class SmokeTest {
 		log("phase " + pack + ": shader pack in use: " + packInUse + ", frames composited by EXIT: " + d[0]
 			+ ", drawings: " + d[1] + " (routed: " + d[2] + "), batches: " + d[3] + ", portals: " + d[4]
 			+ " (passes moved into the channel: " + d[5] + "), portal/routing mismatches: " + d[6]
-			+ ", frames blending channels by depth: " + d[7] + ", Iris shadow callbacks: " + d[8] + ", gizmos moved into channels: " + d[9]);
+			+ ", frames blending channels by depth: " + d[7] + ", Iris shadow callbacks: " + d[8] + ", gizmos moved into channels: " + d[9]
+			+ ", vertex format meshes drawn: " + d[10] + " (seen: " + this.meshesSeen + ")");
+		boolean shapes = !Boolean.getBoolean("emergency_exit.smoke.noShapes");
 		boolean ok = packInUse == wantPack && d[1] > 0 && d[3] > 0 && d[4] > 0 && d[6] == 0
+			&& (d[10] > 0 && this.meshesSeen || !shapes)
 			&& (packInUse ? d[0] > 0 && d[2] > 0 && d[5] > 0 && d[7] > 0 && d[8] > 0 && d[9] > 0 : d[0] == 0 && d[2] == 0 && d[5] == 0);
 		log("phase " + pack + ": " + (ok ? "OK" : "FAILED"));
 		if (!ok) {
@@ -285,7 +295,7 @@ public final class SmokeTest {
 	private static long[] counters() {
 		DebugShapes.Stats stats = DebugShapes.stats();
 		return new long[] {ExitRuntime.compositedFrames(), stats.draws, stats.routedDraws, stats.batchDraws, stats.portalDraws,
-			stats.portalRedirectedPasses, stats.portalRoutingMismatches, ExitRuntime.blendedFrames(), shadowCallbacks, ExitRuntime.redirectedGizmos()};
+			stats.portalRedirectedPasses, stats.portalRoutingMismatches, ExitRuntime.blendedFrames(), shadowCallbacks, ExitRuntime.redirectedGizmos(), stats.meshDraws};
 	}
 
 	/**
@@ -340,7 +350,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc, String pack, String view) {
+	private BufferedImage presented(Minecraft mc, String pack, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -367,6 +377,32 @@ public final class SmokeTest {
 		} catch (IOException e) {
 			log("could not save " + name + ": " + e);
 		}
+		return image;
+	}
+
+	/** Whether the block shows magenta and the pig cyan, at the centres DebugMeshes projected. */
+	private static boolean meshesSeen(BufferedImage image) {
+		DebugShapes.Stats stats = DebugShapes.stats();
+		int block = pixel(image, stats.blockOnScreen);
+		int pig = pixel(image, stats.pigOnScreen);
+		log(String.format(Locale.ROOT, "block pixel #%06x, pig pixel #%06x", block & 0xFFFFFF, pig & 0xFFFFFF));
+		int r = block >> 16 & 0xFF;
+		int g = block >> 8 & 0xFF;
+		int b = block & 0xFF;
+		boolean magenta = r > 100 && b > 100 && g + 40 < Math.min(r, b);
+		r = pig >> 16 & 0xFF;
+		g = pig >> 8 & 0xFF;
+		b = pig & 0xFF;
+		boolean cyan = g > 80 && b > 80 && r + 40 < Math.min(g, b);
+		return magenta && cyan;
+	}
+
+	/** The pixel at a position in fractions of the image size, or black when there is none. */
+	private static int pixel(BufferedImage image, float @Nullable [] at) {
+		if (at == null || at[0] < 0 || at[0] >= 1 || at[1] < 0 || at[1] >= 1) {
+			return 0;
+		}
+		return image.getRGB((int) (at[0] * image.getWidth()), (int) (at[1] * image.getHeight()));
 	}
 
 	private static void deleteOldWorld() {
