@@ -14,6 +14,7 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -169,7 +170,7 @@ public final class SmokeTest {
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				screenshot(mc, "normal");
 			}
-			case 102 -> presented(mc, "presented");
+			case 102 -> logMeshes(presented(mc, "presented"));
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
 			case 115 -> screenshot(mc, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
@@ -209,7 +210,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc, String view) {
+	private BufferedImage presented(Minecraft mc, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -234,6 +235,35 @@ public final class SmokeTest {
 		} catch (IOException e) {
 			log("could not save " + name + ": " + e);
 		}
+		return image;
+	}
+
+	/**
+	 * Logs whether the magenta block and the cyan pig, built in vanilla formats and uploaded outside a portal, showed
+	 * where they belong in the presented frame. With a mismatched vertex format they become scattered triangles.
+	 */
+	private static void logMeshes(BufferedImage image) {
+		DebugShapes.Stats stats = DebugShapes.stats();
+		int block = pixel(image, stats.blockOnScreen);
+		int pig = pixel(image, stats.pigOnScreen);
+		int r = block >> 16 & 0xFF;
+		int g = block >> 8 & 0xFF;
+		int b = block & 0xFF;
+		boolean magenta = r > 100 && b > 100 && g + 40 < Math.min(r, b);
+		r = pig >> 16 & 0xFF;
+		g = pig >> 8 & 0xFF;
+		b = pig & 0xFF;
+		boolean cyan = g > 80 && b > 80 && r + 40 < Math.min(g, b);
+		log(String.format(Locale.ROOT, "vertex format meshes built: %d, drawn: %d, block pixel #%06x, pig pixel #%06x, seen: %b",
+			stats.meshBuilds, stats.meshDraws, block & 0xFFFFFF, pig & 0xFFFFFF, magenta && cyan));
+	}
+
+	/** The pixel at a position in fractions of the image size, or black when there is none. */
+	private static int pixel(BufferedImage image, float @Nullable [] at) {
+		if (at == null || at[0] < 0 || at[0] >= 1 || at[1] < 0 || at[1] >= 1) {
+			return 0;
+		}
+		return image.getRGB((int) (at[0] * image.getWidth()), (int) (at[1] * image.getHeight()));
 	}
 
 	private static void deleteOldWorld() {
