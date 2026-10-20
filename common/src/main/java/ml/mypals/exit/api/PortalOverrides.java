@@ -5,14 +5,14 @@ package ml.mypals.exit.api;
  *
  * @param bypass         {@code ImmediateState.bypass}. The shader pack does not replace vanilla pipelines.
  * @param skipExtension  {@code ImmediateState.skipExtension}, per thread. Vertex buffers built now keep the vanilla
- *                       formats. Iris for 26.2 has no such switch and hands out its widened formats as the vanilla
- *                       ones, so on 26.2 it does nothing.
+ *                       formats, and so do the vanilla pipelines on this thread.
  * @param renderingLevel {@code ImmediateState.isRenderingLevel}. While it is on, Iris widens the formats of vertices
- *                       written by the submit pipeline.
+ *                       written by the submit pipeline, and the vanilla pipelines draw with the widened formats. Buffers
+ *                       built with {@link Exit#plainFormat} only draw right while it is off.
  */
 public record PortalOverrides(Switch bypass, Switch skipExtension, Switch renderingLevel) {
-	/** Bypass on, format widening off, {@code isRenderingLevel} unchanged. */
-	public static final PortalOverrides DEFAULT = new PortalOverrides(Switch.ON, Switch.ON, Switch.KEEP);
+	/** Bypass on, format widening off, {@code isRenderingLevel} off. */
+	public static final PortalOverrides DEFAULT = new PortalOverrides(Switch.ON, Switch.ON, Switch.OFF);
 
 	public PortalOverrides {
 		if (bypass == null || skipExtension == null || renderingLevel == null) {
