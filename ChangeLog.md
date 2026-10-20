@@ -33,6 +33,8 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 **使用**
 - Maven `ml.mypals.exit:emergency_exit-<加载器>:0.1.0+26.2`。事件和 API 同 26.3（见 README）。
+- `PortalOverrides.DEFAULT` 把 `renderingLevel` 设为 `OFF`（26.3 是 `KEEP`），更旧的分支也一样，原因见下面的 **Iris**。
+  在 portal 里画 `Exit.plainFormat` 里建的缓冲时，`renderingLevel` 要保持关着。
 
 **包名**
 - 渲染 API 还在 `com.mojang.blaze3d`，没有 `com.mojang.renderpearl`。例如 `RenderPass`、`RenderPassDescriptor` 在
@@ -63,8 +65,15 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - `CameraRenderState` 没有 `cameraEntityPartialTicks`，partial tick 从 `DeltaTracker` 取。
 
 **Iris**
-- 没有 `ImmediateState.skipExtension`：Iris 直接把加宽后的顶点格式当原版格式交出。EXIT 里这个开关什么都不做
-  （`IrisCompat.hasSkipExtension()` 为 false）。
+- Iris 1.11.4 有 `ImmediateState.skipExtension`（每线程），`BufferBuilder` 只在没设它、`isRenderingLevel` 开着时加宽格式。
+  但它在 `isRenderingLevel` 开着时把原版管线的格式（`RenderPipeline.getVertexFormatBinding(s)`、`RenderType.format()`）
+  也换成加宽的，**在所有线程上**。`isRenderingLevel` 是渲染线程设的全局变量，所以工作线程上按管线格式建的缓冲是原版还是
+  加宽格式，要看那一刻渲染线程在不在渲染关卡；在开着 `isRenderingLevel` 的 portal 里画时总按加宽格式，三角形就乱了，
+  每次重建都不一样。Iris 1.11.6（26.3）的管线钩子只在渲染线程、且没设 `skipExtension` 时加宽，所以 26.3 没这个问题。
+- 所以 EXIT 在这里真的设 `skipExtension`（`IrisCompat.hasSkipExtension()` 为 true），`PlainFormatPipelineMixin` 和
+  `PlainFormatRenderTypeMixin` 在设了它的线程上返回原版格式（在 HEAD 返回，Iris 在 RETURN 的回调就不跑了）。
+  portal 默认关掉 `isRenderingLevel`，画的时候管线也是原版格式。以前这里不动 `skipExtension`，是因为只设它时缓冲拿到的是
+  管线给的加宽格式却没有额外数据（"Missing elements in vertex: mc_midTexCoord, at_tangent"）。
 - 画特征时 `isRenderingLevel` 仍要设为 false（和 26.3 一样）。LitematicaPass 对实体设 true，但在 EXIT 里那样
   `entitySolid` 会画不出来。
 
@@ -107,7 +116,8 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - 方法名是 `LevelRenderer.renderLevel`，最后多一个 `ChunkSectionsToRender` 参数。
 - 主目标用 `Minecraft.getMainRenderTarget()`，当前界面是 `Minecraft.screen`，`getOverlay()`。
 - 只有 OpenGL 后端，`StrictValidationMixin` 只针对 `GlRenderPass`。
-- Iris 同 26.2：没有 `skipExtension`。
+- Iris 同 26.2，只是管线钩子在 `RenderPipeline.getVertexFormat()` 上，没有 `RenderType.format()` 的钩子；
+  `PlainFormatPipelineMixin` 改挂 `getVertexFormat()`。
 
 ## 1.21.11（相对 26.1.2）
 
@@ -160,7 +170,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **Iris**
 - Iris 1.10.8 没有 `IrisApi.registerShadowRenderCallback`。冒烟测试改用 `ShadowRendererMixin`（在 `ShadowRenderer.renderShadows`
   设 `ACTIVE` 之后）。
-- 同样没有 `skipExtension`。
+- Iris 1.10.8 的格式钩子和 26.1.2 相同（`skipExtension`、`RenderPipeline.getVertexFormat()`），EXIT 的处理也相同。
 
 **开发运行**
 - NeoForge 开发环境默认开着 Blaze3D 校验层，Iris 1.10.8 启动时会崩（`ValidationGpuDevice` 不能转成 `GlDevice`）。
@@ -202,8 +212,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - NeoForge 21.10 和 21.11 一样没有 `SubmitCustomGeometryEvent`，调试方块的批量不给 collector。
 
 **Iris**
-- Iris 1.9.7 有 `ImmediateState.skipExtension`，但和 1.10.8 一样把加宽后的格式当原版格式交出。EXIT 照 LitematicaPass 不动它
-  （`IrisCompat.hasSkipExtension()` 为 false）。
+- Iris 1.9.7 的格式钩子和 1.10.8 相同，EXIT 的处理也相同。
 - 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
 
 **开发运行**
@@ -263,7 +272,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - NeoForge 21.8 的 `RenderLevelStageEvent.*` 不给 buffer source，调试方块用 `getCamera()`，不直通。
 
 **Iris**
-- Iris 1.9.6 和 1.9.7 一样有 `ImmediateState.skipExtension`，EXIT 照旧不动它。
+- Iris 1.9.6 的格式钩子和 1.9.7 相同，EXIT 的处理也相同。
 - 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
 
 **开发运行**
@@ -276,7 +285,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **使用**
 - Maven `…:0.1.0+1.21.5`。API 和 Fabric 事件同 1.21.8。
 - NeoForge 只有一个 `RenderLevelStageEvent`，看 `getStage()`：比如 `Stage.AFTER_CUTOUT_BLOCKS`；不要用 `Stage.AFTER_LEVEL`。
-- `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和 26.3 一样。
+- `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和更新的版本一样。
 
 **构建**
 - NeoForm `1.21.5-20250325.162830`，NeoForge `21.5.101`，Fabric API `0.128.2+1.21.5`，Iris 1.8.11、Sodium 0.6.13，
@@ -302,11 +311,12 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 **Iris**
 - Iris 1.8.11 只要光影包在用，就加宽之后新建的每个 `BufferBuilder` 的格式，除非设了 `ImmediateState.skipExtension`；
-  `isRenderingLevel` 开着时，原版管线（`getVertexFormat()`，也就是 `RenderType.format()`）也换成加宽的格式。
+  `isRenderingLevel` 开着时，原版管线（`getVertexFormat()`，也就是 `RenderType.format()`）也换成加宽的格式，在所有线程上。
   批量开始缓冲时两个都要设（`skipExtension` 开、`isRenderingLevel` 关）。只关 `isRenderingLevel` 时，实体方块（绿、黄）
   在光影下完全画不出来，计数却照样通过。
-- 所以 1.21.5 上 `skipExtension` 是真的开关：`IrisCompat.hasSkipExtension()` 为 true，portal 和 `plainFormat` 都会设它，
-  和 26.3 一样（1.21.6 到 26.2 的 Iris 把加宽格式当原版格式交出，EXIT 在那些版本不动它）。
+- `skipExtension` 和更新的版本一样是真的开关，`PlainFormatPipelineMixin` 也一样。不同的是这里 `BufferBuilder` 不看
+  `isRenderingLevel`：portal 里 Iris 的 `BufferSource` 开过一次缓冲后会把 `skipExtension` 重置为 false，之后直接
+  `new BufferBuilder` 的 `BLOCK`/`ENTITY` 缓冲又会加宽，而 portal 里的管线是原版格式。经 `MultiBufferSource` 画的不受影响。
 - Iris 1.8 只要它想替换着色器（不管 bypass），就锁住它不认识的原版程序的颜色和深度写入。`IrisShaderOverrideMixin`
   让 `shouldOverrideShaders` 在 bypass 时返回 false（和 LitematicaPass 一样）。
 - 没有 `registerShadowRenderCallback`，冒烟测试仍用 `ShadowRendererMixin`。
