@@ -26,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
  *     they overlap.</li>
  *     <li>Blue, on the left, is a pass on the main target inside a portal. The portal moves it into a channel that
  *     shows through the world.</li>
+ *     <li>Above them, a magenta block and a cyan pig check the vertex formats, see {@link DebugMeshes}.</li>
  * </ul>
  */
 public final class DebugShapes {
@@ -54,6 +55,12 @@ public final class DebugShapes {
 		public int portalRoutingMismatches;
 		/** Redirects outside a portal that did not throw. Should stay 0. */
 		public int unguardedRedirects;
+		/** How often the block and pig buffers were made, and drawn. */
+		public int meshBuilds;
+		public int meshDraws;
+		/** Where the block and the pig show in the window, as fractions of its size from the top left. */
+		public float @Nullable [] blockOnScreen;
+		public float @Nullable [] pigOnScreen;
 		/** Whether the portal on a worker thread behaved. Null until it ran. */
 		public volatile @Nullable Boolean offThreadOk;
 	}
@@ -124,6 +131,7 @@ public final class DebugShapes {
 				STATS.portalRoutingMismatches++;
 			}
 		});
+		DebugMeshes.render(xray, at, right);
 	}
 
 	/** Checks that redirect throws outside a portal. */
@@ -167,6 +175,7 @@ public final class DebugShapes {
 	public static boolean toggle(Entity viewer) {
 		if (center != null) {
 			center = null;
+			DebugMeshes.close();
 			return false;
 		}
 		Vec3 look = viewer.getLookAngle();
