@@ -328,6 +328,12 @@ public final class ExitRuntime {
 		}
 	}
 
+	/** Only checks the thread: Iris widens no layout when a vertex buffer is uploaded here (see Exit.plainUpload). */
+	public static void plainUpload(Runnable upload) {
+		RenderSystem.assertOnRenderThread();
+		upload.run();
+	}
+
 	static void warnOnce(String key, String message) {
 		if (WARNED.add(key)) {
 			ExitMod.LOGGER.warn(message);
