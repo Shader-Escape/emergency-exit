@@ -100,4 +100,16 @@ public final class Exit {
 	public static void plainFormat(Runnable build) {
 		ExitRuntime.plainFormat(build);
 	}
+
+	/**
+	 * Runs {@code upload}, on the render thread. Upload buffers built with {@link #plainFormat} in it when that happens
+	 * outside a portal.
+	 * <p>
+	 * On this Minecraft version it only runs {@code upload}: the Iris versions for it set the layout up from the format a
+	 * buffer was built in, so the layouts already match. It is here for code that also runs on 1.21.1 to 1.21.4, where
+	 * Iris 1.8 sets up its widened layouts when a buffer is uploaded and buffers built with {@code plainFormat} need it.
+	 */
+	public static void plainUpload(Runnable upload) {
+		ExitRuntime.plainUpload(upload);
+	}
 }
