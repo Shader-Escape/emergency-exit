@@ -234,7 +234,7 @@ public final class ExitRuntime {
 	private static final PortalOverrides KEEP_ALL = new PortalOverrides(PortalOverrides.Switch.KEEP, PortalOverrides.Switch.KEEP, PortalOverrides.Switch.KEEP);
 
 	/** The switches a portal found when it opened. They are restored when it ends, if it set them. */
-	private record Saved(boolean applied, boolean bypass, boolean skipExtension, boolean renderingLevel) {}
+	private record Saved(boolean applied, boolean bypass, boolean skipExtension, boolean renderingLevel, boolean extendedVertexFormat) {}
 
 	/**
 	 * Opens a portal on {@code channel} and returns whether it routes. Null overrides mean the defaults, or no change
@@ -253,11 +253,12 @@ public final class ExitRuntime {
 			overrides = PORTALS.isEmpty() ? PortalOverrides.DEFAULT : KEEP_ALL;
 		}
 		boolean apply = packActive();
-		Saved saved = new Saved(apply, IrisCompat.bypass(), IrisCompat.skipExtension(), IrisCompat.isRenderingLevel());
+		Saved saved = new Saved(apply, IrisCompat.bypass(), IrisCompat.skipExtension(), IrisCompat.isRenderingLevel(), IrisCompat.extendedVertexFormat());
 		PORTALS.addLast(saved);
 		if (apply) {
 			IrisCompat.setBypass(overrides.bypass().apply(saved.bypass()));
 			IrisCompat.setSkipExtension(overrides.skipExtension().apply(saved.skipExtension()));
+			if (IrisCompat.skipExtension()) IrisCompat.setExtendedVertexFormat(false);
 			IrisCompat.setRenderingLevel(overrides.renderingLevel().apply(saved.renderingLevel()));
 		}
 		return portalRouted;
@@ -272,6 +273,7 @@ public final class ExitRuntime {
 			IrisCompat.setBypass(saved.bypass());
 			IrisCompat.setSkipExtension(saved.skipExtension());
 			IrisCompat.setRenderingLevel(saved.renderingLevel());
+			IrisCompat.setExtendedVertexFormat(saved.extendedVertexFormat());
 		}
 		if (PORTALS.isEmpty()) {
 			portalRouted = false;
@@ -314,11 +316,16 @@ public final class ExitRuntime {
 
 	public static void plainFormat(Runnable build) {
 		boolean previous = IrisCompat.skipExtension();
+		// The VAO switch is global, unlike skipExtension: worker builders must not change render-thread state.
+		boolean renderThread = RenderSystem.isOnRenderThread();
+		boolean extended = renderThread && IrisCompat.extendedVertexFormat();
 		IrisCompat.setSkipExtension(true);
+		if (renderThread) IrisCompat.setExtendedVertexFormat(false);
 		try {
 			build.run();
 		} finally {
 			IrisCompat.setSkipExtension(previous);
+			if (renderThread) IrisCompat.setExtendedVertexFormat(extended);
 		}
 	}
 
