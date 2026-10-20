@@ -1,17 +1,3 @@
-> Please note that AI was indeed involved in the development of this library. It was used to:
->
-> - Write documentation comments for the API interfaces
-> - Assist with extracting the core rendering logic from mod LitematicaPass
-> - Port the implementation to older versions
-> 
-> However, this does **not** mean that:
-> 
-> - The mod was entirely made by AI
-> - The author has no understanding of how it works
-> - The functionality has not been tested or verified
->
-> If you encounter any issues, please provide enough information and discuss them in a friendly manner. We are more than happy to help.
-
 # How It Works
 https://hotpad100c.github.io/emergency-exit/render-scale/#bsl
 
