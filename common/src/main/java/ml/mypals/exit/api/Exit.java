@@ -94,8 +94,8 @@ public final class Exit {
 
 	/**
 	 * Runs {@code build} with the shader pack's vertex format widening turned off, on any thread. Use it to build your
-	 * own vertex buffers that are later drawn routed with vanilla pipelines. Unlike a portal it never routes and also
-	 * runs in the shadow pass.
+	 * own vertex buffers that are later drawn routed with vanilla pipelines. The vanilla pipelines hand out the vanilla
+	 * formats in it too. Unlike a portal it never routes and also runs in the shadow pass.
 	 */
 	public static void plainFormat(Runnable build) {
 		ExitRuntime.plainFormat(build);

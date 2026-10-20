@@ -19,9 +19,11 @@ final class IrisHooks {
 	static void setBypass(boolean bypass) {
 		ImmediateState.bypass = bypass;
 	}
-	// Iris 1.8.11 (for 1.21.5) widens the format of every BufferBuilder made while a pack is in use, unless skipExtension
-	// is set; isRenderingLevel does not matter here. The vanilla pipelines keep the vanilla formats, so the switch works
-	// as on 26.3. (Iris 1.9 and later, for 1.21.6 to 26.2, hand out the widened formats as the vanilla ones instead.)
+	// Iris 1.8.11 widens the format of every new BufferBuilder while a pack is in use, unless skipExtension is set
+	// on its thread; isRenderingLevel does not matter there. While the level renders it also hands out the widened
+	// formats from RenderPipeline.getVertexFormat(), on every thread.
+	// PlainFormatPipelineMixin keeps the vanilla formats there where skipExtension is set, so buffers built with it
+	// match the pipelines' vanilla formats.
 	static final boolean HAS_SKIP_EXTENSION = true;
 
 	static boolean skipExtension() {

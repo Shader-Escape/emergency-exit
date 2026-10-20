@@ -12,6 +12,7 @@
     "RenderPipelinesAccessor",
     "StrictValidationMixin",
     "iris.IrisRenderingPipelineMixin",
+    "iris.PlainFormatPipelineMixin",
     "iris.IrisShaderOverrideMixin"
   ],
   "injectors": {
