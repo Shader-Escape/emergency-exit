@@ -5,7 +5,8 @@ package ml.mypals.exit.api;
  *
  * @param bypass         {@code ImmediateState.bypass}. The shader pack does not replace vanilla pipelines.
  * @param skipExtension  {@code ImmediateState.skipExtension}, per thread. Vertex buffers built now keep the vanilla
- *                       formats.
+ *                       formats. While it is on, Iris's {@code renderWithExtendedVertexFormat} is off too, so
+ *                       vertex buffers uploaded now get the vanilla layouts to match (see {@link Exit#plainUpload}).
  * @param renderingLevel {@code ImmediateState.isRenderingLevel}. While it is on, Iris widens the vertex formats the
  *                       vanilla pipelines draw with.
  */

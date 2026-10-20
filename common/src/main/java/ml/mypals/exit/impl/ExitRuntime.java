@@ -233,8 +233,11 @@ public final class ExitRuntime {
 
 	private static final PortalOverrides KEEP_ALL = new PortalOverrides(PortalOverrides.Switch.KEEP, PortalOverrides.Switch.KEEP, PortalOverrides.Switch.KEEP);
 
-	/** The switches a portal found when it opened. They are restored when it ends, if it set them. */
-	private record Saved(boolean applied, boolean bypass, boolean skipExtension, boolean renderingLevel) {}
+	/**
+	 * The switches a portal found when it opened. They are restored when it ends, if it set them. {@code extendedSetup}
+	 * is Iris's renderWithExtendedVertexFormat, which follows skipExtension (see {@link #plainUpload}).
+	 */
+	private record Saved(boolean applied, boolean bypass, boolean skipExtension, boolean renderingLevel, boolean extendedSetup) {}
 
 	/**
 	 * Opens a portal on {@code channel} and returns whether it routes. Null overrides mean the defaults, or no change
@@ -253,11 +256,17 @@ public final class ExitRuntime {
 			overrides = PORTALS.isEmpty() ? PortalOverrides.DEFAULT : KEEP_ALL;
 		}
 		boolean apply = packActive();
-		Saved saved = new Saved(apply, IrisCompat.bypass(), IrisCompat.skipExtension(), IrisCompat.isRenderingLevel());
+		Saved saved = new Saved(apply, IrisCompat.bypass(), IrisCompat.skipExtension(), IrisCompat.isRenderingLevel(),
+			IrisCompat.renderWithExtendedVertexFormat());
 		PORTALS.addLast(saved);
 		if (apply) {
 			IrisCompat.setBypass(overrides.bypass().apply(saved.bypass()));
-			IrisCompat.setSkipExtension(overrides.skipExtension().apply(saved.skipExtension()));
+			boolean skipExtension = overrides.skipExtension().apply(saved.skipExtension());
+			IrisCompat.setSkipExtension(skipExtension);
+			if (skipExtension) {
+				// Buffers built in the portal are vanilla, so the ones uploaded in it get the vanilla layout.
+				IrisCompat.setRenderWithExtendedVertexFormat(false);
+			}
 			IrisCompat.setRenderingLevel(overrides.renderingLevel().apply(saved.renderingLevel()));
 		}
 		return portalRouted;
@@ -272,6 +281,7 @@ public final class ExitRuntime {
 			IrisCompat.setBypass(saved.bypass());
 			IrisCompat.setSkipExtension(saved.skipExtension());
 			IrisCompat.setRenderingLevel(saved.renderingLevel());
+			IrisCompat.setRenderWithExtendedVertexFormat(saved.extendedSetup());
 		}
 		if (PORTALS.isEmpty()) {
 			portalRouted = false;
@@ -279,7 +289,10 @@ public final class ExitRuntime {
 		}
 	}
 
-	/** A portal off the render thread. It only sets this thread's vertex format switch. */
+	/**
+	 * A portal off the render thread. It only sets this thread's vertex format switch: the layout switch is global, and
+	 * vertex buffers are uploaded on the render thread.
+	 */
 	static void portalOffThread(PortalOverrides overrides, Runnable body) {
 		if (overrides.skipExtension() == PortalOverrides.Switch.KEEP) {
 			body.run();
@@ -319,6 +332,17 @@ public final class ExitRuntime {
 			build.run();
 		} finally {
 			IrisCompat.setSkipExtension(previous);
+		}
+	}
+
+	public static void plainUpload(Runnable upload) {
+		RenderSystem.assertOnRenderThread();
+		boolean previous = IrisCompat.renderWithExtendedVertexFormat();
+		IrisCompat.setRenderWithExtendedVertexFormat(false);
+		try {
+			upload.run();
+		} finally {
+			IrisCompat.setRenderWithExtendedVertexFormat(previous);
 		}
 	}
 
