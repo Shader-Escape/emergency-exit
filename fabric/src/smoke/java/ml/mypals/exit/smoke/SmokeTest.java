@@ -68,6 +68,11 @@ public final class SmokeTest {
 	private int windowHeight;
 	/** Whether the shader pack was reloaded, which only the run with a pack does. */
 	private boolean packReloaded;
+	/**
+	 * Whether the magenta block and the cyan pig, built in vanilla formats and uploaded outside a portal, showed where
+	 * they belong in the presented frame. With a mismatched vertex format they become scattered triangles.
+	 */
+	private boolean meshesSeen;
 
 	/** The loader's name, part of the screenshot names. */
 	private String loader = "unknown";
@@ -121,14 +126,16 @@ public final class SmokeTest {
 				log("drawings: " + stats.draws + " (routed: " + stats.routedDraws + "), batches: "
 					+ stats.batchDraws + ", portals: " + stats.portalDraws + " (passes moved into the channel: " + stats.portalRedirectedPasses + "), portal/routing mismatches: "
 					+ stats.portalRoutingMismatches + ", redirects outside a portal that did not throw: " + stats.unguardedRedirects
-					+ ", off-thread portal ok: " + stats.offThreadOk);
+					+ ", off-thread portal ok: " + stats.offThreadOk + ", vertex format meshes drawn: " + stats.meshDraws + " (seen: " + this.meshesSeen + ")");
 				log("frames blending channels by depth: " + ExitRuntime.blendedFrames());
 				log("shadow pass: Iris shadow callbacks: " + shadowCallbacks + ", EXIT drawings and portals run in them: " + shadowPassRuns);
+				boolean shapes = !Boolean.getBoolean("emergency_exit.smoke.noShapes");
 				boolean drew = stats.draws > 0 && stats.batchDraws > 0 && stats.portalDraws > 0 && stats.portalRoutingMismatches == 0
 					&& (stats.portalRedirectedPasses > 0 || !IrisCompat.isPackInUse())
 					&& stats.unguardedRedirects == 0 && Boolean.TRUE.equals(stats.offThreadOk)
 					&& (shadowCallbacks > 0 || !IrisCompat.isPackInUse()) && shadowPassRuns == 0
-					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse());
+					&& (ExitRuntime.blendedFrames() > 0 || !IrisCompat.isPackInUse())
+					&& (stats.meshDraws > 0 && this.meshesSeen || !shapes);
 				log(drew ? "RESULT: OK (entered the world and rendered " + TICKS_IN_WORLD + " ticks through EXIT)"
 					: "RESULT: FAILED (the EXIT drawings did not all run)");
 				if (!drew) {
@@ -202,7 +209,7 @@ public final class SmokeTest {
 					+ ", merged stretched: " + SceneSize.mergeStretched());
 				screenshot(mc, "normal");
 			}
-			case 102 -> presented(mc, "presented");
+			case 102 -> this.meshesSeen = meshesSeen(presented(mc, "presented"));
 			case 103 -> DebugView.set(DebugView.Mode.COLOR, Exit.MAIN);
 			case 115 -> screenshot(mc, "color");
 			case 116 -> DebugView.set(DebugView.Mode.TARGET_DEPTH, Exit.MAIN);
@@ -408,7 +415,7 @@ public final class SmokeTest {
 	 * Saves the window's front buffer, which is what the player sees. With a resolution scaling mod the main target is
 	 * not the presented frame.
 	 */
-	private void presented(Minecraft mc, String view) {
+	private BufferedImage presented(Minecraft mc, String view) {
 		int width = mc.getWindow().getWidth();
 		int height = mc.getWindow().getHeight();
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -433,6 +440,32 @@ public final class SmokeTest {
 		} catch (IOException e) {
 			log("could not save " + name + ": " + e);
 		}
+		return image;
+	}
+
+	/** Whether the block shows magenta and the pig cyan, at the centres DebugMeshes projected. */
+	private static boolean meshesSeen(BufferedImage image) {
+		DebugShapes.Stats stats = DebugShapes.stats();
+		int block = pixel(image, stats.blockOnScreen);
+		int pig = pixel(image, stats.pigOnScreen);
+		log(String.format(Locale.ROOT, "block pixel #%06x, pig pixel #%06x", block & 0xFFFFFF, pig & 0xFFFFFF));
+		int r = block >> 16 & 0xFF;
+		int g = block >> 8 & 0xFF;
+		int b = block & 0xFF;
+		boolean magenta = r > 100 && b > 100 && g + 40 < Math.min(r, b);
+		r = pig >> 16 & 0xFF;
+		g = pig >> 8 & 0xFF;
+		b = pig & 0xFF;
+		boolean cyan = g > 80 && b > 80 && r + 40 < Math.min(g, b);
+		return magenta && cyan;
+	}
+
+	/** The pixel at a position in fractions of the image size, or black when there is none. */
+	private static int pixel(BufferedImage image, float @Nullable [] at) {
+		if (at == null || at[0] < 0 || at[0] >= 1 || at[1] < 0 || at[1] >= 1) {
+			return 0;
+		}
+		return image.getRGB((int) (at[0] * image.getWidth()), (int) (at[1] * image.getHeight()));
 	}
 
 	private static void deleteOldWorld() {
