@@ -19,15 +19,17 @@ final class IrisHooks {
 	static void setBypass(boolean bypass) {
 		ImmediateState.bypass = bypass;
 	}
-	// Iris for 26.2 hands out its widened terrain and entity formats as the vanilla ones, so buffers and vanilla
-	// pipelines already agree. Skipping the extension would leave the buffers in that format without its extra data
-	// ("Missing elements in vertex: mc_midTexCoord, at_tangent"), so the switch does nothing here.
-	static final boolean HAS_SKIP_EXTENSION = false;
+	// Iris 1.11.4 widens a new BufferBuilder's format while the level renders unless skipExtension is set on its
+	// thread, and hands out the widened formats from RenderPipeline.getVertexFormat() then, on every thread.
+	// PlainFormatPipelineMixin keeps the vanilla formats there where skipExtension is set, so buffers built with it
+	// match the pipelines' vanilla formats.
+	static final boolean HAS_SKIP_EXTENSION = true;
 
 	static boolean skipExtension() {
-		return false;
+		return ImmediateState.skipExtension.get();
 	}
 	static void setSkipExtension(boolean skip) {
+		ImmediateState.skipExtension.set(skip);
 	}
 
 	static boolean isRenderingLevel() {

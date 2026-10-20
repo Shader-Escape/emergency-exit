@@ -12,7 +12,8 @@
     "RenderPipelinesAccessor",
     "RenderTypeAccessor",
     "StrictValidationMixin",
-    "iris.IrisRenderingPipelineMixin"
+    "iris.IrisRenderingPipelineMixin",
+    "iris.PlainFormatPipelineMixin"
   ],
   "injectors": {
     "defaultRequire": 1
