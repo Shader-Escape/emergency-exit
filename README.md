@@ -168,6 +168,20 @@ So build your buffers inside `plainFormat` to keep them in the vanilla format. I
 
 > Calling `portal` off the render thread has the same effect, but of the three switches it can only turn off format widening for the current thread. The other switches have no effect, and nothing can be redirected.
 
+### plainUpload: upload them outside a portal
+
+```java
+// render thread, e.g. a queue of finished meshes drained each frame
+Exit.plainUpload(() -> {
+    vertexBuffer.bind();
+    vertexBuffer.upload(meshData);
+    VertexBuffer.unbind();
+});
+```
+On Minecraft 1.21.1 to 1.21.4, Iris 1.8 also widens the *layout* a vertex buffer gets when it is uploaded (`VertexFormat.setupBufferState`), and the buffer keeps it. A buffer built with `plainFormat` but uploaded with that layout is drawn as scattered triangles while a shader pack is in use.
+Portals turn that off themselves while they turn format widening off, so uploads inside a portal are fine. Wrap uploads that happen anywhere else in `plainUpload`, on the render thread. Only buffers built with `plainFormat` belong in it: the others are in Iris's widened format and need its layout.
+On every other Minecraft version `plainUpload` just runs the code, so the same calls work everywhere.
+
 ## Channels: different display for different content
 
 `Exit.draw/batch/portal` above all use the shared main channel. For effects such as seeing through blocks, you can declare your own channel:
@@ -227,7 +241,7 @@ Off the render thread, `isRouting()` and `inPortal()` are always `false`.
 
 ## Limitations
 
-* **When to call.** Only on the render thread, while the level is rendering (except `plainFormat` and `portal` off the render thread). Outside that, `draw` and `batch` content is dropped (with one warning in the log), and a portal still runs but doesn't bypass the shader pack.
+* **When to call.** Only on the render thread, while the level is rendering (except `plainFormat`, `portal` off the render thread, and `plainUpload`, which only needs the render thread). Outside that, `draw` and `batch` content is dropped (with one warning in the log), and a portal still runs but doesn't bypass the shader pack.
 * **Where to open a portal.** A portal must be called **after the level has started rendering**, for example in Fabric's `END_MAIN`, and not inside an open RenderPass. A RenderPass that was already open before the portal started is not moved, and what's drawn in it is still processed by the shader pack.
 * **No shadows.** While the shader pack draws shadows, `draw` and `portal` lambdas don't run, and `batch` content is dropped.
 * **Translucency in a portal.** See "Translucency" above first. Also, translucent content you draw in your own RenderPass inside a portal is treated as very far away when compared with other channels, so it is easily covered. Translucent content submitted through `draw` or `batch` doesn't have this problem.

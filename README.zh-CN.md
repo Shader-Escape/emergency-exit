@@ -166,6 +166,22 @@ Exit.plainFormat(() -> buildMyVertexBuffer());
 
 > 虽然在非渲染线程调用 `portal` 效果相同，但3个开关中，只能关掉当前线程的格式加宽，其它开关无效，也不能重定向任何内容。
 
+### plainUpload：在 portal 之外上传
+
+```java
+// 渲染线程，比如每帧处理一批已构建好的网格
+Exit.plainUpload(() -> {
+    vertexBuffer.bind();
+    vertexBuffer.upload(meshData);
+    VertexBuffer.unbind();
+});
+```
+在 Minecraft 1.21.1 到 1.21.4 上，Iris 1.8 还会在顶点缓冲**上传**时把它的布局（`VertexFormat.setupBufferState`）换成加宽的格式，
+缓冲会一直保留这个布局。用 `plainFormat` 构建、却带着这种布局上传的缓冲，在使用光影包时会画成一堆散乱的三角形。
+portal 关掉格式加宽时会顺带把这个也关掉，所以在 portal 里上传没问题。在其他地方上传，就在渲染线程上把上传包进 `plainUpload`。
+只有用 `plainFormat` 构建的缓冲才能放进去：其它缓冲是 Iris 的加宽格式，需要它的布局。
+在其它所有 Minecraft 版本上，`plainUpload` 只是直接执行代码，所以同样的调用在所有版本上都能用。
+
 ## 通道：给不同内容不同的显示方式
 
 上面的 `Exit.draw/batch/portal` 用的都是共享的主通道。但若想要透视等效果，你可以声明自己的通道：
@@ -225,7 +241,7 @@ ExitOptions.builder().wantsFrame(() -> MyConfig.enabled).build();
 
 ## 限制
 
-* **调用时机。** 只能在渲染线程上、关卡渲染期间调用（`plainFormat` 和非渲染线程的 `portal` 除外）。在这之外调用，`draw` 和 `batch` 的内容会被丢掉（日志里警告一次），portal 照常执行但不绕过光影包。
+* **调用时机。** 只能在渲染线程上、关卡渲染期间调用（`plainFormat`、非渲染线程的 `portal`，以及只要求渲染线程的 `plainUpload` 除外）。在这之外调用，`draw` 和 `batch` 的内容会被丢掉（日志里警告一次），portal 照常执行但不绕过光影包。
 * **portal 的位置。** portal 要在关卡**开始渲染之后**调用，比如 Fabric 的 `END_MAIN`，而且不能在已打开的 RenderPass 里。portal 开始前就开着的 RenderPass 不会被换走，在里面画的东西照样被光影包处理。
 * **没有影子。** 光影包画阴影时，`draw` 和 `portal` 的 lambda 不执行，`batch` 的内容被丢掉。
 * **portal 里的半透明。** 先看上面的"先画批量，再画半透明"。另外，你自己在 portal 里开 RenderPass 画的半透明内容，和其它通道比较远近时会被当成在很远处，容易被盖住；通过 `draw`、`batch` 提交的半透明内容没有这个问题。
