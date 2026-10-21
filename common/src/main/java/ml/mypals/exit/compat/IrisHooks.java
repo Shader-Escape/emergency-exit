@@ -29,16 +29,20 @@ final class IrisHooks {
 		ImmediateState.skipExtension.set(skip);
 	}
 
-	static boolean isRenderingLevel() {
-		return ImmediateState.isRenderingLevel;
-	}
-
-	static boolean extendedVertexFormat() {
+	// Iris 1.8 also widens the layout itself: VertexFormat.setupBufferState sets up its terrain, entity and glyph formats
+	// in place of the vanilla ones while a pack is in use and renderWithExtendedVertexFormat is on, which it is except
+	// while Iris flushes outside the level. VertexBuffer.upload bakes that layout into the buffer, so buffers built with
+	// skipExtension have to be uploaded with it off.
+	static boolean renderWithExtendedVertexFormat() {
 		return ImmediateState.renderWithExtendedVertexFormat;
 	}
 
-	static void setExtendedVertexFormat(boolean extended) {
+	static void setRenderWithExtendedVertexFormat(boolean extended) {
 		ImmediateState.renderWithExtendedVertexFormat = extended;
+	}
+
+	static boolean isRenderingLevel() {
+		return ImmediateState.isRenderingLevel;
 	}
 
 	static void setRenderingLevel(boolean renderingLevel) {

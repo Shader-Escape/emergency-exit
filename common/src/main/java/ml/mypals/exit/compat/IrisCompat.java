@@ -32,6 +32,20 @@ public final class IrisCompat {
 		}
 	}
 
+	/**
+	 * Whether vertex formats set up their layout in Iris's widened format, as a vertex buffer does when it is uploaded.
+	 * Global, not per thread.
+	 */
+	public static boolean renderWithExtendedVertexFormat() {
+		return LOADED && IrisHooks.renderWithExtendedVertexFormat();
+	}
+
+	public static void setRenderWithExtendedVertexFormat(boolean extended) {
+		if (LOADED) {
+			IrisHooks.setRenderWithExtendedVertexFormat(extended);
+		}
+	}
+
 	/** Iris only widens vertex formats while the level is being rendered. */
 	public static boolean isRenderingLevel() {
 		return LOADED && IrisHooks.isRenderingLevel();
@@ -40,17 +54,6 @@ public final class IrisCompat {
 	public static void setRenderingLevel(boolean renderingLevel) {
 		if (LOADED) {
 			IrisHooks.setRenderingLevel(renderingLevel);
-		}
-	}
-
-	/** Iris 1.8 also changes VAO attribute strides through a separate render-thread switch. */
-	public static boolean extendedVertexFormat() {
-		return LOADED && IrisHooks.extendedVertexFormat();
-	}
-
-	public static void setExtendedVertexFormat(boolean extended) {
-		if (LOADED) {
-			IrisHooks.setExtendedVertexFormat(extended);
 		}
 	}
 
