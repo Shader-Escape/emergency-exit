@@ -1,5 +1,5 @@
 # How It Works
-https://hotpad100c.github.io/emergency-exit/render-scale/#bsl
+[https://shader-escape.github.io/emergency-exit/render-scale/#bsl](https://shader-escape.github.io/emergency-exit/render-scale/#bsl)
 
 # EXIT (Emergency Exit)
 
