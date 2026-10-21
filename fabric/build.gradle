@@ -167,3 +167,18 @@ publishing {
         }
     }
 }
+
+// JitPack serves a build that publishes one artifact as com.github.<user>:<repo>, not under the multi-module
+// coordinates the other Minecraft versions have. An empty second artifact keeps those coordinates.
+if (System.getenv('JITPACK')) {
+    def jitpackMarkerJar = tasks.register('jitpackMarkerJar', Jar) {
+        archiveBaseName = "${mod_id}-jitpack-marker"
+        destinationDirectory = layout.buildDirectory.dir('jitpack')
+    }
+    publishing.publications.register('jitpackMarker', MavenPublication) {
+        groupId = "${System.getenv('GROUP')}.${System.getenv('ARTIFACT')}"
+        artifactId = "${mod_id}-jitpack-marker"
+        version = System.getenv('VERSION')
+        artifact(jitpackMarkerJar)
+    }
+}
