@@ -1,0 +1,6 @@
+# JitPack builds and serves EXIT from this repository, see README.
+# Gradle runs on Java 25 (the newest Temurin SDKMAN has); the java_version toolchain is downloaded by foojay.
+before_install:
+  - JDK="$(curl -s 'https://api.sdkman.io/2/candidates/java/linuxx64/versions/list?installed=' | grep -o '25\.[0-9.+]*-tem' | head -n 1)" && sdk install java "$JDK" && sdk use java "$JDK"
+install:
+  - ./gradlew publishToMavenLocal --no-daemon --no-configuration-cache --stacktrace -Dorg.gradle.jvmargs=-Xmx2G
