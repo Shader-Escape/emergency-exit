@@ -96,8 +96,22 @@ public final class Exit {
 	 * Runs {@code build} with the shader pack's vertex format widening turned off, on any thread. Use it to build your
 	 * own vertex buffers that are later drawn routed with vanilla pipelines. Unlike a portal it never routes and also
 	 * runs in the shadow pass.
+	 * <p>
+	 * Upload what it builds into a {@code VertexBuffer} inside a portal or {@link #plainUpload}. Iris 1.8 sets up its
+	 * widened layout for the block, entity and glyph formats when a vertex buffer is uploaded, and the buffer keeps that
+	 * layout: vanilla vertices uploaded anywhere else are drawn as scattered triangles while a shader pack is in use.
 	 */
 	public static void plainFormat(Runnable build) {
 		ExitRuntime.plainFormat(build);
+	}
+
+	/**
+	 * Runs {@code upload} with Iris's widened vertex layouts turned off, on the render thread. Upload buffers built with
+	 * {@link #plainFormat} in it when that happens outside a portal; portals turn the layouts off themselves while they
+	 * turn the format widening off. Buffers built without {@code plainFormat} must not be uploaded in it, as theirs are
+	 * the widened formats.
+	 */
+	public static void plainUpload(Runnable upload) {
+		ExitRuntime.plainUpload(upload);
 	}
 }
