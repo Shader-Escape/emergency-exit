@@ -159,6 +159,12 @@ publishing {
     publications {
         register('mavenJava', MavenPublication) {
             artifactId = base.archivesName.get()
+            // JitPack serves the jars as com.github.<user>.<repo>:<artifactId>:<tag or branch-SNAPSHOT>, and Gradle rejects
+            // a POM or module file that names other coordinates. Only the publication changes: the mod keeps its version.
+            if (System.getenv('JITPACK')) {
+                groupId = "${System.getenv('GROUP')}.${System.getenv('ARTIFACT')}"
+                version = System.getenv('VERSION')
+            }
             from components.java
         }
     }
