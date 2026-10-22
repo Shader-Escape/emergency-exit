@@ -8,6 +8,45 @@ Emergency Exit（应急出口） 是一个渲染类库。它旨在提供便捷�
 
 该库以Minecraft26.3为原点向下移植，支持直到1.16.5的主要常见版本，支持Fabric与Neoforge。
 
+## 引入到你的模组
+
+[JitPack](https://jitpack.io/#Shader-Escape/emergency-exit) 从本仓库构建 EXIT。加上它的仓库，再按加载器和 Minecraft 版本依赖对应的产物：
+
+```groovy
+repositories {
+    exclusiveContent {
+        forRepository { maven { url = 'https://jitpack.io' } }
+        filter { includeGroup 'com.github.Shader-Escape.emergency-exit' }
+    }
+}
+
+dependencies {
+    // Fabric，Minecraft 1.21.11 及更早（Loom 需要重映射）
+    modImplementation('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-1.21.11') { transitive = false }
+    include('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-1.21.11')
+
+    // Fabric，Minecraft 26.1 及更新（Loom 不重映射）
+    implementation('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-26.3') { transitive = false }
+    include('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-26.3')
+
+    // NeoForge，Minecraft 1.21.1 及更新
+    implementation('com.github.Shader-Escape.emergency-exit:emergency_exit-neoforge:0.1.0-26.3')
+}
+```
+
+`include` 把 EXIT 嵌进你的 jar，玩家不用另外安装。`transitive = false` 让 EXIT 自己用的 Fabric Loader 和 Fabric API 版本不进入你的构建。NeoForge 上用 `jarJar` 内嵌，或者让玩家自行安装 EXIT。
+
+版本号是 `<EXIT版本>-<Minecraft版本>`，每个 Minecraft 版本一个（模组本身的版本写作 `0.1.0+1.21.11`，但 JitPack 不接受 `+`）：
+
+| Minecraft | 版本 | 产物 |
+|---|---|---|
+| 1.16.5、1.17.1、1.18.2、1.19.3、1.20、1.20.1 | `0.1.0-<mc>` | `emergency_exit-fabric` |
+| 1.20.2、1.20.4、1.20.6 | `0.1.0-<mc>` | `emergency_exit-fabric`、`emergency_exit-common` |
+| 1.21.1、1.21.4 | `0.1.1-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
+| 1.21.3、1.21.5、1.21.8、1.21.10、1.21.11、26.1.2、26.2、26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
+
+Fabric 和 NeoForge 的 jar 都包含整个库；`emergency_exit-common` 给多加载器项目的 common 模块用。想用某个 Minecraft 版本的最新提交，可以用 `port~<mc>-SNAPSHOT`（从 `port/<mc>` 分支构建），只建议开发时用。
+
 ## API调用
 
 所有 API 都要在渲染线程上、关卡渲染（LevelRendering）期间调用。下面是 26.3 上能用的事件，其它版本见 [ChangeLog.md](ChangeLog.md) 对应版本的 **使用**。

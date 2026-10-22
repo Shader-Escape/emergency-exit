@@ -11,6 +11,45 @@ Emergency Exit is a rendering library. It gives mods an easy way to get their cu
 
 The library starts from Minecraft 26.3 and is ported down to the common major versions as far back as 1.16.5, on both Fabric and NeoForge.
 
+## Adding it to your mod
+
+[JitPack](https://jitpack.io/#Shader-Escape/emergency-exit) builds EXIT from this repository. Add its repository and depend on the artifact for your loader and Minecraft version:
+
+```groovy
+repositories {
+    exclusiveContent {
+        forRepository { maven { url = 'https://jitpack.io' } }
+        filter { includeGroup 'com.github.Shader-Escape.emergency-exit' }
+    }
+}
+
+dependencies {
+    // Fabric, Minecraft 1.21.11 and older (Loom with remapping)
+    modImplementation('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-1.21.11') { transitive = false }
+    include('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-1.21.11')
+
+    // Fabric, Minecraft 26.1 and newer (Loom without remapping)
+    implementation('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-26.3') { transitive = false }
+    include('com.github.Shader-Escape.emergency-exit:emergency_exit-fabric:0.1.0-26.3')
+
+    // NeoForge, Minecraft 1.21.1 and newer
+    implementation('com.github.Shader-Escape.emergency-exit:emergency_exit-neoforge:0.1.0-26.3')
+}
+```
+
+`include` nests EXIT in your jar, so players don't install it separately. `transitive = false` keeps EXIT's own Fabric Loader and Fabric API versions out of your build. On NeoForge, nest it with `jarJar` or ask players to install EXIT.
+
+The version is `<EXIT version>-<Minecraft version>`, one per Minecraft version (JitPack does not accept the `+` that the mod itself uses, as in `0.1.0+1.21.11`):
+
+| Minecraft | Version | Artifacts |
+|---|---|---|
+| 1.16.5, 1.17.1, 1.18.2, 1.19.3, 1.20, 1.20.1 | `0.1.0-<mc>` | `emergency_exit-fabric` |
+| 1.20.2, 1.20.4, 1.20.6 | `0.1.0-<mc>` | `emergency_exit-fabric`, `emergency_exit-common` |
+| 1.21.1, 1.21.4 | `0.1.1-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
+| 1.21.3, 1.21.5, 1.21.8, 1.21.10, 1.21.11, 26.1.2, 26.2, 26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
+
+The Fabric and NeoForge jars carry the whole library. `emergency_exit-common` is for the common module of a multi-loader project. For the newest commit of a Minecraft version, use `port~<mc>-SNAPSHOT` (built from the `port/<mc>` branch), during development only.
+
 ## Calling the API
 
 Every API must be called on the render thread while the level is rendering. The table lists the events you can use on 26.3. For other versions, see **Usage** under that version in [ChangeLog.md](ChangeLog.md).
