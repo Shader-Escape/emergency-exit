@@ -217,17 +217,21 @@ final class SceneScale {
 		// OpenGL masks the colour of every draw buffer at once before 26.2, so one colour target that writes nothing masks
 		// all the buffers the pack's program writes to.
 		GpuBuffer vertices = pipeline.getVertexFormat().uploadImmediateVertexBuffer(mesh.vertexBuffer());
+		// Writing the transform maps its uniform buffer, and the index buffer may be uploaded when it grows: neither can
+		// happen inside a pass.
+		var transform = RenderSystem.getDynamicUniforms()
+			.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f());
+		GpuBuffer indexBuffer = indices.getBuffer(6);
 		try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "emergency_exit scale probe",
 			main.getColorTextureView(), OptionalInt.empty(), main.getDepthTextureView(), OptionalDouble.empty())) {
 			pass.setPipeline(pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
-			pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms()
-				.writeTransform(modelView, new Vector4f(1, 1, 1, 1), new Vector3f(), new Matrix4f()));
+			pass.setUniform("DynamicTransforms", transform);
 			for (Map.Entry<String, RenderSetup.TextureAndSampler> texture : textures.entrySet()) {
 				pass.bindTexture(texture.getKey(), texture.getValue().textureView(), texture.getValue().sampler());
 			}
 			pass.setVertexBuffer(0, vertices);
-			pass.setIndexBuffer(indices.getBuffer(6), indices.type());
+			pass.setIndexBuffer(indexBuffer, indices.type());
 			pass.drawIndexed(0, 0, 6, 1);
 		}
 	}
