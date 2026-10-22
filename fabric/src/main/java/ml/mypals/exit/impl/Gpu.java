@@ -38,8 +38,9 @@ final class Gpu {
 	}
 
 	/**
-	 * Kept for the merge code. Before 1.21.5 the pack's frame is never at a different resolution than the scene on
-	 * this branch (no Super Resolution), so passes always cover the whole output and this does nothing.
+	 * Kept for the merge code. There is no resolution scaling mod (Super Resolution) on this branch, so the scene is the
+	 * whole output: passes always cover it and this does nothing. A shader pack that renders at a lower resolution is
+	 * handled by SceneScale.
 	 */
 	static boolean wholeOutput;
 
@@ -65,6 +66,13 @@ final class Gpu {
 	/** A target whose depth is used; older versions always give it a colour texture too. */
 	static TextureTarget depthTarget(String label, int width, int height) {
 		return colorDepthTarget(label, width, height);
+	}
+
+	/** A target with only a colour texture. */
+	static TextureTarget colorTarget(String label, int width, int height) {
+		TextureTarget target = new TextureTarget(width, height, false, Minecraft.ON_OSX);
+		target.setClearColor(0, 0, 0, 0);
+		return target;
 	}
 
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
@@ -93,6 +101,24 @@ final class Gpu {
 		GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D, texture, 0);
 		GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, target.frameBufferId);
 		GL30.glBlitFramebuffer(0, 0, target.width, target.height, 0, 0, target.width, target.height, GL11.GL_DEPTH_BUFFER_BIT,
+			GL11.GL_NEAREST);
+		GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+		GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+	}
+
+	private static int depthTextureDrawFramebuffer;
+
+	/** Copies the depth of {@code source} into the depth texture {@code texture}, of {@code source}'s size. */
+	static void copyDepthIntoTexture(RenderTarget source, int texture) {
+		int drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+		if (depthTextureDrawFramebuffer == 0) {
+			depthTextureDrawFramebuffer = GL30.glGenFramebuffers();
+		}
+		GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, depthTextureDrawFramebuffer);
+		GL30.glFramebufferTexture2D(GL30.GL_DRAW_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D, texture, 0);
+		GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, source.frameBufferId);
+		GL30.glBlitFramebuffer(0, 0, source.width, source.height, 0, 0, source.width, source.height, GL11.GL_DEPTH_BUFFER_BIT,
 			GL11.GL_NEAREST);
 		GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
 		GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
