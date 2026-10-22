@@ -225,15 +225,19 @@ final class SceneScale {
 			}
 			descriptor.withDepthAttachment(main.getDepthTextureView(), OptionalDouble.empty())
 				.withRenderArea(new RenderPass.RenderArea(0, 0, main.width, main.height));
+			// Writing the transform maps its uniform buffer, and the index buffer may be uploaded when it grows: neither can
+			// happen inside a pass.
+			var transform = RenderSystem.getDynamicUniforms().writeTransform(modelView);
+			var indexBuffer = indices.getBuffer(6);
 			try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
 				pass.setPipeline(pipeline);
 				RenderSystem.bindDefaultUniforms(pass);
-				pass.setUniform("DynamicTransforms", RenderSystem.getDynamicUniforms().writeTransform(modelView));
+				pass.setUniform("DynamicTransforms", transform);
 				for (PreparedRenderType.Texture texture : prepared.textures()) {
 					pass.bindTexture(texture.name(), texture.textureView(), texture.sampler());
 				}
 				pass.setVertexBuffer(0, vertices.slice());
-				pass.setIndexBuffer(indices.getBuffer(6), indices.type());
+				pass.setIndexBuffer(indexBuffer, indices.type());
 				pass.drawIndexed(6, 1, 0, 0, 0);
 			}
 		}
