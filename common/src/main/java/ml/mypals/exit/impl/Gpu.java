@@ -76,7 +76,10 @@ final class Gpu {
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}, and keeps what was bound. */
 	static void clear(RenderTarget target) {
 		Runnable restore = saveBinding();
+		// A clear leaves the depth alone while depth writes are off.
+		Runnable restoreDepthWrites = writeDepth();
 		target.clear(Minecraft.ON_OSX);
+		restoreDepthWrites.run();
 		restore.run();
 	}
 
@@ -87,12 +90,39 @@ final class Gpu {
 		restore.run();
 	}
 
-	/** Binds {@code target} for drawing. The returned runnable binds what was bound before. */
+	/**
+	 * Binds {@code target} for drawing, with depth writes on. The returned runnable binds what was bound before and puts
+	 * the depth writes back.
+	 */
 	static Runnable bindForDrawing(RenderTarget target) {
 		Runnable restore = saveBinding();
 		GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.frameBufferId);
 		GlStateManager._viewport(0, 0, target.width, target.height);
-		return restore;
+		Runnable restoreDepthWrites = writeDepth();
+		return () -> {
+			restoreDepthWrites.run();
+			restore.run();
+		};
+	}
+
+	/**
+	 * Turns depth writes on. Render types only ever turn them off, and expect them on otherwise. But Iris's final pass
+	 * turns them off and leaves them so, and EXIT renders its batches after it, at the end of the level rendering. The
+	 * returned runnable puts back what was set.
+	 */
+	private static Runnable writeDepth() {
+		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+		GlStateManager._depthMask(true);
+		return () -> {
+			// While EXIT records translucent depth, GlStateManagerMixin would turn this back into true.
+			boolean paused = GlOverrides.paused;
+			GlOverrides.paused = true;
+			try {
+				GlStateManager._depthMask(depthMask);
+			} finally {
+				GlOverrides.paused = paused;
+			}
+		};
 	}
 
 	/** Saves the bound framebuffers and the viewport. The returned runnable puts them back. */
@@ -281,6 +311,8 @@ final class Gpu {
 	private static void drawUnchecked(Pipeline pipeline, RenderTarget output, Sampler... samplers) {
 		Runnable restoreBinding = saveBinding();
 		boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+		int depthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
 		boolean blend = GL11.glIsEnabled(GL11.GL_BLEND);
 		int activeTexture = GlStateManager._getActiveTexture();
 		// Minecraft caches the bound program, vertex array and textures, so put back exactly what was bound, or its next
@@ -342,8 +374,8 @@ final class Gpu {
 		}
 		GlStateManager._activeTexture(activeTexture);
 		GlStateManager._colorMask(true, true, true, true);
-		GlStateManager._depthMask(true);
-		GlStateManager._depthFunc(GL11.GL_LEQUAL);
+		GlStateManager._depthMask(depthMask);
+		GlStateManager._depthFunc(depthFunc);
 		if (depthTest) {
 			GlStateManager._enableDepthTest();
 		} else {
