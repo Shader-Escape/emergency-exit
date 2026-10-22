@@ -40,10 +40,11 @@ dependencies {
 
 | Minecraft | 版本 | 产物 |
 |---|---|---|
-| 1.16.5、1.17.1、1.18.2、1.19.3、1.20、1.20.1 | `0.1.0-<mc>` | `emergency_exit-fabric` |
-| 1.20.2、1.20.4、1.20.6 | `0.1.0-<mc>` | `emergency_exit-fabric`、`emergency_exit-common` |
-| 1.21.1、1.21.4 | `0.1.1-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
-| 1.21.3、1.21.5、1.21.8、1.21.10、1.21.11、26.1.2、26.2、26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
+| 1.16.5、1.17.1、1.18.2、1.19.3、1.20、1.20.1 | `0.1.1-<mc>` | `emergency_exit-fabric` |
+| 1.20.2、1.20.4、1.20.6 | `0.1.1-<mc>` | `emergency_exit-fabric`、`emergency_exit-common` |
+| 1.21.1、1.21.4 | `0.1.2-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
+| 1.21.3、26.1.2、26.2 | `0.1.1-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
+| 1.21.5、1.21.8、1.21.10、1.21.11、26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`、`emergency_exit-neoforge`、`emergency_exit-common` |
 
 Fabric 和 NeoForge 的 jar 都包含整个库；`emergency_exit-common` 给多加载器项目的 common 模块用。想用某个 Minecraft 版本的最新提交，可以用 `port~<mc>-SNAPSHOT`（从 `port/<mc>` 分支构建），只建议开发时用。
 

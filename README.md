@@ -43,10 +43,11 @@ The version is `<EXIT version>-<Minecraft version>`, one per Minecraft version (
 
 | Minecraft | Version | Artifacts |
 |---|---|---|
-| 1.16.5, 1.17.1, 1.18.2, 1.19.3, 1.20, 1.20.1 | `0.1.0-<mc>` | `emergency_exit-fabric` |
-| 1.20.2, 1.20.4, 1.20.6 | `0.1.0-<mc>` | `emergency_exit-fabric`, `emergency_exit-common` |
-| 1.21.1, 1.21.4 | `0.1.1-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
-| 1.21.3, 1.21.5, 1.21.8, 1.21.10, 1.21.11, 26.1.2, 26.2, 26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
+| 1.16.5, 1.17.1, 1.18.2, 1.19.3, 1.20, 1.20.1 | `0.1.1-<mc>` | `emergency_exit-fabric` |
+| 1.20.2, 1.20.4, 1.20.6 | `0.1.1-<mc>` | `emergency_exit-fabric`, `emergency_exit-common` |
+| 1.21.1, 1.21.4 | `0.1.2-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
+| 1.21.3, 26.1.2, 26.2 | `0.1.1-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
+| 1.21.5, 1.21.8, 1.21.10, 1.21.11, 26.3 | `0.1.0-<mc>` | `emergency_exit-fabric`, `emergency_exit-neoforge`, `emergency_exit-common` |
 
 The Fabric and NeoForge jars carry the whole library. `emergency_exit-common` is for the common module of a multi-loader project. For the newest commit of a Minecraft version, use `port~<mc>-SNAPSHOT` (built from the `port/<mc>` branch), during development only.
 
