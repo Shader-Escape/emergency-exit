@@ -12,7 +12,7 @@ its own git branch with plain code for that version.
 
 ### Loaders
 
-One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.0+1.18.2`). Iris is optional.
+One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.1+1.18.2`). Iris is optional.
 Without a shader pack nothing is routed. Iris has no NeoForge build for this Minecraft version, so this branch is
 Fabric only. 1.18.2 has no NeoForm artifact, so the MultiLoader-Template split is gone: one Fabric Loom project, with
 what was in `common` next to the loader code in `fabric`.
