@@ -38,8 +38,9 @@ final class Gpu {
 	}
 
 	/**
-	 * Kept for the merge code. Before 1.21.5 the pack's frame is never at a different resolution than the scene on
-	 * this branch (no Super Resolution), so passes always cover the whole output and this does nothing.
+	 * Kept for the merge code. There is no resolution scaling mod (Super Resolution) on this branch, so the scene is the
+	 * whole output: passes always cover it and this does nothing. A shader pack that renders at a lower resolution is
+	 * handled by SceneScale.
 	 */
 	static boolean wholeOutput;
 
@@ -65,6 +66,13 @@ final class Gpu {
 	/** A target whose depth is used; older versions always give it a colour texture too. */
 	static TextureTarget depthTarget(String label, int width, int height) {
 		return colorDepthTarget(label, width, height);
+	}
+
+	/** A target with only a colour texture. */
+	static TextureTarget colorTarget(String label, int width, int height) {
+		TextureTarget target = new TextureTarget(width, height, false, Minecraft.ON_OSX);
+		target.setClearColor(0, 0, 0, 0);
+		return target;
 	}
 
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}. */
