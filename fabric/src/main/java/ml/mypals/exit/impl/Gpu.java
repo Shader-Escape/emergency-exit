@@ -37,11 +37,7 @@ final class Gpu {
 		return false;
 	}
 
-	/**
-	 * Kept for the merge code. There is no resolution scaling mod (Super Resolution) on this branch, so the scene is the
-	 * whole output: passes always cover it and this does nothing. A shader pack that renders at a lower resolution is
-	 * handled by SceneScale.
-	 */
+	/** Kept for the merge code. Without Super Resolution on this branch, passes always cover the whole output. */
 	static boolean wholeOutput;
 
 	static int sceneWidth() {
@@ -82,7 +78,6 @@ final class Gpu {
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 		int[] viewport = new int[4];
 		GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
-		// A clear leaves the depth alone while depth writes are off.
 		Runnable restoreDepthWrites = writeDepth();
 		target.clear(Minecraft.ON_OSX);
 		restoreDepthWrites.run();
@@ -127,10 +122,7 @@ final class Gpu {
 		return () -> {};
 	}
 
-	/**
-	 * Makes {@code target} the framebuffer that following draws go to, with depth writes on; run the returned action to
-	 * bind back what was bound and put the depth writes back.
-	 */
+	/** Binds {@code target} for drawing, with depth writes on. The returned runnable restores both. */
 	static Runnable bindForDrawing(RenderTarget target) {
 		int drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -147,11 +139,7 @@ final class Gpu {
 		};
 	}
 
-	/**
-	 * Turns depth writes on. Render types only ever turn them off, and expect them on otherwise. But Iris's final pass
-	 * turns them off and leaves them so, and EXIT renders its batches after it, at the end of the level rendering. The
-	 * returned runnable puts back what was set.
-	 */
+	/** Turns depth writes on, which Iris's final pass leaves off. The returned runnable restores them. */
 	private static Runnable writeDepth() {
 		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
 		GlStateManager._depthMask(true);

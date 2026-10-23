@@ -154,7 +154,6 @@ final class SceneScale {
 		boolean bypass = IrisCompat.bypass();
 		IrisCompat.setBypass(true);
 		try {
-			// On this version a pass always covers the whole output.
 			Gpu.draw(maskPipeline, probeMask, Gpu.depth("Before", beforeProbe), Gpu.depth("After", afterProbe));
 		} finally {
 			IrisCompat.setBypass(bypass);
@@ -184,7 +183,6 @@ final class SceneScale {
 		RenderType type = RenderType.entitySolid(WHITE);
 		// Built in the format Iris gives the entity program while the level renders, so the pack's program reads it.
 		if (probeBuilder == null) {
-			// A BufferBuilder mallocs its store and cannot free it on this version, so one is kept for the probe.
 			probeBuilder = new BufferBuilder(1024);
 		}
 		BufferBuilder builder = probeBuilder;
@@ -196,11 +194,7 @@ final class SceneScale {
 		return true;
 	}
 
-	/**
-	 * Draws the quad with the render type, which Iris draws with the pack's program into the pack's buffers, writing
-	 * depth and no colour. Before 1.21.5 there is no pipeline to copy: the masks are set after the render type's state,
-	 * as FeatureDrawer does for depth only.
-	 */
+	/** Draws the quad with the pack's program into the pack's buffers, writing depth and no colour. */
 	private static void draw(RenderType type, BufferBuilder.RenderedBuffer buffer, Matrix4f modelView) {
 		PoseStack modelViewStack = RenderSystem.getModelViewStack();
 		modelViewStack.pushPose();
