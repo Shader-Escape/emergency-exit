@@ -49,10 +49,7 @@ public final class SceneDepth {
 		}
 	}
 
-	/**
-	 * Puts {@code depth} back as the shader pack's scene depth: into the main depth, and into the pack's own texture
-	 * where it keeps one (Iris 1.2 and older).
-	 */
+	/** Puts {@code depth} back into the main depth and into the depth texture of Iris 1.2 and older. */
 	static void restoreMainDepth(RenderTarget depth) {
 		RenderTarget main = Gpu.mainTarget();
 		Gpu.copyDepth(main, depth);
