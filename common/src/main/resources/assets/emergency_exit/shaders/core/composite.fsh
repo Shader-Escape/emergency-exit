@@ -25,6 +25,16 @@ const float OCCLUDED = 1.0005;
 // Depth is standard (near = 0, far = 1). Closeness is larger for nearer depths and 0 far away.
 float closeness(float depth) { return 1.0 - depth; }
 
+float slope(sampler2D depth, ivec2 p) {
+    ivec2 last = textureSize(depth, 0) - 1;
+    float c = closeness(texelFetch(depth, p, 0).r);
+    float l = closeness(texelFetch(depth, max(p - ivec2(1, 0), ivec2(0)), 0).r);
+    float r = closeness(texelFetch(depth, min(p + ivec2(1, 0), last), 0).r);
+    float d = closeness(texelFetch(depth, max(p - ivec2(0, 1), ivec2(0)), 0).r);
+    float u = closeness(texelFetch(depth, min(p + ivec2(0, 1), last), 0).r);
+    return max(min(abs(r - c), abs(c - l)), min(abs(u - c), abs(c - d)));
+}
+
 // HIDE_UNDER_HAND drops the pixels of the hand. DIM_PERCENT is the brightness behind translucent surfaces.
 void main() {
 #ifdef STRETCHED
@@ -40,7 +50,8 @@ void main() {
     }
 
 #ifdef OCCLUDED_BY_WORLD
-    if (closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) > closeness(texelFetch(ExitDepth, pixelCoords, 0).r) * OCCLUDED) {
+    float world = closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) - slope(OpaqueDepth, pixelCoords);
+    if (world > closeness(texelFetch(ExitDepth, pixelCoords, 0).r) * OCCLUDED) {
         discard;
     }
 #endif
