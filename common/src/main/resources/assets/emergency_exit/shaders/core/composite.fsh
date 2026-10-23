@@ -3,13 +3,13 @@
 
 // Every declared texture must be bound, so only declare what this variant reads.
 uniform sampler2D ExitColor;
-#ifdef DIM_PERCENT
+#if defined(DIM_PERCENT) || defined(OCCLUDED_BY_WORLD)
 uniform sampler2D ExitDepth;
 #endif
 #if defined(STRETCHED) || defined(DIM_PERCENT)
 uniform sampler2D MainDepth;
 #endif
-#if defined(HIDE_UNDER_HAND) || defined(DIM_PERCENT)
+#if defined(HIDE_UNDER_HAND) || defined(DIM_PERCENT) || defined(OCCLUDED_BY_WORLD)
 uniform sampler2D OpaqueDepth;
 #endif
 #ifdef HIDE_UNDER_HAND
@@ -20,6 +20,7 @@ layout(location = 0) out vec4 fragColor;
 
 const float TRANSLUCENT_EXISTS = 1.0005;
 const float BEHIND = 0.999;
+const float OCCLUDED = 1.0005;
 
 // Depth is standard (near = 0, far = 1). Closeness is larger for nearer depths and 0 far away.
 float closeness(float depth) { return 1.0 - depth; }
@@ -37,6 +38,12 @@ void main() {
     if (color.a <= 0.0) {
         discard;
     }
+
+#ifdef OCCLUDED_BY_WORLD
+    if (closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) > closeness(texelFetch(ExitDepth, pixelCoords, 0).r) * OCCLUDED) {
+        discard;
+    }
+#endif
 
 #ifdef HIDE_UNDER_HAND
     // The depth differs before and after the hand where the hand is. The hand must stay on top.
