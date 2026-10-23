@@ -24,6 +24,13 @@ public class LevelRendererMixin {
 		ExitRuntime.beginLevel(camera, viewRotation, projection, partialTick);
 	}
 
+	/** Before 1.21.2 there is no frame graph: this frame's depth starts when the level clears the main target. */
+	@Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V",
+		ordinal = 0, shift = At.Shift.AFTER))
+	private void emergency_exit$beginPasses(CallbackInfo ci) {
+		ExitRuntime.beginPasses();
+	}
+
 	@Inject(method = "renderLevel", at = @At("RETURN"))
 	private void emergency_exit$endLevel(CallbackInfo ci) {
 		ExitRuntime.endLevel();
