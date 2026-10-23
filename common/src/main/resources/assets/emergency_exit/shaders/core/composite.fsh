@@ -21,6 +21,7 @@ layout(location = 0) out vec4 fragColor;
 const float TRANSLUCENT_EXISTS = 1.0005;
 const float BEHIND = 0.999;
 const float OCCLUDED = 1.0005;
+const float PUSH = 0.9995;
 
 // Depth is reversed, so closeness is larger for nearer depths and 0 far away.
 float closeness(float depth) { return depth; }
@@ -50,8 +51,8 @@ void main() {
     }
 
 #ifdef OCCLUDED_BY_WORLD
-    float world = closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) - slope(OpaqueDepth, pixelCoords);
-    if (world > closeness(texelFetch(ExitDepth, pixelCoords, 0).r) * OCCLUDED) {
+    float world = closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) * PUSH - slope(OpaqueDepth, pixelCoords);
+    if (world > closeness(texelFetch(ExitDepth, pixelCoords, 0).r) * OCCLUDED + 1.0e-6) {
         discard;
     }
 #endif
