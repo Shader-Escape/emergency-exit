@@ -76,7 +76,6 @@ final class Gpu {
 	/** Clears the colour to transparent black and the depth to {@link #FAR_DEPTH}, and keeps what was bound. */
 	static void clear(RenderTarget target) {
 		Runnable restore = saveBinding();
-		// A clear leaves the depth alone while depth writes are off.
 		Runnable restoreDepthWrites = writeDepth();
 		target.clear(Minecraft.ON_OSX);
 		restoreDepthWrites.run();
@@ -90,10 +89,7 @@ final class Gpu {
 		restore.run();
 	}
 
-	/**
-	 * Binds {@code target} for drawing, with depth writes on. The returned runnable binds what was bound before and puts
-	 * the depth writes back.
-	 */
+	/** Binds {@code target} for drawing, with depth writes on. The returned runnable restores both. */
 	static Runnable bindForDrawing(RenderTarget target) {
 		Runnable restore = saveBinding();
 		GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.frameBufferId);
@@ -105,16 +101,11 @@ final class Gpu {
 		};
 	}
 
-	/**
-	 * Turns depth writes on. Render types only ever turn them off, and expect them on otherwise. But Iris's final pass
-	 * turns them off and leaves them so, and EXIT renders its batches after it, at the end of the level rendering. The
-	 * returned runnable puts back what was set.
-	 */
+	/** Turns depth writes on, which Iris's final pass leaves off. The returned runnable restores them. */
 	private static Runnable writeDepth() {
 		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
 		GlStateManager._depthMask(true);
 		return () -> {
-			// While EXIT records translucent depth, GlStateManagerMixin would turn this back into true.
 			boolean paused = GlOverrides.paused;
 			GlOverrides.paused = true;
 			try {
