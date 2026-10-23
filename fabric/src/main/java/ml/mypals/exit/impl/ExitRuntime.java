@@ -35,7 +35,7 @@ public final class ExitRuntime {
 	private static @Nullable Channel main;
 
 	private static boolean inLevel;
-	/** Set once the level's frame graph runs. From then on the main depth holds this frame's depth. */
+	/** Set once the level cleared the main target. From then on the main depth holds this frame's depth. */
 	private static boolean passesRunning;
 	private static @Nullable Camera camera;
 	private static final Matrix4f VIEW_ROTATION = new Matrix4f();
@@ -337,8 +337,8 @@ public final class ExitRuntime {
 	}
 
 	/**
-	 * Called when the level's frame graph starts. Before this the main depth still belongs to the previous frame, so
-	 * no channel can be seeded from it.
+	 * Called when the level rendering has cleared the main target. Before this the main depth still belongs to the
+	 * previous frame, so no channel can be seeded from it.
 	 */
 	public static void beginPasses() {
 		if (inLevel) {
