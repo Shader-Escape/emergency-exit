@@ -13,7 +13,7 @@ accepts 1.19.4 (`fabric.mod.json`: `>=1.19.4 <=1.20`).
 
 ### Loaders
 
-One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.2+1.20`). Iris is optional.
+One jar: `emergency_exit-fabric` (Maven `ml.mypals.exit:emergency_exit-fabric:0.1.3+1.20`). Iris is optional.
 Without a shader pack nothing is routed. Iris has no NeoForge build for this Minecraft version, so this branch is
 Fabric only.
 
