@@ -240,10 +240,6 @@ public final class ExitRuntime {
 			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal. The
 			// level's projection is not set this late in the frame, so set it too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
-			PoseStack modelView = RenderSystem.getModelViewStack();
-			modelView.pushPose();
-			modelView.last().pose().identity();
-			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
 			// 1.19.3 has no vertex sorting (RenderSystem.setProjectionMatrix takes the matrix alone).
 			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION));
@@ -267,8 +263,6 @@ public final class ExitRuntime {
 					RenderSystem.setProjectionMatrix(savedProjection);
 					savedProjection = null;
 				}
-				RenderSystem.getModelViewStack().popPose();
-				RenderSystem.applyModelViewMatrix();
 				restoreOutput.run();
 			}
 			restoreOutput = null;
