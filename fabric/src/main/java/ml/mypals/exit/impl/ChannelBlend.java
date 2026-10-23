@@ -45,6 +45,7 @@ final class ChannelBlend {
 		boolean hand = options.hideUnderHand();
 		int dimPercent = Math.round(options.dimBehindTranslucent() * 100);
 		boolean dim = dimPercent < 100;
+		boolean occluded = options.occludedByWorld();
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
 		if (opaque == null) {
@@ -63,18 +64,21 @@ final class ChannelBlend {
 		if (dim) {
 			samplers.add(Gpu.depth("MainDepth", SceneDepth.current(main)));
 		}
-		if (hand || dim) {
+		if (hand || dim || occluded) {
 			samplers.add(Gpu.depth("OpaqueDepth", opaque));
 		}
 		if (hand) {
 			samplers.add(Gpu.depth("NoHandDepth", noHand));
 		}
 
-		String key = (hand ? "h" : "") + (dim ? "d" + dimPercent : "");
+		String key = (hand ? "h" : "") + (occluded ? "o" : "") + (dim ? "d" + dimPercent : "");
 		Gpu.Pipeline pipeline = PIPELINES.computeIfAbsent(key, k -> {
 			Map<String, Integer> defines = new LinkedHashMap<>();
 			if (hand) {
 				defines.put("HIDE_UNDER_HAND", 1);
+			}
+			if (occluded) {
+				defines.put("OCCLUDED_BY_WORLD", 1);
 			}
 			if (dim) {
 				defines.put("DIM_PERCENT", dimPercent);
