@@ -10,6 +10,16 @@ const float PUSH = 0.9995;
 float closeness(float depth) { return depth; }
 float depthOf(float closeness) { return closeness; }
 
+float slope(sampler2D depth, ivec2 p) {
+    ivec2 last = textureSize(depth, 0) - 1;
+    float c = closeness(texelFetch(depth, p, 0).r);
+    float l = closeness(texelFetch(depth, max(p - ivec2(1, 0), ivec2(0)), 0).r);
+    float r = closeness(texelFetch(depth, min(p + ivec2(1, 0), last), 0).r);
+    float d = closeness(texelFetch(depth, max(p - ivec2(0, 1), ivec2(0)), 0).r);
+    float u = closeness(texelFetch(depth, min(p + ivec2(0, 1), last), 0).r);
+    return max(min(abs(r - c), abs(c - l)), min(abs(u - c), abs(c - d)));
+}
+
 // HIDE_UNDER_HAND keeps the hand in front. OCCLUDED_BY_WORLD lets the world hide the channel.
 void main() {
     ivec2 pixelCoords = ivec2(gl_FragCoord.xy);
@@ -25,7 +35,7 @@ void main() {
 #endif
 
 #ifdef OCCLUDED_BY_WORLD
-    gl_FragDepth = depthOf(closeness(opaque) * PUSH);
+    gl_FragDepth = depthOf(max(closeness(opaque) * PUSH - slope(OpaqueDepth, pixelCoords), 0.0));
 #else
     discard;
 #endif
