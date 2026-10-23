@@ -1,10 +1,10 @@
 # EXIT（应急出口）for Minecraft 1.21.8
 
 This branch is EXIT for Minecraft **1.21.8**: Fabric and NeoForge, mod id `emergency_exit`, Maven
-`ml.mypals.exit:emergency_exit-<loader>:0.1.3+1.21.8`.
+`ml.mypals.exit:emergency_exit-<loader>:0.1.4+1.21.8`.
 
 这个分支是 Minecraft **1.21.8** 的 EXIT：Fabric 和 NeoForge，mod id `emergency_exit`，Maven
-`ml.mypals.exit:emergency_exit-<加载器>:0.1.3+1.21.8`。
+`ml.mypals.exit:emergency_exit-<加载器>:0.1.4+1.21.8`。
 
 The documentation is kept on `master` only. 文档只在 `master` 上维护：
 
