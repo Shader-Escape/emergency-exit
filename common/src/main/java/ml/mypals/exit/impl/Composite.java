@@ -26,6 +26,7 @@ final class Composite {
 		boolean hand = options.hideUnderHand();
 		int dimPercent = Math.round(options.dimBehindTranslucent() * 100);
 		boolean dim = dimPercent < 100;
+		boolean occluded = options.occludedByWorld();
 
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
@@ -43,17 +44,17 @@ final class Composite {
 			// When stretched the shader also reads the output size from it.
 			samplers.add(Gpu.depth("MainDepth", stretched ? main : SceneDepth.current(main)));
 		}
-		if (dim) {
+		if (dim || occluded) {
 			samplers.add(Gpu.depth("ExitDepth", channel));
 		}
-		if (hand || dim) {
+		if (hand || dim || occluded) {
 			samplers.add(Gpu.depth("OpaqueDepth", opaque));
 		}
 		if (hand) {
 			samplers.add(Gpu.depth("NoHandDepth", noHand));
 		}
 
-		String key = (stretched ? "s" : "") + (hand ? "h" : "") + (dim ? "d" + dimPercent : "");
+		String key = (stretched ? "s" : "") + (hand ? "h" : "") + (occluded ? "o" : "") + (dim ? "d" + dimPercent : "");
 		Gpu.Pipeline pipeline = PIPELINES.computeIfAbsent(key, k -> {
 			Map<String, Integer> defines = new LinkedHashMap<>();
 			if (stretched) {
@@ -61,6 +62,9 @@ final class Composite {
 			}
 			if (hand) {
 				defines.put("HIDE_UNDER_HAND", 1);
+			}
+			if (occluded) {
+				defines.put("OCCLUDED_BY_WORLD", 1);
 			}
 			if (dim) {
 				defines.put("DIM_PERCENT", dimPercent);
