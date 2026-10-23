@@ -82,7 +82,10 @@ final class Gpu {
 		int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
 		int[] viewport = new int[4];
 		GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
+		// A clear leaves the depth alone while depth writes are off.
+		Runnable restoreDepthWrites = writeDepth();
 		target.clear(Minecraft.ON_OSX);
+		restoreDepthWrites.run();
 		GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
 		GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
 		GlStateManager._viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
@@ -143,8 +146,8 @@ final class Gpu {
 	}
 
 	/**
-	 * Makes {@code target} the framebuffer that following draws go to; run the returned action to bind back what was
-	 * bound.
+	 * Makes {@code target} the framebuffer that following draws go to, with depth writes on; run the returned action to
+	 * bind back what was bound and put the depth writes back.
 	 */
 	static Runnable bindForDrawing(RenderTarget target) {
 		int drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
@@ -153,11 +156,24 @@ final class Gpu {
 		GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
 		GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.frameBufferId);
 		GlStateManager._viewport(0, 0, target.width, target.height);
+		Runnable restoreDepthWrites = writeDepth();
 		return () -> {
+			restoreDepthWrites.run();
 			GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
 			GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
 			GlStateManager._viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 		};
+	}
+
+	/**
+	 * Turns depth writes on. Render types only ever turn them off, and expect them on otherwise. But Iris's final pass
+	 * turns them off and leaves them so, and EXIT renders its batches after it, at the end of the level rendering. The
+	 * returned runnable puts back what was set.
+	 */
+	private static Runnable writeDepth() {
+		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+		GlStateManager._depthMask(true);
+		return () -> GlStateManager._depthMask(depthMask);
 	}
 
 	/** A texture a full-screen pass samples: the colour or the depth of a target, read with {@code texelFetch}. */
@@ -307,6 +323,8 @@ final class Gpu {
 		int[] viewport = new int[4];
 		GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
 		boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+		int depthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
 		boolean blend = GL11.glIsEnabled(GL11.GL_BLEND);
 		int activeTexture = GlStateManager._getActiveTexture();
 		// Minecraft caches the bound program, vertex array and textures; restore exactly what was bound, or its next
@@ -365,8 +383,8 @@ final class Gpu {
 		}
 		GlStateManager._activeTexture(activeTexture);
 		GlStateManager._colorMask(true, true, true, true);
-		GlStateManager._depthMask(true);
-		GlStateManager._depthFunc(GL11.GL_LEQUAL);
+		GlStateManager._depthMask(depthMask);
+		GlStateManager._depthFunc(depthFunc);
 		if (depthTest) {
 			GlStateManager._enableDepthTest();
 		} else {
