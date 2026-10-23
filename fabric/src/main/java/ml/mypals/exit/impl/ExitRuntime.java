@@ -1,5 +1,6 @@
 package ml.mypals.exit.impl;
 
+import org.joml.Matrix3f;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -174,6 +175,13 @@ public final class ExitRuntime {
 	}
 
 	/** The level's projection. */
+	static PoseStack levelPoseStack() {
+		PoseStack poseStack = new PoseStack();
+		poseStack.last().pose().set(VIEW_ROTATION);
+		poseStack.last().normal().set(new Matrix3f(VIEW_ROTATION));
+		return poseStack;
+	}
+
 	static Matrix4fc projectionMatrix() {
 		return PROJECTION;
 	}
@@ -230,11 +238,11 @@ public final class ExitRuntime {
 		}
 		if (PORTALS.size() == 1 && portalRouted) {
 			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal. The
-			// level's view rotation and projection are not set this late in the frame, so set them too.
+			// level's projection is not set this late in the frame, so set it too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().set(VIEW_ROTATION);
+			modelView.last().pose().identity();
 			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
 			// 1.19.3 has no vertex sorting (RenderSystem.setProjectionMatrix takes the matrix alone).

@@ -104,7 +104,7 @@ public final class DebugShapes {
 			return;
 		}
 		STATS.batchDraws++;
-		box(Exit.batch(source), new PoseStack(), camera, at, 0xFF30FF30, true);
+		box(Exit.batch(source), ExitRuntime.levelPoseStack(), camera, at, 0xFF30FF30, true);
 	}
 
 	/** Called at the end of the level rendering, before the batches are drawn. */
@@ -137,12 +137,12 @@ public final class DebugShapes {
 				STATS.portalRedirectedPasses++;
 				// With a shader pack the portal bound the channel's framebuffer, so the main target lands there.
 				MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(IMMEDIATE);
-				box(immediate, new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
+				box(immediate, ExitRuntime.levelPoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
 				immediate.endBatch();
 			} else {
 				// Without a shader pack the framebuffer is the main target and the model view is no longer the level's,
 				// so record into the channel's own batch, drawn with the right view and projection at the end.
-				box(xray.batch(null), new PoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
+				box(xray.batch(null), ExitRuntime.levelPoseStack(), ExitRuntime.camera().getPosition(), at.subtract(right.scale(2)), 0xC03030FF, false);
 			}
 		});
 		DebugMeshes.render(xray, at, right);

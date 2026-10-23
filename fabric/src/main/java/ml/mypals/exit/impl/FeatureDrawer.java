@@ -146,7 +146,7 @@ public final class FeatureDrawer {
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().set(ExitRuntime.viewRotation());
+			modelView.last().pose().identity();
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
 			// 1.19.3 has no vertex sorting: depth sorting is done by the shader pack itself.
