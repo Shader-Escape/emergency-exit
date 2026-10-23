@@ -32,7 +32,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 26.2（相对 26.3）
 
 **使用**
-- Maven `ml.mypals.exit:emergency_exit-<加载器>:0.1.1+26.2`。事件和 API 同 26.3（见 README）。
+- Maven `ml.mypals.exit:emergency_exit-<加载器>:0.1.3+26.2`。事件和 API 同 26.3（见 README）。
 - `PortalOverrides.DEFAULT` 把 `renderingLevel` 设为 `OFF`（26.3 是 `KEEP`），更旧的分支也一样，原因见下面的 **Iris**。
   在 portal 里画 `Exit.plainFormat` 里建的缓冲时，`renderingLevel` 要保持关着。
 
@@ -84,7 +84,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 26.1.2（相对 26.2）
 
 **使用**
-- Maven `…:0.1.1+26.1.2`。事件和 API 同 26.3。
+- Maven `…:0.1.3+26.1.2`。事件和 API 同 26.3。
 
 **深度方向**
 - 深度是标准方向：近 = 0，远 = 1，默认深度测试是 `LESS_THAN_OR_EQUAL`。26.2 起是反向（近 = 1，远 = 0）。
@@ -122,7 +122,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.11（相对 26.1.2）
 
 **使用**
-- Maven `…:0.1.0+1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
+- Maven `…:0.1.3+1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
 - Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1.world`）：批量和绘制在 `BEFORE_ENTITIES`
   （直通 `context.commandQueue()`），绘制也可在 `AFTER_ENTITIES`、`END_MAIN` 等；portal 在 `END_MAIN`。
 - NeoForge：`RenderLevelStageEvent.AfterOpaqueBlocks` 等。没有交出关卡收集器的事件，没东西可直通：用 `Exit.batch()`、
@@ -179,7 +179,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.10（相对 1.21.11）
 
 **使用**
-- Maven `…:0.1.0+1.21.10`。事件同 1.21.11。
+- Maven `…:0.1.3+1.21.10`。事件同 1.21.11。
 - API 用 `ResourceLocation` 代替 `Identifier`（`Exit.MAIN`、`Exit.channel`、`ExitChannel.id()`），`@Nullable` 是
   `org.jetbrains.annotations.Nullable`。
 - 没有 Gizmo：README 里 portal 收 Gizmo 的规则和调试方块的青色线框都没有。
@@ -223,7 +223,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.8（相对 1.21.10）
 
 **使用**
-- Maven `…:0.1.0+1.21.8`。
+- Maven `…:0.1.3+1.21.8`。
 - API 的 `SubmitNodeCollector` 换成 `MultiBufferSource`：`Exit.draw(MultiBufferSource, …)`、`ExitContext.bufferSource()`
   （代替 `collector()`）、`Exit.batch(MultiBufferSource)` 收、交 `MultiBufferSource`；`ExitContext.camera()` 是 `Camera`。
   绘制和批量里画的东西照样记进通道的批量，帧末先实体后半透明。
@@ -283,7 +283,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.5（相对 1.21.8）
 
 **使用**
-- Maven `…:0.1.0+1.21.5`。API 和 Fabric 事件同 1.21.8。
+- Maven `…:0.1.3+1.21.5`。API 和 Fabric 事件同 1.21.8。
 - NeoForge 只有一个 `RenderLevelStageEvent`，看 `getStage()`：比如 `Stage.AFTER_CUTOUT_BLOCKS`；不要用 `Stage.AFTER_LEVEL`。
 - `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和更新的版本一样。
 
@@ -328,7 +328,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.4（相对 1.21.5）
 
 **使用**
-- Maven `…:0.1.2+1.21.4`。API 和事件同 1.21.5。
+- Maven `…:0.1.3+1.21.4`。API 和事件同 1.21.5。
 - 没有渲染通道：portal 改道时绑定通道目标，并让 `Minecraft.getMainRenderTarget()` 返回它，所以画进主目标的代码（含渲染类型）
   自动画进通道。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha。portal 开始之前就拿到的主目标不会被换掉，要用 `redirect`。
 
@@ -365,7 +365,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.3（相对 1.21.4）
 
 **使用**
-- Maven `…:0.1.1+1.21.3`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.3+1.21.3`。API、事件、portal 同 1.21.4。
 - `PortalOverrides.bypass` 是 EXIT 自己的开关（Iris 1.8.1 没有），效果相同：开着时 Iris 不替换原版着色器。
 
 **构建**
@@ -386,7 +386,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.1（相对 1.21.3）
 
 **使用**
-- Maven `…:0.1.2+1.21.1`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.3+1.21.1`。API、事件、portal 同 1.21.4。
 - 没有帧图：关卡清空主目标、开始绘制之后才能改道（主渲染通道里的事件都可以）。
 
 **构建**
