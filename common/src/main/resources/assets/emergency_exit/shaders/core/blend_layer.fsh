@@ -10,7 +10,7 @@ uniform sampler2D ExitDepth;
 #ifdef DIM_PERCENT
 uniform sampler2D MainDepth;
 #endif
-#if defined(HIDE_UNDER_HAND) || defined(DIM_PERCENT)
+#if defined(HIDE_UNDER_HAND) || defined(DIM_PERCENT) || defined(OCCLUDED_BY_WORLD)
 uniform sampler2D OpaqueDepth;
 #endif
 #ifdef HIDE_UNDER_HAND
@@ -21,6 +21,7 @@ layout(location = 0) out vec4 fragColor;
 
 const float TRANSLUCENT_EXISTS = 1.0005;
 const float BEHIND = 0.999;
+const float OCCLUDED = 1.0005;
 
 // Depth is reversed, so closeness is larger for nearer depths and 0 far away.
 float closeness(float depth) { return depth; }
@@ -35,6 +36,12 @@ void main() {
 
 #ifdef HIDE_UNDER_HAND
     if (texelFetch(OpaqueDepth, pixelCoords, 0).r != texelFetch(NoHandDepth, pixelCoords, 0).r) {
+        color = vec4(0.0);
+    }
+#endif
+
+#ifdef OCCLUDED_BY_WORLD
+    if (closeness(texelFetch(OpaqueDepth, pixelCoords, 0).r) > closeness(exitDepth) * OCCLUDED) {
         color = vec4(0.0);
     }
 #endif
