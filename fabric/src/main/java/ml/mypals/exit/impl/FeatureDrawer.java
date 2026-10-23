@@ -132,16 +132,27 @@ public final class FeatureDrawer {
 			Map<RenderType, BufferBuilder.RenderedBuffer> translucent = new LinkedHashMap<>();
 			Map<RenderType, BufferBuilder.RenderedBuffer> translucentDepthData = new LinkedHashMap<>();
 			for (Map.Entry<RenderType, Buffers> entry : this.buffers.entrySet()) {
-				BufferBuilder.RenderedBuffer colour = entry.getValue().colour.endOrDiscardIfEmpty();
-				if (colour != null) {
-					(entry.getValue().translucent ? translucent : solid).put(entry.getKey(), colour);
-				}
-				if (entry.getValue().depth != null) {
-					BufferBuilder.RenderedBuffer depth = entry.getValue().depth.endOrDiscardIfEmpty();
-					if (depth != null) {
-						translucentDepthData.put(entry.getKey(), depth);
+				Buffers buffers = entry.getValue();
+				if (buffers.colour.building()) {
+					BufferBuilder.RenderedBuffer colour = buffers.colour.endOrDiscardIfEmpty();
+					if (colour != null) {
+						(buffers.translucent ? translucent : solid).put(entry.getKey(), colour);
 					}
 				}
+				if (buffers.depth != null && buffers.depth.building()) {
+					BufferBuilder.RenderedBuffer depth = buffers.depth.endOrDiscardIfEmpty();
+					if (depth == null) {
+						continue;
+					}
+					if (translucentDepth != null) {
+						translucentDepthData.put(entry.getKey(), depth);
+					} else {
+						depth.release();
+					}
+				}
+			}
+			if (solid.isEmpty() && translucent.isEmpty() && translucentDepthData.isEmpty()) {
+				return;
 			}
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
