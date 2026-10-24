@@ -70,7 +70,6 @@ public interface ExitChannel {
 	/**
 	 * A buffer source for this frame's batch. What is submitted to it is rendered into the channel's target at the end
 	 * of the level rendering, in one frame with the channel's {@link #draw drawings}: solid first, then translucent.
-	 * Use camera-relative positions, and get it again each frame.
 	 */
 	default MultiBufferSource batch() {
 		return this.batch(null);
