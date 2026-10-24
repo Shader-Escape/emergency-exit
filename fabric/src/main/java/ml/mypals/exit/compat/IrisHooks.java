@@ -2,12 +2,15 @@ package ml.mypals.exit.compat;
 
 import ml.mypals.exit.mixin.iris.LegacyIrisPipelineAccessor;
 import net.coderbot.iris.Iris;
+import net.coderbot.iris.pipeline.FixedFunctionWorldRenderingPipeline;
+import net.coderbot.iris.pipeline.WorldRenderingPipeline;
 import net.irisshaders.iris.api.v0.IrisApi;
 
 final class IrisHooks {
+	/** Iris 1.2's API only reads the pipeline field, which is empty for parts of the frame; then ask for the pack. */
 	static boolean isPackInUse() {
-		// Iris 1.7 (1.20.6) has no Iris.isPackInUseQuick; the public API answers it.
-		return IrisApi.getInstance().isShaderPackInUse();
+		WorldRenderingPipeline pipeline = Iris.getPipelineManager().getPipelineNullable();
+		return pipeline != null ? !(pipeline instanceof FixedFunctionWorldRenderingPipeline) : Iris.getCurrentPack().isPresent();
 	}
 	static boolean isRenderingShadowPass() {
 		return IrisApi.getInstance().isRenderingShadowPass();
