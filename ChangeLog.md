@@ -5,7 +5,26 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 移植到更旧的版本时，从最接近的分支开出，照着这里改。
 
 每节开头的 **使用** 写给用 EXIT 的 mod：这个版本的 Maven 坐标、各加载器在哪些事件里调用 EXIT、API 类型和 README（以 26.3 为准）
-有什么不同。README 只在 `master` 上维护，各分支的 README 只指向这里。
+有什么不同。README 只在 `master` 上维护。1.16.5 到 1.20.4 的分支已经删掉了自己的 README，以 `master` 的 README 和本文件为准。
+
+Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency_exit-<加载器>:<EXIT版本>-<Minecraft版本>`，
+下面简写成 `…:0.1.4-<mc>`。JitPack 不接受 `+`，模组自己的版本仍写作 `0.1.4+<mc>`。目前 19 个版本都是 0.1.4。
+在分支里 `publishToMavenLocal` 会用同样的坐标发布到本地；把 mavenLocal 排在 JitPack 前面的项目（比如 LFM）会用这份本地构建，
+只要它不比 JitPack 上的旧。改完先本地发布、测试，再发正式版本。
+
+所有版本都有的改动（不算版本差异，记在这里）：
+- 0.1.3 起，合并通道时（`Composite` 和 `ChannelBlend`），`occludedByWorld` 的通道在半透明之前的场景深度更近的地方丢掉像素。
+  这份深度里已经有实体和方块实体，所以在实体之前画的东西（Litematica 的方块层、EXIT 的调试形状）也会被实体挡住。
+  以前只靠深度种子遮挡，而种子在通道本帧第一次使用时就取了，那时实体还没画。
+- 0.1.4 起，深度种子和合并时的遮挡都容许世界深度一个像素的斜率（每个轴取和邻居差得较小的那个，边缘照样遮挡），
+  贴在世界表面上的通道内容，不会因为两份深度之间的细微差别在斜面上成条地被挡掉。
+  合并时世界深度也换到"种子空间"再比较（和种子一样按 `PUSH` 推远、加上斜率）：不写深度的线和选区框，通道深度就是种子，
+  以前和没推远的世界深度比，取整决定每个像素，结果断成固定的条纹。
+- 0.1.5 起，1.20 及更旧（Sodium 0.4）：Sodium 0.4 在实心层之后才画 cutout 和 cutout_mipped 地形（草方块、树叶），
+  而 Litematica 的方块层挂在实心层末尾，通道在那里第一次使用、取深度种子，种子里还没有这些地形。
+  之后不写深度的选区框按旧种子做深度测试，合并时却和完整的场景深度比，在草地前面整块消失。
+  现在 Iris 取半透明之前的场景深度时，本帧已经播种的通道重新播种：只改深度仍等于原种子（没画过东西）的像素，
+  画过的像素保留自己的深度。
 
 | Minecraft | 分支 | Java | 映射 | Iris（开发运行） |
 |---|---|---|---|---|
@@ -24,7 +43,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 | 1.20.2 | `port/1.20.2` | 17 | 混淆，Mojang 映射 | 1.6.14 |
 | 1.20.1 | `port/1.20.1` | 17 | 混淆，Mojang 映射 | 1.7.6 |
 | 1.20 | `port/1.20` | 17 | 混淆，Mojang 映射 | 1.6.4 |
-| 1.19.3 | `port/1.19.3` | 17 | 混淆，Mojang 映射 | 1.5.2 |
+| 1.19.4 | `port/1.19.4` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 | 1.18.2 | `port/1.18.2` | 17 | 混淆，Mojang 映射 | 1.6.11 |
 | 1.17.1 | `port/1.17.1` | 16 | 混淆，Mojang 映射 | 1.2.7 |
 | 1.16.5 | `port/1.16.5` | 16 | 混淆，Mojang 映射 | 1.4.5 |
@@ -32,7 +51,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 26.2（相对 26.3）
 
 **使用**
-- Maven `ml.mypals.exit:emergency_exit-<加载器>:0.1.4+26.2`。事件和 API 同 26.3（见 README）。
+- Maven `…:0.1.4-26.2`。事件和 API 同 26.3（见 README）。
 - `PortalOverrides.DEFAULT` 把 `renderingLevel` 设为 `OFF`（26.3 是 `KEEP`），更旧的分支也一样，原因见下面的 **Iris**。
   在 portal 里画 `Exit.plainFormat` 里建的缓冲时，`renderingLevel` 要保持关着。
 
@@ -47,6 +66,8 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - 所有 `createRenderPass` 重载最后都进 `CommandEncoder.createRenderPass(RenderPassDescriptor)`，portal 在这里换附件。
 - 没有 `RenderSystem.getCompiledPipeline`。`RenderPass.setPipeline` 直接接收 `RenderPipeline`，深度变体在这里替换。
 - 绑定采样器用 `pass.bindTexture(name, view, sampler)`，不是 `setUniform`。
+- 缩放探针在打开自己的渲染通道之前写好变换（`writeTransform`）、取好索引缓冲；在通道里做会抛
+  `Close the existing render pass`（0.1.1 起，26.1.2 相同）。
 
 **管线和目标**
 - 采样器用 `BindGroupLayout.withSampler(name)`，没有 `UniformType.COMBINED_IMAGE_SAMPLER`。
@@ -84,7 +105,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 26.1.2（相对 26.2）
 
 **使用**
-- Maven `…:0.1.4+26.1.2`。事件和 API 同 26.3。
+- Maven `…:0.1.4-26.1.2`。事件和 API 同 26.3。
 
 **深度方向**
 - 深度是标准方向：近 = 0，远 = 1，默认深度测试是 `LESS_THAN_OR_EQUAL`。26.2 起是反向（近 = 1，远 = 0）。
@@ -122,7 +143,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.11（相对 26.1.2）
 
 **使用**
-- Maven `…:0.1.4+1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
+- Maven `…:0.1.4-1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
 - Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1.world`）：批量和绘制在 `BEFORE_ENTITIES`
   （直通 `context.commandQueue()`），绘制也可在 `AFTER_ENTITIES`、`END_MAIN` 等；portal 在 `END_MAIN`。
 - NeoForge：`RenderLevelStageEvent.AfterOpaqueBlocks` 等。没有交出关卡收集器的事件，没东西可直通：用 `Exit.batch()`、
@@ -179,7 +200,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.10（相对 1.21.11）
 
 **使用**
-- Maven `…:0.1.4+1.21.10`。事件同 1.21.11。
+- Maven `…:0.1.4-1.21.10`。事件同 1.21.11。
 - API 用 `ResourceLocation` 代替 `Identifier`（`Exit.MAIN`、`Exit.channel`、`ExitChannel.id()`），`@Nullable` 是
   `org.jetbrains.annotations.Nullable`。
 - 没有 Gizmo：README 里 portal 收 Gizmo 的规则和调试方块的青色线框都没有。
@@ -223,7 +244,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.8（相对 1.21.10）
 
 **使用**
-- Maven `…:0.1.4+1.21.8`。
+- Maven `…:0.1.4-1.21.8`。
 - API 的 `SubmitNodeCollector` 换成 `MultiBufferSource`：`Exit.draw(MultiBufferSource, …)`、`ExitContext.bufferSource()`
   （代替 `collector()`）、`Exit.batch(MultiBufferSource)` 收、交 `MultiBufferSource`；`ExitContext.camera()` 是 `Camera`。
   绘制和批量里画的东西照样记进通道的批量，帧末先实体后半透明。
@@ -283,7 +304,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.5（相对 1.21.8）
 
 **使用**
-- Maven `…:0.1.4+1.21.5`。API 和 Fabric 事件同 1.21.8。
+- Maven `…:0.1.4-1.21.5`。API 和 Fabric 事件同 1.21.8。
 - NeoForge 只有一个 `RenderLevelStageEvent`，看 `getStage()`：比如 `Stage.AFTER_CUTOUT_BLOCKS`；不要用 `Stage.AFTER_LEVEL`。
 - `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和更新的版本一样。
 
@@ -328,7 +349,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.4（相对 1.21.5）
 
 **使用**
-- Maven `…:0.1.4+1.21.4`。API 和事件同 1.21.5。
+- Maven `…:0.1.4-1.21.4`。API 和事件同 1.21.5。
 - 没有渲染通道：portal 改道时绑定通道目标，并让 `Minecraft.getMainRenderTarget()` 返回它，所以画进主目标的代码（含渲染类型）
   自动画进通道。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha。portal 开始之前就拿到的主目标不会被换掉，要用 `redirect`。
 
@@ -340,6 +361,9 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `Gpu` 照 LitematicaPass 换成纯 GL：自己编译程序（同样的片元着色器，顶点着色器用 `gl_VertexID` 画一个全屏三角形），
   画完放回帧缓冲、视口、程序、顶点数组、纹理、掩码、深度测试和混合。四种全屏通道保留：颜色（预乘混合或替换）、深度（LEQUAL）、
   替换深度、整层（用 `GL_ALWAYS`，不用先清成远处）。编译失败的程序只记一次日志，冒烟测试会列出来。
+- 深度写入：原版渲染类型只会关掉 depthMask，默认它是开着的；Iris 的 final 通道把它关掉后不再打开，EXIT 在那之后画批量，
+  实体和方块实体就只写颜色不写深度。所以 EXIT 画进通道时（批量和 portal，在 `Gpu.bindForDrawing` 和清除目标时）打开深度写入，画完放回；
+  全屏通道画完放回它找到的 depthMask 和深度函数，不再强制设定。1.21.4 和 1.21.1 从 0.1.2 起，1.21.3 从 0.1.1 起，1.20.6 到 1.16.5 从 0.1.2 起。
 - `TextureTarget(width, height, useDepth)`，清除色设成透明；`RenderTarget.clear()`、`copyDepthFrom` 会把帧缓冲绑回 0，EXIT 自己放回原来的绑定。
 - 去掉了 `PortalPassMixin`、`RenderPassMixin`、`CompiledPipelineMixin`、`RenderPipelinesAccessor`、`CompositeRenderTypeAccessor`、
   `StrictValidationMixin` 和打开通道的计数。
@@ -365,7 +389,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.3（相对 1.21.4）
 
 **使用**
-- Maven `…:0.1.4+1.21.3`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.4-1.21.3`。API、事件、portal 同 1.21.4。
 - `PortalOverrides.bypass` 是 EXIT 自己的开关（Iris 1.8.1 没有），效果相同：开着时 Iris 不替换原版着色器。
 
 **构建**
@@ -386,7 +410,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 ## 1.21.1（相对 1.21.3）
 
 **使用**
-- Maven `…:0.1.4+1.21.1`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.4-1.21.1`。API、事件、portal 同 1.21.4。
 - 没有帧图：关卡清空主目标、开始绘制之后才能改道（主渲染通道里的事件都可以）。
 
 **构建**
@@ -414,10 +438,20 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **开发运行**
 - Super Resolution 1.21.1 的 1.21-0.9.2-alpha.2：开发运行里加上它内嵌的库后能启动，但实体模型（含手）画不出来、SR 不缩放（配 Sundial Lite
   也是场景尺寸 = 窗口尺寸），退出时原生崩溃。所以 1.21.1 也不带 `-Pexit.superResolution`，没有测 SR。
+
 ## 1.20.6（相对 1.21.11）
 
 这一节把 1.21.11 到 1.20.6 之间的差异一起记下（1.21.10、1.21.8、1.21.5、1.21.4、1.21.3、1.21.1 都跳过了，直接从
 `port/1.21.11` 开出并一次性改到 1.20.6）。
+
+**使用**
+- Maven `…:0.1.4-1.20.6`，只有 Fabric（`emergency_exit-fabric`）。Iris 不是必需的，没有光影包时什么都不改道。
+- API 同 1.21.8：没有 `SubmitNodeCollector`，绘制和批量收、交 `MultiBufferSource`（`ExitContext.bufferSource()`）。
+- Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1`）：批量和绘制在 `BEFORE_ENTITIES`（直通上下文的
+  `consumers()`），绘制也可在 `AFTER_ENTITIES`；portal 在这些事件里调用，或在关卡渲染结束时。
+- 没有输出覆盖，portal 靠绑定通道的帧缓冲、让 `Minecraft.getMainRenderTarget()` 交出通道目标来改道（同 1.21.4）。
+- 批量默认在关卡渲染结束时画；`flushBatch()` 能在那之前画（见下面的 **关卡钩子**）。
+- 视图旋转在 `RenderSystem` 的 model-view 矩阵里，`ExitContext.poseStack()` 不带旋转（和更新的版本一样）。1.20.4 及更旧的不同，见 1.20.4。
 
 **构建**
 - Java 21（同 1.21.11）。common 仍用 ModDevGradle NeoForm `1.20.6-20240627.102356`，Fabric 用 Loom
@@ -449,14 +483,22 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `ExitContext.bufferSource()`、`Exit.batch(MultiBufferSource)`。
 - 批次按 `RenderType` 攒；帧末先画不混合的类型，再画半透明的（保证实体不盖住更近的半透明）。半透明的提交另外录进第二个
   buffer，画的时候 colour 关、depth 开，写进通道的半透明深度目标，合并前用 `TranslucentDepth.fold` 取更近的。
-- 删掉：gizmo（1.21.6 才有，连同 `SimpleGizmoCollector`/`DrawableGizmoPrimitives`/`Gizmos`）、Super Resolution 与缩放
-  探针（`SceneScale`、`scale_probe.fsh`、`RenderTypeAccessor`）、`StrictValidationMixin`，以及新渲染 API 的 mixin
-  （`RenderPassMixin`、`PortalPassMixin`、`CompiledPipelineMixin`、`RenderPipelinesAccessor`、
-  `FeatureRenderDispatcherAccessor`、`FeatureRenderDispatcherMixin`、`RenderTypeAccessor`）。
+- 删掉：gizmo（1.21.6 才有，连同 `SimpleGizmoCollector`/`DrawableGizmoPrimitives`/`Gizmos`）、Super Resolution、
+  `StrictValidationMixin`，以及新渲染 API 的 mixin（`RenderPassMixin`、`PortalPassMixin`、`CompiledPipelineMixin`、
+  `RenderPipelinesAccessor`、`FeatureRenderDispatcherAccessor`、`FeatureRenderDispatcherMixin`、`RenderTypeAccessor`）。
+
+**缩放探针**
+- 移植时缩放探针（`SceneScale`、`scale_probe.fsh`）和 Super Resolution 一起删了，理由是这里光影包总按场景分辨率渲染。
+  但 Kappa 的 TAAU 这类光影包在自己的顶点着色器里缩放每个顶点，哪个版本都一样：场景只占深度缓冲的一角，深度种子、
+  合并和通道混合都拿错位的深度比较。0.1.1 起探针又回来了（1.20.6 到 1.16.5），照 1.21.1 移植：探针四边形用
+  `BufferBuilder.begin/end` 建，像 `FeatureDrawer` 那样只写深度地画；`SceneDepth` 照旧重采样场景深度。
 
 **关卡钩子**
 - `LevelRenderer.renderLevel(float, long, boolean, Camera, GameRenderer, LightTexture, Matrix4f 视图旋转, Matrix4f 投影)`。
   视图旋转与投影直接取参数（1.21 在本方法入口模型视图还是 identity，不能从 `RenderSystem` 读）。END 时合并。
+- 没有帧图（1.21.2 才有），`ExitRuntime.beginPasses` 和 1.21.1 一样在 `renderLevel` 清空主目标之后调用。移植时漏了这个调用，
+  `flushBatch()` 什么都不做，批量只在关卡结束时画，画在本该在它之后的东西（比如写深度的 Litematica overlay）后面；
+  0.1.3 起改好了，1.20.4 到 1.16.5 相同。
 
 **加载器事件**
 - 没有 `LevelRenderEvents`（1.21.11 的）：用 `WorldRenderEvents.BEFORE_ENTITIES`，上下文里取 `consumers()`。
@@ -472,6 +514,17 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 - 运行目录 `run/fabric-1.20.6`；冒烟测试无光影与 BSL 光影各跑一次都 `RESULT: OK`；`runAuditClient` 每个 mixin 都应用。
 
 ## 1.20.4（相对 1.20.6）
+
+**使用**
+- Maven `…:0.1.4-1.20.4`，只有 Fabric。事件同 1.20.6。
+- **pose stack 按 Minecraft 1.20.5 之前的约定**（已提交，还没发布，会是 0.1.5；0.1.4 还是旧的做法）：1.20.5 之前 Minecraft
+  把视图旋转放在关卡的 pose stack 里，model-view 矩阵是单位矩阵。现在 `ExitContext.poseStack()` 一开始就带着视图旋转
+  （就是关卡在相机位置的 pose stack），`ExitContext.modelView()` 是单位矩阵，批量用单位 model-view 矩阵画。
+  portal 不动 model-view 矩阵，Minecraft 当时是什么就是什么：它在 debug 和 world-last 阶段会把视图旋转放进 model-view，
+  Litematica 的选区框就靠这个，用单位 pose stack 画。
+  往 `Exit.batch(...)` 提交、在绘制里画，都和交给关卡自己的 buffer source 一样直接用关卡的 pose stack，不用换算。
+  以前 EXIT 要的是不带旋转的 pose stack、旋转由它自己加，于是用关卡 pose stack 交进来的实体和方块实体被转了两次。
+  1.20.2 到 1.16.5 相同；1.20.5 起不变，那里旋转在 `RenderSystem` 的 model-view 矩阵里。
 
 **构建**
 - Java 17（1.20.5 起才是 21）。
@@ -493,6 +546,9 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.20.2（相对 1.20.4）
 
+**使用**
+- Maven `…:0.1.4-1.20.2`，只有 Fabric。事件和 API 同 1.20.4（pose stack 的约定也一样）。
+
 **构建**
 - NeoForm `1.20.2-20241215.201144`；Fabric API `0.91.6+1.20.2`；Iris 1.6.14、Sodium 见 `gradle.properties`。
 
@@ -510,6 +566,11 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 其余同 1.20.4。
 
 ## 1.20.1（相对 1.20.2）
+
+**使用**
+- Maven `…:0.1.4-1.20.1`，只有 Fabric。事件和 API 同 1.20.2。
+- 批量只结束正在构建的 builder，和 1.20.2 一样。以前本帧没用到的渲染类型也会被结束，批量一提前画（`flushBatch()`）就抛
+  `Not building!`。0.1.5 起，1.20 和 1.19.4 相同。
 
 **构建**
 - 变成**单个 Fabric Loom 工程**（同 LitematicaPass）：1.20.1 没有 ModDevGradle 能用的 NeoForm 构建，`common` 子工程根本
@@ -543,6 +604,10 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.20（相对 1.20.2）
 
+**使用**
+- Maven `…:0.1.4-1.20`，只有 Fabric。事件和 API 同 1.20.2。
+- 代码和 1.20.2 相同，所以这个 jar 也能装在 1.19.4 上（`fabric.mod.json`：`>=1.19.4 <=1.20`）。
+
 **构建**
 - 变成**单个 Fabric Loom 工程**（同 LitematicaPass）：Minecraft 1.20.1 及更早没有 ModDevGradle 能用的 NeoForm 构建，
   `common` 子工程根本建不起来。`common/src/main/java` 移进 `fabric/src/main/java`，`common/src/main/resources` 移进
@@ -570,7 +635,12 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 其余同 1.20.2。
 
-## 1.19.3（相对 1.20.2）
+## 1.19.4（相对 1.20.2）
+
+1.19.4 是 1.19.x 的最后一版，取代了原来的 `port/1.19.3`。
+
+**使用**
+- Maven `…:0.1.4-1.19.4`，只有 Fabric（Iris 1.6.11 没有 NeoForge 版）。事件和 API 同 1.20.2。
 
 **构建**
 - 变成**单个 Fabric Loom 工程**：只留 Fabric 后 `common` 子工程没有意义。`common/src/main/java` 移进
@@ -578,43 +648,37 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `fabric/src/smoke`；`common` 子工程和 build-logic 的 multiloader 插件都删掉，`fabric/build.gradle` 直接就是
   fabric-loom-remap 工程（`minecraft(...)`、`loom.officialMojangMappings()`、fabric-loader、fabric-api、Iris/Sodium 用
   `modCompileOnly` + `modLocalRuntime`、`nestedLibraries`、client / smokeClient / auditClient 三个运行配置、smoke 和
-  audit source set，以及展开 `fabric.mod.json` 和 `*.mixins.json` 的 processResources），`neoforge` 插件也删掉（Iris 1.5.2
-  没有 NeoForge 构建）。API 包名（`ml.mypals.exit.*`）不变。
-- Fabric API `0.76.1+1.19.3`；Iris 1.5.2（Modrinth `YL57xq9U:ExtC2pRY`）、Sodium `0.4.9+build.23`
-  （`AANobbMI:idtcaIVT`）。
+  audit source set，以及展开 `fabric.mod.json` 和 `*.mixins.json` 的 processResources），`neoforge` 插件也删掉。
+  API 包名（`ml.mypals.exit.*`）不变。
+- Fabric API `0.87.2+1.19.4`；Iris 1.6.11（Modrinth `YL57xq9U:wN6PuLPa`）、Sodium 0.4.10（`AANobbMI:b4hTi3mo`）。
+  `minecraft_version_range` 是 `1.19.4`。
 
 **顶点排序**
 - 没有 `com.mojang.blaze3d.vertex.VertexSorting`，`RenderSystem.setProjectionMatrix` 只收矩阵：`ExitRuntime` 里
   portal 的投影保存/恢复和 `FeatureDrawer` 里的投影设置都不再传 `DISTANCE_TO_ORIGIN`（这个版本的深度排序由光影包
-  自己做）。
-
-**调试形状（冒烟测试）**
-- 没有 `RenderType.debugQuads()`，而 `RenderType.create` 是包私有：半透明的测试方块改用
-  `RenderType.entityTranslucentEmissive(白色纹理)`（无剔除、不写深度、自发光）。两种渲染类型都是实体顶点格式，
-  顶点写法合并成一套（位置、颜色、纹理、overlay、光照、法线）。
-
-**建世界界面（冒烟测试）**
-- 没有 `WorldCreationUiState`，`CreateWorldScreen` 自己保存世界名和游戏模式。`CreateWorldScreenAccessor` 增加
-  `nameEdit`（EditBox）和 `modeButton`（`CycleButton<?>`，值的类型是包私有的）两个 accessor：测试用 `setValue` 设
-  世界名，循环按 `onPress()` 直到读到 `CREATIVE`（顺带打开作弊，后面的 `tp` 才有效，不用再设 op）。
+  自己做）。也还没有 `VertexBuffer.Usage`。
 
 **Iris**
-- Iris 1.5.2 的包名、管线类和阴影钩子和 1.20.2 一样：`net.coderbot.iris.*`、
+- Iris 1.6.11 的包名、管线类和阴影钩子和 1.20.2 一样：`net.coderbot.iris.*`、
   `net.coderbot.iris.pipeline.newshader.NewWorldRenderingPipeline`、`net.coderbot.iris.pipeline.ShadowRenderer`；
   `IrisCompat` 和两个 Iris mixin 一行没改。
 
 **开发运行**
-- 运行目录 `run/fabric-1.19.3`；冒烟测试无光影和 BSL 光影各跑一次都是 `RESULT: OK`（BSL：2201 次改道绘制、1947 帧
-  按深度混合、2201 次阴影回调里 EXIT 画了 0 次）；`runAuditClient` 每个 mixin 都应用成功。
-- 画面和 `port/1.20.2` 一致：无光影时只有黄色盒子（红色和绿色是提交给关卡自己 buffer source 的，这里不画它们），
-  有光影时是蓝、绿、黄、红四个盒子加三张调试视图（截图在 `smoke-shots/1.19.3/fabric-none` 和 `fabric-bsl`）。
+- 运行目录 `run/fabric-1.19.4`；冒烟测试用 Complementary Unbound r5.9.3 跑是 `RESULT: OK`（964 次改道绘制、800 帧按深度混合、
+  964 次阴影回调里 EXIT 画了 0 次）。
 
 其余同 1.20.2。
 
 
 ## 1.18.2（相对 1.20.2）
 
-这一支直接照 `port/1.20.2` 的代码改（1.20.1、1.20、1.19.3 三支是之后才补的），所以下面是相对 1.20.2 的差异。
+**使用**
+- Maven `…:0.1.4-1.18.2`，只有 Fabric。事件同 1.20.2（Fabric API 的 `WorldRenderEvents`，`BEFORE_ENTITIES` 的 `consumers()`）。
+- API 里的 `Matrix4f` 是 `com.mojang.math.Matrix4f`：渲染路径还没有 JOML，`ExitContext.modelView()` 返回它，不是 `Matrix4fc`。
+- 没有 `RenderType.debugQuads()`（1.19 才有）：半透明的东西用带自己纹理的渲染类型，比如 `RenderType.entityTranslucent(白色纹理)`。
+  实体格式的每个顶点元素都要写。
+
+这一支直接照 `port/1.20.2` 的代码改（1.20.1、1.20、1.19.4 三支是之后才补的），所以下面是相对 1.20.2 的差异。
 
 **构建**
 - Minecraft 1.18.2、Fabric API `0.77.0+1.18.2`、Fabric loader 0.19.5；Java 17。
@@ -647,6 +711,12 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 
 ## 1.17.1（相对 1.18.2）
+
+**使用**
+- Maven `…:0.1.4-1.17.1`，只有 Fabric。事件和 API 同 1.18.2。
+- 1.17 跑在 Java 16 上。只构建、测试了 1.17.1，`fabric.mod.json` 写的是 `>=1.17 <=1.17.1`。
+- Iris 是 1.2.7（`net.coderbot.iris`）。
+- Fabric API 的 mod id 还是 `fabric`（见下面的 **构建**），依赖 Fabric API 时写 `fabric`。
 
 **构建**
 - Minecraft 1.17.1、Fabric API `0.46.1+1.17`、Fabric loader 0.19.5；Java 16。构建 JVM 用 JDK 25（Loom 1.18.1
@@ -683,6 +753,8 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   （`@Mixin(targets = ...NewWorldRenderingPipeline)` + `@Accessor("renderTargets")`）取
   `RenderTargets.getDepthTexture()`；不同 1.17.1 构建返回的东西不一样（多数给 `DepthTexture` 对象，晚期的给纹理
   id），所以反射调 `getTextureId()` 兜底。取之前要先把旁路关掉（`IrisShaderOverrideMixin` 旁路时管线是 null）。
+- **缩放探针**（0.1.1 起，见 1.20.6）：场景深度在 Iris 自己的纹理里，所以探针先把那张纹理同步进主深度再读，读完把不带探针
+  四边形的深度放回两边。
 
 **开发运行**
 - 运行目录 `run/fabric-1.17.1`；无光影和 BSL 各跑一次都是 `RESULT: OK`（无光影：2213 次绘制、0 次改道；BSL：
@@ -709,6 +781,13 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 
 ## 1.16.5（相对 1.17.1）
 
+**使用**
+- Maven `…:0.1.4-1.16.5`，只有 Fabric。事件和 API 同 1.17.1。
+- Fabric API 的 mod id 是 `fabric`（`fabric-api` 这个 id 是后来才有的），EXIT 的 jar 依赖 `fabric`，你的 mod 也要依赖 `fabric`。
+- 固定功能管线，pose stack 的约定和 1.20.4 一样（从 0.1.5 起，见 1.20.4）：视图旋转在关卡的 pose stack 里。
+  EXIT 画通道时（portal 和批量）把关卡的投影放回 GL 的投影矩阵栈；批量把 model-view 栈设成单位矩阵，portal 不动它。
+  0.1.4 及以前两者都会把视图旋转乘到 model-view 栈上。
+
 **构建**
 - 单个 Fabric Loom 工程（形状同 1.17.1）：`common` 的内容在 `fabric` 里，`build-logic` 和多加载器插件都已经删掉。
 - Fabric API `0.42.0+1.16`；Iris 1.4.5（Modrinth `YL57xq9U:1turazSM`）、Sodium `AANobbMI:YAGZ1cCS`；Java 16。
@@ -722,9 +801,10 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 **渲染（没有核心着色器，固定功能管线）**
 - **没有 `TextureTarget`：`RenderTarget` 自己就是带纹理的目标**，`new RenderTarget(w, h, true, Minecraft.ON_OSX)`。
 - `RenderSystem` 还没有 `getModelViewStack` / `applyModelViewMatrix` / `getProjectionMatrix` / `setProjectionMatrix`：
-  关卡的视旋转和投影就在 GL 矩阵栈上。EXIT 自己画通道时（portal 和批次）用
-  `RenderSystem.matrixMode(GL_PROJECTION) → pushMatrix() → loadIdentity() → multMatrix(投影)`，MODELVIEW 同理，
-  画完 pop 回去（`GameRenderer.resetProjectionMatrix` 就是这个写法）。`ExitRuntime` 的两个矩阵字段因此不再是
+  关卡的投影就在 GL 矩阵栈上，视图旋转在关卡的 pose stack 里。EXIT 自己画通道时（portal 和批次）用
+  `RenderSystem.matrixMode(GL_PROJECTION) → pushMatrix() → loadIdentity() → multMatrix(投影)`，MODELVIEW 只
+  `pushMatrix() → loadIdentity()`，画完 pop 回去（`GameRenderer.resetProjectionMatrix` 就是这个写法）。
+  0.1.4 及以前 MODELVIEW 还会 `multMatrix(视图旋转)`，见 **使用**。`ExitRuntime` 的两个矩阵字段因此不再是
   `final`，`savedProjection` 也不需要了。
 - `com.mojang.math.Matrix4f` 没有 `load(Matrix4f)`，只有拷贝构造（`new Matrix4f(other)`）。
 - `GlStateManager` 没有 `_glGenVertexArrays` / `_glBindVertexArray` / `_getActiveTexture`：用
@@ -740,6 +820,8 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
   `IrisRenderingPipelineMixin`（`beginHand` / `beginTranslucents`）、`LegacyIrisPipelineAccessor`
   （`@Mixin(targets = ...DeferredWorldRenderingPipeline)` + `@Accessor("renderTargets")`）、以及
   `IrisHooks.sceneDepthTexture()` 都指向它；`RenderTargets.getDepthTexture()` 直接返回纹理 id，不是 `DepthTexture`。
+- 场景深度和 1.17.1 一样在 Iris 自己的纹理里，缩放探针也一样先同步、再放回不带探针四边形的深度。探针四边形按视图空间给出，
+  用固定功能的矩阵栈画。
 - **旁路开关换成 `setIsMainBound`**：把 `PipelineManager.getPipelineNullable()` 变成 null 对固定功能没用，
   Iris 只在它认为"主目标被绑定"时才绑自己的程序。所以 `IrisShaderOverrideMixin` 改成在
   `DeferredWorldRenderingPipeline.setIsMainBound` 的参数上做 `@ModifyVariable`，`IrisHooks.setBypass` 另外直接调
