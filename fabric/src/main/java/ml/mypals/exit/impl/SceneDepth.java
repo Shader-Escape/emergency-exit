@@ -32,6 +32,7 @@ public final class SceneDepth {
 		if (ExitRuntime.wantsSceneDepth()) {
 			opaque = copy(opaque, "emergency_exit_depth_opaque");
 			opaqueReady = true;
+			ExitRuntime.reseedChannels();
 			// Without a first-person hand there is no beginHand.
 			SceneScale.measureIfNeeded();
 		}

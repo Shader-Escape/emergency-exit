@@ -83,7 +83,6 @@ public final class FeatureDrawer {
 			RenderSystem.matrixMode(GL11.GL_MODELVIEW);
 			RenderSystem.pushMatrix();
 			RenderSystem.loadIdentity();
-			RenderSystem.multMatrix(ExitRuntime.viewRotation());
 			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
 			boolean renderingLevel = IrisCompat.isRenderingLevel();
 			IrisCompat.setRenderingLevel(false);

@@ -13,7 +13,7 @@ final class DrawContext implements ExitContext {
 	private final MultiBufferSource bufferSource;
 	private final boolean routed;
 	private final Camera camera;
-	private final PoseStack poseStack = new PoseStack();
+	private final PoseStack poseStack = ExitRuntime.levelPoseStack();
 
 	DrawContext(Channel channel, MultiBufferSource bufferSource, boolean routed, Camera camera) {
 		this.channel = channel;
@@ -49,7 +49,9 @@ final class DrawContext implements ExitContext {
 
 	@Override
 	public Matrix4f modelView() {
-		return ExitRuntime.viewRotation();
+		Matrix4f identity = new Matrix4f();
+		identity.setIdentity();
+		return identity;
 	}
 
 	@Override

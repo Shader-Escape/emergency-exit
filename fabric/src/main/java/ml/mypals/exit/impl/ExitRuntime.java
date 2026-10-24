@@ -1,5 +1,7 @@
 package ml.mypals.exit.impl;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Matrix3f;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import ml.mypals.exit.api.Exit;
@@ -173,6 +175,13 @@ public final class ExitRuntime {
 	}
 
 	/** The level's projection. */
+	static PoseStack levelPoseStack() {
+		PoseStack poseStack = new PoseStack();
+		poseStack.last().pose().multiply(VIEW_ROTATION);
+		poseStack.last().normal().mul(new Matrix3f(VIEW_ROTATION));
+		return poseStack;
+	}
+
 	static Matrix4f projectionMatrix() {
 		return PROJECTION;
 	}
@@ -229,18 +238,13 @@ public final class ExitRuntime {
 		}
 		if (PORTALS.size() == 1 && portalRouted) {
 			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal. The
-			// level's view rotation and projection are not set this late in the frame, so set them too.
+			// level's projection is not set this late in the frame, so set it too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
-			// The level's view rotation and projection are no longer on the stacks this late in the frame (the pack's
-			// passes moved them), so put them back for the portal.
 			RenderSystem.matrixMode(GL11.GL_PROJECTION);
 			RenderSystem.pushMatrix();
 			RenderSystem.loadIdentity();
 			RenderSystem.multMatrix(PROJECTION);
 			RenderSystem.matrixMode(GL11.GL_MODELVIEW);
-			RenderSystem.pushMatrix();
-			RenderSystem.loadIdentity();
-			RenderSystem.multMatrix(VIEW_ROTATION);
 		}
 		return portalRouted;
 	}
@@ -257,8 +261,6 @@ public final class ExitRuntime {
 		}
 		if (PORTALS.isEmpty()) {
 			if (portalRouted && restoreOutput != null) {
-				RenderSystem.matrixMode(GL11.GL_MODELVIEW);
-				RenderSystem.popMatrix();
 				RenderSystem.matrixMode(GL11.GL_PROJECTION);
 				RenderSystem.popMatrix();
 				RenderSystem.matrixMode(GL11.GL_MODELVIEW);
@@ -296,6 +298,13 @@ public final class ExitRuntime {
 			}
 		}
 		return false;
+	}
+
+	/** Channels seeded before the opaque scene depth was captured missed what the level drew since. */
+	static void reseedChannels() {
+		for (Channel channel : mergeOrder) {
+			channel.reseed();
+		}
 	}
 
 	/** A buffer source whose content is thrown away at the end of the frame. */
