@@ -8,13 +8,12 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * What a drawing gets. Positions are relative to the camera, so translate the pose by
- * {@code worldPos - cameraPos()}. EXIT applies the camera rotation and projection itself.
+ * {@code worldPos - cameraPos()}.
  */
 public interface ExitContext {
 	/** Where to submit. It is rendered with the channel's batch. */
 	MultiBufferSource bufferSource();
 
-	/** An identity pose stack at the camera position, without the camera rotation. */
 	PoseStack poseStack();
 
 	Vec3 cameraPos();
@@ -25,8 +24,7 @@ public interface ExitContext {
 	float partialTick();
 
 	/**
-	 * The view rotation, the model-view matrix EXIT renders the submits with. 1.17 has no read-only matrix type
-	 * (org.joml), so this is Minecraft's own Matrix4f; do not modify it.
+	 * 1.17 has no read-only matrix type (org.joml), so this is Minecraft's own Matrix4f; do not modify it.
 	 */
 	Matrix4f modelView();
 

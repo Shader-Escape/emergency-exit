@@ -1,5 +1,6 @@
 package ml.mypals.exit.impl;
 
+import com.mojang.math.Matrix3f;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -173,6 +174,13 @@ public final class ExitRuntime {
 	}
 
 	/** The level's projection. */
+	static PoseStack levelPoseStack() {
+		PoseStack poseStack = new PoseStack();
+		poseStack.last().pose().multiply(VIEW_ROTATION);
+		poseStack.last().normal().mul(new Matrix3f(VIEW_ROTATION));
+		return poseStack;
+	}
+
 	static Matrix4f projectionMatrix() {
 		return PROJECTION;
 	}
@@ -229,12 +237,8 @@ public final class ExitRuntime {
 		}
 		if (PORTALS.size() == 1 && portalRouted) {
 			// Before 1.21.5 draws go to whatever framebuffer is bound; bind the channel's target for the portal. The
-			// level's view rotation and projection are not set this late in the frame, so set them too.
+			// level's projection is not set this late in the frame, so set it too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
-			PoseStack modelView = RenderSystem.getModelViewStack();
-			modelView.pushPose();
-			modelView.last().pose().load(VIEW_ROTATION);
-			RenderSystem.applyModelViewMatrix();
 			savedProjection = RenderSystem.getProjectionMatrix();
 			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION));
 		}
@@ -257,8 +261,6 @@ public final class ExitRuntime {
 					RenderSystem.setProjectionMatrix(savedProjection);
 					savedProjection = null;
 				}
-				RenderSystem.getModelViewStack().popPose();
-				RenderSystem.applyModelViewMatrix();
 				restoreOutput.run();
 			}
 			restoreOutput = null;
@@ -293,6 +295,13 @@ public final class ExitRuntime {
 			}
 		}
 		return false;
+	}
+
+	/** Channels seeded before the opaque scene depth was captured missed what the level drew since. */
+	static void reseedChannels() {
+		for (Channel channel : mergeOrder) {
+			channel.reseed();
+		}
 	}
 
 	/** A buffer source whose content is thrown away. */

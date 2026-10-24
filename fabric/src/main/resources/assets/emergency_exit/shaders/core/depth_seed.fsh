@@ -3,6 +3,8 @@
 
 uniform sampler2D OpaqueDepth;
 uniform sampler2D NoHandDepth;
+uniform sampler2D ChannelDepth;
+uniform sampler2D SeededDepth;
 
 const float PUSH = 0.9995;
 
@@ -23,6 +25,11 @@ float slope(sampler2D depth, ivec2 p) {
 // HIDE_UNDER_HAND keeps the hand in front. OCCLUDED_BY_WORLD lets the world hide the channel.
 void main() {
     ivec2 pixelCoords = ivec2(gl_FragCoord.xy);
+#ifdef RESEED
+    if (texelFetch(ChannelDepth, pixelCoords, 0).r != texelFetch(SeededDepth, pixelCoords, 0).r) {
+        discard;
+    }
+#endif
     float opaque = texelFetch(OpaqueDepth, pixelCoords, 0).r;
 
 #ifdef HIDE_UNDER_HAND
