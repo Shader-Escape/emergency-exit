@@ -1,7 +1,9 @@
 package ml.mypals.exit.impl;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.pipeline.TextureTarget;
 import ml.mypals.exit.api.ExitOptions;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,15 +19,50 @@ import java.util.Map;
 final class DepthSeed {
 	private static final Map<String, Gpu.Pipeline> PIPELINES = new HashMap<>();
 
+	private static TextureTarget scratch;
+
 	private DepthSeed() {}
 
+	static boolean seeds(ExitOptions options) {
+		return options.occludedByWorld() || options.hideUnderHand();
+	}
+
 	static void seed(RenderTarget main, RenderTarget target, ExitOptions options) {
-		boolean world = options.occludedByWorld();
-		boolean hand = options.hideUnderHand();
-		if (!world && !hand) {
+		if (!seeds(options)) {
 			// The cleared depth is far and hides nothing.
 			return;
 		}
+		draw(main, target, options, null);
+	}
+
+	/** A copy of the depth {@code target} was seeded with. */
+	static TextureTarget remember(@Nullable TextureTarget copy, RenderTarget target, String label) {
+		copy = sized(copy, label, target);
+		Gpu.copyDepth(copy, target);
+		return copy;
+	}
+
+	/** Seeds the pixels of {@code target} whose depth is still {@code seeded} again, from the scene depth now. */
+	static void reseed(RenderTarget main, RenderTarget target, RenderTarget seeded, ExitOptions options) {
+		scratch = sized(scratch, "emergency_exit_reseed_scratch", target);
+		Gpu.copyDepth(scratch, target);
+		draw(main, target, options, seeded);
+	}
+
+	private static TextureTarget sized(@Nullable TextureTarget copy, String label, RenderTarget like) {
+		if (copy == null) {
+			return Gpu.depthTarget(label, like.width, like.height);
+		}
+		if (copy.width != like.width || copy.height != like.height) {
+			Gpu.resize(copy, like.width, like.height);
+		}
+		return copy;
+	}
+
+	private static void draw(RenderTarget main, RenderTarget target, ExitOptions options, @Nullable RenderTarget seeded) {
+		boolean again = seeded != null;
+		boolean world = options.occludedByWorld();
+		boolean hand = options.hideUnderHand();
 		RenderTarget opaque = SceneDepth.opaque();
 		RenderTarget noHand = SceneDepth.noHand();
 		if (opaque == null) {
@@ -40,8 +77,12 @@ final class DepthSeed {
 		if (hand) {
 			samplers.add(Gpu.depth("NoHandDepth", noHand));
 		}
+		if (again) {
+			samplers.add(Gpu.depth("ChannelDepth", scratch));
+			samplers.add(Gpu.depth("SeededDepth", seeded));
+		}
 
-		String key = (world ? "w" : "") + (hand ? "h" : "");
+		String key = (world ? "w" : "") + (hand ? "h" : "") + (again ? "r" : "");
 		Gpu.Pipeline pipeline = PIPELINES.computeIfAbsent(key, k -> {
 			Map<String, Integer> defines = new LinkedHashMap<>();
 			if (world) {
@@ -49,6 +90,9 @@ final class DepthSeed {
 			}
 			if (hand) {
 				defines.put("HIDE_UNDER_HAND", 1);
+			}
+			if (again) {
+				defines.put("RESEED", 1);
 			}
 			return Gpu.depthPipeline("pipeline/depth_seed_" + k, "core/depth_seed", defines,
 				samplers.stream().map(Gpu.Sampler::name).toArray(String[]::new));

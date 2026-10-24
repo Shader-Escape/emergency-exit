@@ -299,6 +299,13 @@ public final class ExitRuntime {
 		return false;
 	}
 
+	/** Channels seeded before the opaque scene depth was captured missed what the level drew since. */
+	static void reseedChannels() {
+		for (Channel channel : mergeOrder) {
+			channel.reseed();
+		}
+	}
+
 	/** A buffer source whose content is thrown away. */
 	static MultiBufferSource discard() {
 		return FeatureDrawer.discard();
