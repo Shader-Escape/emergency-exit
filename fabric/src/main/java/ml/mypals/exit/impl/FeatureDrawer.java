@@ -160,7 +160,7 @@ public final class FeatureDrawer {
 			modelView.last().pose().identity();
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
-			// 1.19.3 has no vertex sorting: depth sorting is done by the shader pack itself.
+			// 1.19.4 has no vertex sorting: depth sorting is done by the shader pack itself.
 			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()));
 			// Iris widens the vertex formats while the level renders; the buffers are already in the vanilla format.
 			boolean renderingLevel = IrisCompat.isRenderingLevel();

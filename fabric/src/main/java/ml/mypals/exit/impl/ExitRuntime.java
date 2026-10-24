@@ -241,7 +241,7 @@ public final class ExitRuntime {
 			// level's projection is not set this late in the frame, so set it too.
 			restoreOutput = Gpu.bindForDrawing(portalChannel.prepareForDraw());
 			savedProjection = RenderSystem.getProjectionMatrix();
-			// 1.19.3 has no vertex sorting (RenderSystem.setProjectionMatrix takes the matrix alone).
+			// 1.19.4 has no vertex sorting (RenderSystem.setProjectionMatrix takes the matrix alone).
 			RenderSystem.setProjectionMatrix(new Matrix4f(PROJECTION));
 		}
 		return portalRouted;

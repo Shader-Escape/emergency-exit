@@ -1,5 +1,5 @@
 plugins {
-    // Minecraft 1.19.3 is obfuscated (Mojang mappings). Iris has no NeoForge build for this Minecraft version, so this
+    // Minecraft 1.19.4 is obfuscated (Mojang mappings). Iris has no NeoForge build for this Minecraft version, so this
     // branch is a single Fabric Loom project.
     id 'net.fabricmc.fabric-loom-remap' version '1.18.1' apply false
 }
