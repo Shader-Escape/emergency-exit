@@ -162,6 +162,9 @@ publishing {
             if (System.getenv('JITPACK')) {
                 groupId = "${System.getenv('GROUP')}.${System.getenv('ARTIFACT')}"
                 version = System.getenv('VERSION')
+            } else {
+                groupId = 'com.github.Shader-Escape.emergency-exit'
+                version = project.version.toString().replace('+', '-')
             }
             from components.java
         }

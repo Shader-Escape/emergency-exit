@@ -1,5 +1,6 @@
 package ml.mypals.exit.impl;
 
+import org.joml.Matrix4f;
 import com.mojang.blaze3d.vertex.PoseStack;
 import ml.mypals.exit.api.ExitContext;
 import net.minecraft.client.Camera;
@@ -13,7 +14,7 @@ final class DrawContext implements ExitContext {
 	private final MultiBufferSource bufferSource;
 	private final boolean routed;
 	private final Camera camera;
-	private final PoseStack poseStack = new PoseStack();
+	private final PoseStack poseStack = ExitRuntime.levelPoseStack();
 
 	DrawContext(Channel channel, MultiBufferSource bufferSource, boolean routed, Camera camera) {
 		this.channel = channel;
@@ -49,7 +50,7 @@ final class DrawContext implements ExitContext {
 
 	@Override
 	public Matrix4fc modelView() {
-		return ExitRuntime.viewRotation();
+		return new Matrix4f();
 	}
 
 	@Override
