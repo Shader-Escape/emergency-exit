@@ -8,7 +8,7 @@ EXIT 每个 Minecraft 版本一个 git 分支，分支里只有该版本的代�
 有什么不同。README 只在 `master` 上维护。1.16.5 到 1.20.4 的分支已经删掉了自己的 README，以 `master` 的 README 和本文件为准。
 
 Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency_exit-<加载器>:<EXIT版本>-<Minecraft版本>`，
-下面简写成 `…:0.1.4-<mc>`。JitPack 不接受 `+`，模组自己的版本仍写作 `0.1.4+<mc>`。目前 19 个版本都是 0.1.4。
+下面简写成 `…:0.1.5-<mc>`。JitPack 不接受 `+`，模组自己的版本仍写作 `0.1.5+<mc>`。目前 19 个版本都是 0.1.5。
 在分支里 `publishToMavenLocal` 会用同样的坐标发布到本地；把 mavenLocal 排在 JitPack 前面的项目（比如 LFM）会用这份本地构建，
 只要它不比 JitPack 上的旧。改完先本地发布、测试，再发正式版本。
 
@@ -51,7 +51,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 26.2（相对 26.3）
 
 **使用**
-- Maven `…:0.1.4-26.2`。事件和 API 同 26.3（见 README）。
+- Maven `…:0.1.5-26.2`。事件和 API 同 26.3（见 README）。
 - `PortalOverrides.DEFAULT` 把 `renderingLevel` 设为 `OFF`（26.3 是 `KEEP`），更旧的分支也一样，原因见下面的 **Iris**。
   在 portal 里画 `Exit.plainFormat` 里建的缓冲时，`renderingLevel` 要保持关着。
 
@@ -105,7 +105,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 26.1.2（相对 26.2）
 
 **使用**
-- Maven `…:0.1.4-26.1.2`。事件和 API 同 26.3。
+- Maven `…:0.1.5-26.1.2`。事件和 API 同 26.3。
 
 **深度方向**
 - 深度是标准方向：近 = 0，远 = 1，默认深度测试是 `LESS_THAN_OR_EQUAL`。26.2 起是反向（近 = 1，远 = 0）。
@@ -143,7 +143,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.11（相对 26.1.2）
 
 **使用**
-- Maven `…:0.1.4-1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
+- Maven `…:0.1.5-1.21.11`。API 同 26.3。关卡在 `LevelRenderer.renderLevel` 里渲染。
 - Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1.world`）：批量和绘制在 `BEFORE_ENTITIES`
   （直通 `context.commandQueue()`），绘制也可在 `AFTER_ENTITIES`、`END_MAIN` 等；portal 在 `END_MAIN`。
 - NeoForge：`RenderLevelStageEvent.AfterOpaqueBlocks` 等。没有交出关卡收集器的事件，没东西可直通：用 `Exit.batch()`、
@@ -200,7 +200,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.10（相对 1.21.11）
 
 **使用**
-- Maven `…:0.1.4-1.21.10`。事件同 1.21.11。
+- Maven `…:0.1.5-1.21.10`。事件同 1.21.11。
 - API 用 `ResourceLocation` 代替 `Identifier`（`Exit.MAIN`、`Exit.channel`、`ExitChannel.id()`），`@Nullable` 是
   `org.jetbrains.annotations.Nullable`。
 - 没有 Gizmo：README 里 portal 收 Gizmo 的规则和调试方块的青色线框都没有。
@@ -244,7 +244,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.8（相对 1.21.10）
 
 **使用**
-- Maven `…:0.1.4-1.21.8`。
+- Maven `…:0.1.5-1.21.8`。
 - API 的 `SubmitNodeCollector` 换成 `MultiBufferSource`：`Exit.draw(MultiBufferSource, …)`、`ExitContext.bufferSource()`
   （代替 `collector()`）、`Exit.batch(MultiBufferSource)` 收、交 `MultiBufferSource`；`ExitContext.camera()` 是 `Camera`。
   绘制和批量里画的东西照样记进通道的批量，帧末先实体后半透明。
@@ -304,7 +304,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.5（相对 1.21.8）
 
 **使用**
-- Maven `…:0.1.4-1.21.5`。API 和 Fabric 事件同 1.21.8。
+- Maven `…:0.1.5-1.21.5`。API 和 Fabric 事件同 1.21.8。
 - NeoForge 只有一个 `RenderLevelStageEvent`，看 `getStage()`：比如 `Stage.AFTER_CUTOUT_BLOCKS`；不要用 `Stage.AFTER_LEVEL`。
 - `PortalOverrides.skipExtension` 在这个版本真的起作用（Iris 1.8），和更新的版本一样。
 
@@ -349,7 +349,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.4（相对 1.21.5）
 
 **使用**
-- Maven `…:0.1.4-1.21.4`。API 和事件同 1.21.5。
+- Maven `…:0.1.5-1.21.4`。API 和事件同 1.21.5。
 - 没有渲染通道：portal 改道时绑定通道目标，并让 `Minecraft.getMainRenderTarget()` 返回它，所以画进主目标的代码（含渲染类型）
   自动画进通道。区间里的绘制按 `(ONE, ONE_MINUS_SRC_ALPHA)` 混合 alpha。portal 开始之前就拿到的主目标不会被换掉，要用 `redirect`。
 
@@ -389,7 +389,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.3（相对 1.21.4）
 
 **使用**
-- Maven `…:0.1.4-1.21.3`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.5-1.21.3`。API、事件、portal 同 1.21.4。
 - `PortalOverrides.bypass` 是 EXIT 自己的开关（Iris 1.8.1 没有），效果相同：开着时 Iris 不替换原版着色器。
 
 **构建**
@@ -410,7 +410,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.21.1（相对 1.21.3）
 
 **使用**
-- Maven `…:0.1.4-1.21.1`。API、事件、portal 同 1.21.4。
+- Maven `…:0.1.5-1.21.1`。API、事件、portal 同 1.21.4。
 - 没有帧图：关卡清空主目标、开始绘制之后才能改道（主渲染通道里的事件都可以）。
 
 **构建**
@@ -445,7 +445,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 `port/1.21.11` 开出并一次性改到 1.20.6）。
 
 **使用**
-- Maven `…:0.1.4-1.20.6`，只有 Fabric（`emergency_exit-fabric`）。Iris 不是必需的，没有光影包时什么都不改道。
+- Maven `…:0.1.5-1.20.6`，只有 Fabric（`emergency_exit-fabric`）。Iris 不是必需的，没有光影包时什么都不改道。
 - API 同 1.21.8：没有 `SubmitNodeCollector`，绘制和批量收、交 `MultiBufferSource`（`ExitContext.bufferSource()`）。
 - Fabric（`WorldRenderEvents`，`net.fabricmc.fabric.api.client.rendering.v1`）：批量和绘制在 `BEFORE_ENTITIES`（直通上下文的
   `consumers()`），绘制也可在 `AFTER_ENTITIES`；portal 在这些事件里调用，或在关卡渲染结束时。
@@ -516,8 +516,8 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.20.4（相对 1.20.6）
 
 **使用**
-- Maven `…:0.1.4-1.20.4`，只有 Fabric。事件同 1.20.6。
-- **pose stack 按 Minecraft 1.20.5 之前的约定**（已提交，还没发布，会是 0.1.5；0.1.4 还是旧的做法）：1.20.5 之前 Minecraft
+- Maven `…:0.1.5-1.20.4`，只有 Fabric。事件同 1.20.6。
+- **pose stack 按 Minecraft 1.20.5 之前的约定**（0.1.5 起；0.1.4 还是旧的做法）：1.20.5 之前 Minecraft
   把视图旋转放在关卡的 pose stack 里，model-view 矩阵是单位矩阵。现在 `ExitContext.poseStack()` 一开始就带着视图旋转
   （就是关卡在相机位置的 pose stack），`ExitContext.modelView()` 是单位矩阵，批量用单位 model-view 矩阵画。
   portal 不动 model-view 矩阵，Minecraft 当时是什么就是什么：它在 debug 和 world-last 阶段会把视图旋转放进 model-view，
@@ -547,7 +547,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.20.2（相对 1.20.4）
 
 **使用**
-- Maven `…:0.1.4-1.20.2`，只有 Fabric。事件和 API 同 1.20.4（pose stack 的约定也一样）。
+- Maven `…:0.1.5-1.20.2`，只有 Fabric。事件和 API 同 1.20.4（pose stack 的约定也一样）。
 
 **构建**
 - NeoForm `1.20.2-20241215.201144`；Fabric API `0.91.6+1.20.2`；Iris 1.6.14、Sodium 见 `gradle.properties`。
@@ -568,7 +568,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.20.1（相对 1.20.2）
 
 **使用**
-- Maven `…:0.1.4-1.20.1`，只有 Fabric。事件和 API 同 1.20.2。
+- Maven `…:0.1.5-1.20.1`，只有 Fabric。事件和 API 同 1.20.2。
 - 批量只结束正在构建的 builder，和 1.20.2 一样。以前本帧没用到的渲染类型也会被结束，批量一提前画（`flushBatch()`）就抛
   `Not building!`。0.1.5 起，1.20 和 1.19.4 相同。
 
@@ -605,7 +605,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.20（相对 1.20.2）
 
 **使用**
-- Maven `…:0.1.4-1.20`，只有 Fabric。事件和 API 同 1.20.2。
+- Maven `…:0.1.5-1.20`，只有 Fabric。事件和 API 同 1.20.2。
 - 代码和 1.20.2 相同，所以这个 jar 也能装在 1.19.4 上（`fabric.mod.json`：`>=1.19.4 <=1.20`）。
 
 **构建**
@@ -640,7 +640,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 1.19.4 是 1.19.x 的最后一版，取代了原来的 `port/1.19.3`。
 
 **使用**
-- Maven `…:0.1.4-1.19.4`，只有 Fabric（Iris 1.6.11 没有 NeoForge 版）。事件和 API 同 1.20.2。
+- Maven `…:0.1.5-1.19.4`，只有 Fabric（Iris 1.6.11 没有 NeoForge 版）。事件和 API 同 1.20.2。
 
 **构建**
 - 变成**单个 Fabric Loom 工程**：只留 Fabric 后 `common` 子工程没有意义。`common/src/main/java` 移进
@@ -673,7 +673,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.18.2（相对 1.20.2）
 
 **使用**
-- Maven `…:0.1.4-1.18.2`，只有 Fabric。事件同 1.20.2（Fabric API 的 `WorldRenderEvents`，`BEFORE_ENTITIES` 的 `consumers()`）。
+- Maven `…:0.1.5-1.18.2`，只有 Fabric。事件同 1.20.2（Fabric API 的 `WorldRenderEvents`，`BEFORE_ENTITIES` 的 `consumers()`）。
 - API 里的 `Matrix4f` 是 `com.mojang.math.Matrix4f`：渲染路径还没有 JOML，`ExitContext.modelView()` 返回它，不是 `Matrix4fc`。
 - 没有 `RenderType.debugQuads()`（1.19 才有）：半透明的东西用带自己纹理的渲染类型，比如 `RenderType.entityTranslucent(白色纹理)`。
   实体格式的每个顶点元素都要写。
@@ -713,7 +713,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.17.1（相对 1.18.2）
 
 **使用**
-- Maven `…:0.1.4-1.17.1`，只有 Fabric。事件和 API 同 1.18.2。
+- Maven `…:0.1.5-1.17.1`，只有 Fabric。事件和 API 同 1.18.2。
 - 1.17 跑在 Java 16 上。只构建、测试了 1.17.1，`fabric.mod.json` 写的是 `>=1.17 <=1.17.1`。
 - Iris 是 1.2.7（`net.coderbot.iris`）。
 - Fabric API 的 mod id 还是 `fabric`（见下面的 **构建**），依赖 Fabric API 时写 `fabric`。
@@ -782,7 +782,7 @@ Maven 坐标是 JitPack 的：`com.github.Shader-Escape.emergency-exit:emergency
 ## 1.16.5（相对 1.17.1）
 
 **使用**
-- Maven `…:0.1.4-1.16.5`，只有 Fabric。事件和 API 同 1.17.1。
+- Maven `…:0.1.5-1.16.5`，只有 Fabric。事件和 API 同 1.17.1。
 - Fabric API 的 mod id 是 `fabric`（`fabric-api` 这个 id 是后来才有的），EXIT 的 jar 依赖 `fabric`，你的 mod 也要依赖 `fabric`。
 - 固定功能管线，pose stack 的约定和 1.20.4 一样（从 0.1.5 起，见 1.20.4）：视图旋转在关卡的 pose stack 里。
   EXIT 画通道时（portal 和批量）把关卡的投影放回 GL 的投影矩阵栈；批量把 model-view 栈设成单位矩阵，portal 不动它。
