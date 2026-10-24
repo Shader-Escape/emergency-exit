@@ -155,7 +155,7 @@ public final class FeatureDrawer {
 
 			PoseStack modelView = RenderSystem.getModelViewStack();
 			modelView.pushPose();
-			modelView.last().pose().load(ExitRuntime.viewRotation());
+			modelView.last().pose().setIdentity();
 			RenderSystem.applyModelViewMatrix();
 			Matrix4f projection = RenderSystem.getProjectionMatrix();
 			RenderSystem.setProjectionMatrix(new Matrix4f(ExitRuntime.projectionMatrix()));

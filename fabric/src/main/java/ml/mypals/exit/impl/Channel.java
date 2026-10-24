@@ -26,6 +26,7 @@ final class Channel implements ExitChannel {
 	private @Nullable TextureTarget target;
 	/** The depth of the translucent drawings, see {@link TranslucentDepth}. */
 	private @Nullable TextureTarget translucentDepth;
+	private @Nullable TextureTarget seeded;
 	private boolean translucentDrawn;
 	private boolean preparedThisFrame;
 	private boolean usedThisFrame;
@@ -173,11 +174,21 @@ final class Channel implements ExitChannel {
 		if (!this.preparedThisFrame) {
 			Gpu.clear(output);
 			DepthSeed.seed(Gpu.mainTarget(), output, this.options);
+			if (DepthSeed.seeds(this.options)) {
+				this.seeded = DepthSeed.remember(this.seeded, output, this.label() + "_seeded");
+			}
 			this.preparedThisFrame = true;
 			this.translucentDrawn = false;
 		}
 		this.usedThisFrame = true;
 		return output;
+	}
+
+	/** Seeds the pixels nothing was drawn on again, from the scene depth captured since the channel was seeded. */
+	void reseed() {
+		if (this.preparedThisFrame && this.target != null && this.seeded != null && DepthSeed.seeds(this.options)) {
+			DepthSeed.reseed(Gpu.mainTarget(), this.target, this.seeded, this.options);
+		}
 	}
 
 	/**
@@ -261,6 +272,10 @@ final class Channel implements ExitChannel {
 		if (this.translucentDepth != null) {
 			this.translucentDepth.destroyBuffers();
 			this.translucentDepth = null;
+		}
+		if (this.seeded != null) {
+			this.seeded.destroyBuffers();
+			this.seeded = null;
 		}
 		this.translucentDrawn = false;
 		this.preparedThisFrame = false;
